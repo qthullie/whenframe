@@ -289,6 +289,35 @@ trained on English only, keeps 40 %.
 | add 0.05 x similarity to the 10 best frames | alpha-QE | 31.4 | -0.2 | 26 / 29 | 0.79 |
 <!-- /table -->
 
+### Re-ranking with a vision-language model, on the tuning videos only
+
+A vision-language model can look at a frame and answer whether it shows the
+description. SmolVLM-256M-Instruct (Hugging Face, Apache 2.0), run by ONNX
+Runtime on the CPU like the rest, looked at the best frame of each of the first
+ten moments, for 600 tuning descriptions drawn at random, and was asked
+`Does this image match the description "…"? Answer yes or no.`
+([scripts/rerank.py](../scripts/rerank.py)). Its answer re-orders the ten moments
+alone, or added to the search's own score. On this sample the search alone has
+an R@5 of 29.7 %, against 31.5 % on all 1,957 tuning descriptions.
+
+<!-- table didemo-rerank -->
+| the first 10 moments of 600 tuning descriptions | R@1 | R@5 |
+|---|---|---|
+| the search's own order | 16.0 | 29.7 |
+| SmolVLM-256M's answers alone | 9.7 | 26.3 |
+| the search's score + SmolVLM-256M's, weight chosen on the other half | 15.2 | 30.7 |
+| the best possible order, for a perfect judge | 38.7 | 38.7 |
+<!-- /table -->
+
+On its own, the model orders the ten moments worse than the search: it puts the
+right moment first 9.7 % of the time, against 16.0 %. Added to the search's
+score, with the weight chosen on the other half of the sample, it moves 21
+descriptions into the first five and 15 out of them, +1.0 point, which a sign
+test does not tell apart from chance (p = 0.41). A perfect judge of the same ten
+moments would reach 38.7 %. Seeing ten frames at 512 x 512 pixels and answering
+takes 7.3 s per search on the 4 vCPUs, more than a hundred times the search
+itself. The tool does not use it.
+
 ## Charades-STA, with DiDeMo's parameters
 
 The usual benchmark for placing a described moment in a given video: 3,720

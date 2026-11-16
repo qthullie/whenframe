@@ -1,0 +1,40 @@
+{
+ "model": "HuggingFaceTB/SmolVLM-256M-Instruct (ONNX, float32)",
+ "question": "Does this image match the description \"{}\"? Answer yes or no.",
+ "descriptions": 600,
+ "moments_per_description": 10,
+ "orders": {
+  "search": {
+   "R@1": 0.16,
+   "R@5": 0.2966666666666667
+  },
+  "model alone": {
+   "R@1": 0.09666666666666666,
+   "R@5": 0.2633333333333333
+  },
+  "search + model": {
+   "R@1": 0.15166666666666667,
+   "R@5": 0.30666666666666664
+  },
+  "best possible": {
+   "R@1": 0.38666666666666666,
+   "R@5": 0.38666666666666666
+  }
+ },
+ "weights chosen": [
+  2.0,
+  0.5
+ ],
+ "in-sample R@5 by weight": {
+  "0.25": 0.305,
+  "0.5": 0.315,
+  "1.0": 0.31,
+  "2.0": 0.31166666666666665,
+  "4.0": 0.29833333333333334
+ },
+ "wins": 21,
+ "losses": 15,
+ "p": 0.40503224614076316,
+ "seconds per search": 7.2869376960006775,
+ "threads": 4
+}
