@@ -238,3 +238,23 @@ No criterion.
 
 **Check.** The second test run evaluates the first round's methods again; their
 numbers must be identical to the first run's.
+
+## Charades-STA, without tuning
+
+Added with the second round, before any Charades video was embedded. Charades-STA
+(Gao et al., 2017) is the usual benchmark for placing a described moment in a
+given video, so it allows a comparison with published numbers, which DiDeMo's
+corpus setting does not.
+
+- **Data:** the test split, 3,720 sentences in 1,334 Charades videos
+  (Sigurdsson et al., 2016), from the lmms-eval/charades_sta copy on the Hugging
+  Face Hub; whole videos, one frame per second.
+- **No tuning:** `frame_window`, `frame_window_bank`, `whenframe` and
+  `whenframe_bank` run with the parameters tuned on DiDeMo
+  (`results/didemo_tuned.json`) and the DiDeMo query bank. Nothing is chosen on
+  Charades.
+- **Metrics:** for a given video, R1 at IoU >= 0.5 and >= 0.7 and mean IoU, as
+  in the literature; and the corpus search over the 1,334 videos (R@5 at
+  IoU >= 0.5).
+- **No criterion.** Published numbers are quoted as their authors report them,
+  with what their methods run on; they are not reproduced here.

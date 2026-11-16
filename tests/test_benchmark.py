@@ -60,3 +60,18 @@ def test_selecting_frames_keeps_videos_apart():
     sub = f.select(f.every(2))
     assert sub.counts.tolist() == [5, 5, 5] and sub.starts.tolist() == [0, 5, 10]
     assert sub.times[:5].tolist() == [0, 2, 4, 6, 8]
+
+
+def test_a_second_encoder_identical_to_the_first_changes_nothing():
+    f = corpus()
+    f.bank = np.eye(3)[[0, 1]]
+    f.extra = {"mobileclip-s2": f.emb.copy()}
+    f.extra_banks = {"mobileclip-s2": f.bank.copy()}
+    texts = {"siglip2-base": TEXT, "mobileclip-s2": TEXT}
+    p = {"window": 3.0, "per_video": 2, "beta": 10.0, "lam": 0.5}
+    ref = run(f, QUERIES, texts, "frame_window_bank", p)
+    for method, extra in (("mobileclip_bank", {}), ("ensemble_bank", {"beta2": 10.0, "lam2": 0.5, "weight": 1.0})):
+        r = run(f, QUERIES, texts, method, {**p, **extra})
+        assert (r["corpus"], r["single"], r["video"]) == (ref["corpus"], ref["single"], ref["video"])
+    sub = f.select(f.every(2))
+    assert len(sub.extra["mobileclip-s2"]) == len(sub.emb) == 15

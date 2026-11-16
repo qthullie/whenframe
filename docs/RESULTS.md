@@ -208,3 +208,45 @@ the protocol (changes 8 to 10). The test split played no part in them.
 - The 10-second windows fit DiDeMo's 5-second segments. They are a sound
   default for short clips, not a finding about moments in general.
 - One machine, one run, one dataset. The descriptions are in English.
+
+## Second round
+
+Written into the protocol before the test split was used a second time
+([PROTOCOL.md](PROTOCOL.md), "Second round"): two modes that use a second image
+encoder, MobileCLIP-S2, and the same searches with the descriptions translated
+into French. Everything was developed on the tuning videos; the test split was
+evaluated once more, after the protocol's second round had been committed.
+
+<!-- table round2-check -->
+<!-- /table -->
+
+<!-- table round2-criteria -->
+<!-- /table -->
+
+### Three modes
+
+<!-- table round2-modes -->
+<!-- /table -->
+
+### French descriptions
+
+<!-- table round2-french -->
+<!-- /table -->
+
+### What else was tried, on the tuning videos only
+
+<!-- table didemo-explore -->
+| variant (tuning videos) | source | R@5 | change | won / lost | sign test p |
+|---|---|---|---|---|---|
+| default search |  | 31.5 | +0.0 | 0 / 0 |  |
+| no query bank |  | 29.0 | -2.5 | 90 / 139 | 0.00 |
+| bias = mean of the 8 best bank scores | NNN, arXiv 2410.24114 | 29.3 | -2.2 | 55 / 98 | 0.00 |
+| bias = mean of the 32 best bank scores | NNN, arXiv 2410.24114 | 31.1 | -0.4 | 51 / 59 | 0.50 |
+| bias = mean of the 128 best bank scores | NNN, arXiv 2410.24114 | 31.7 | +0.2 | 36 / 33 | 0.81 |
+| correct only frames ranked first by a bank text | QB-Norm, arXiv 2112.12777 | 28.1 | -3.4 | 98 / 165 | 0.00 |
+| centre both modalities, then the bank | GR-CLIP, arXiv 2507.19054 | 31.2 | -0.3 | 63 / 69 | 0.66 |
+| bank of 30,431 descriptions instead of 4,096 |  | 31.7 | +0.2 | 15 / 12 | 0.70 |
+| each frame averaged with its neighbours |  | 30.7 | -0.9 | 74 / 91 | 0.21 |
+| also subtract the video's mean offset (x 0.5) |  | 31.0 | -0.6 | 33 / 44 | 0.25 |
+| add 0.05 x similarity to the 10 best frames | alpha-QE | 31.4 | -0.2 | 26 / 29 | 0.79 |
+<!-- /table -->

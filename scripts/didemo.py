@@ -287,36 +287,36 @@ def translate(args) -> None:
 
 
 def calibrate(args) -> None:
-    """Fit sigmoid(a * cos + b) for a model on tuning pairs: frames inside the annotated moment
-    against as many frames of other videos, for each description."""
+    """Scale and bias of a second model's displayed confidence, sigmoid(a * cos + b).
+
+    Fitted by least squares so that a * cos + b matches the main model's own logit
+    (SigLIP's sigmoid) on tuning pairs: for each description, the frames inside its
+    annotated moment and as many frames of other videos. The tool then shows
+    confidences on one scale whatever the mode; no ranking depends on them.
+    """
     model = args.model
-    frozen, queries, _ = load(args.split, args.annotations, () if model == MAIN else (model,))
-    emb = frozen.emb if model == MAIN else frozen.extra[model]
-    text = text_embeddings(queries, args.split, args.model_dir, model)
+    assert model != MAIN, "the main model's probability is its own sigmoid"
+    frozen, queries, _ = load(args.split, args.annotations, (model,))
+    text = text_embeddings(queries, args.split, args.model_dir)
+    text2 = text_embeddings(queries, args.split, args.model_dir, model)
     rng = np.random.default_rng(0)
     video_of = np.repeat(np.arange(len(frozen.starts)), frozen.counts)
-    cos, label = [], []
+    spec = make_encoder(args.model_dir).spec
+    x, target = [], []
     for qi, q in enumerate(queries):
         s, c = frozen.starts[q["video"]], frozen.counts[q["video"]]
         t = frozen.times[s : s + c]
         inside = s + np.flatnonzero((t >= q["moment"][0]) & (t < q["moment"][1]))
-        others = rng.choice(np.flatnonzero(video_of != q["video"]), size=len(inside), replace=False)
-        for rows, y in ((inside, 1.0), (others, 0.0)):
-            cos.append(emb[rows] @ text[qi])
-            label.append(np.full(len(rows), y))
-    x, y = np.concatenate(cos).astype(np.float64), np.concatenate(label)
-    a, b = 10.0, 0.0
-    for _ in range(50):  # Newton's method on the logistic loss, two parameters
-        p = 1 / (1 + np.exp(-(a * x + b)))
-        g = np.array([((p - y) * x).sum(), (p - y).sum()])
-        w = p * (1 - p)
-        h = np.array([[(w * x * x).sum(), (w * x).sum()], [(w * x).sum(), w.sum()]])
-        a, b = np.array([a, b]) - np.linalg.solve(h, g)
+        rows = np.concatenate([inside, rng.choice(np.flatnonzero(video_of != q["video"]), len(inside), replace=False)])
+        x.append(frozen.extra[model][rows] @ text2[qi])
+        target.append(spec.logit_scale * (frozen.emb[rows] @ text[qi]) + spec.logit_bias)
+    x, target = np.concatenate(x).astype(np.float64), np.concatenate(target)
+    a, b = np.polyfit(x, target, 1)
+    r = float(np.corrcoef(a * x + b, target)[0, 1])
     out = ROOT / "results" / "didemo_calibration.json"
-    fitted = json.loads(out.read_text()) if out.exists() else {}
-    fitted[model] = {"scale": float(a), "bias": float(b), "pairs": int(len(x))}
-    out.write_text(json.dumps(fitted, indent=1))
-    print(model, fitted[model])
+    out.write_text(json.dumps({model: {"scale": float(a), "bias": float(b), "pairs": int(len(x)), "fitted_to": MAIN,
+                                       "correlation": r}}, indent=1))  # fmt: skip
+    print(model, json.loads(out.read_text())[model])
 
 
 def main_args(argv: list[str] | None = None) -> argparse.Namespace:

@@ -10,7 +10,9 @@ pip install git+https://github.com/qthullie/whenframe
 ```
 
 The first run downloads the SigLIP 2 model (about 1.5 GB) into
-`~/.cache/whenframe` (or `$WHENFRAME_CACHE`). Nothing else leaves your machine.
+`~/.cache/whenframe` (or `$WHENFRAME_CACHE`). Nothing else goes over the
+network: whenframe turns off ONNX Runtime's usage telemetry
+(`ORT_DISABLE_TELEMETRY=1`) before loading it.
 
 ## Index a folder
 
@@ -21,6 +23,16 @@ whenframe index ~/Videos
 Every video under the folder is read at one frame per second. Frames that
 barely differ from the previous one are skipped. Run the same command again
 later: only new or modified videos are indexed.
+
+A library is built in one of three modes, chosen the first time it is indexed:
+
+| `--mode` | model | indexing | accuracy on DiDeMo |
+|---|---|---|---|
+| `standard` (default) | SigLIP 2 | reference | reference |
+| `economy` | MobileCLIP-S2 (0.5 GB download) | about 2.3 times less CPU | a little lower |
+| `precision` | both, scores combined | about 1.4 times more CPU | higher |
+
+The measured numbers are in [RESULTS.md](RESULTS.md), "Second round".
 
 The index lives in `~/.local/share/whenframe/library` (or `$WHENFRAME_LIBRARY`,
 or `--library DIR`). It takes about 5 MB per hour of video, and a search holds
@@ -47,6 +59,19 @@ Each line is a moment: how sure the model is that its best frame matches the
 description, where the moment starts and ends, and the file. About a tenth of
 the model's training text was not English, so descriptions in French or Spanish
 can work; they were not measured here, and English is the safer bet.
+
+## In the browser
+
+```bash
+whenframe serve            # then open http://127.0.0.1:8765
+```
+
+The model stays loaded, so each search answers in a fraction of a second. The
+page shows the best frame of each moment; a click plays the video from the start
+of the moment and stops at its end. It listens on this computer only (`--host`
+changes that) and loads nothing from the internet. Browsers play mp4 and webm;
+for other formats the page gives the file's folder, to open it in a video
+player.
 
 ## From Python
 
@@ -90,6 +115,17 @@ make didemo-extract   # frame and text embeddings, scene cuts, timings
 make didemo-tune      # parameters of every method, on training videos only
 make didemo-eval      # the test numbers in docs/RESULTS.md
 make tables           # rewrite the tables from results/*.json
+```
+
+The second round needs the English-to-French model as well
+(`Xenova/opus-mt-en-fr` on the Hugging Face Hub: `config.json`,
+`tokenizer.json`, `onnx/encoder_model.onnx`, `onnx/decoder_model.onnx`, in
+`data/opus-mt-en-fr/`); MobileCLIP-S2 is downloaded like SigLIP 2:
+
+```bash
+make didemo-explore   # the other score corrections tried on tuning videos
+make didemo-round2    # MobileCLIP-S2, French descriptions, calibration, tuning, test
+make tables
 ```
 
 The protocol, including the success criteria, is in [PROTOCOL.md](PROTOCOL.md).
