@@ -2,9 +2,10 @@ PY ?= python3
 DIDEMO ?= data/didemo
 TRANSLATOR ?= data/opus-mt-en-fr
 FILMS ?= data/films
+SMOLVLM ?= data/smolvlm-256m
 
 .PHONY: install check lint test didemo-extract didemo-tune didemo-eval didemo-explore didemo-round2 tables figures \
-	demo site
+	didemo-rerank demo site
 
 install:
 	$(PY) -m pip install -e ".[dev]"
@@ -42,6 +43,11 @@ figures:
 # what was tried on the tuning videos after the first test run
 didemo-explore:
 	$(PY) scripts/explore.py --annotations $(DIDEMO)/didemo_train.json --train-annotations $(DIDEMO)/didemo_train.json
+
+# a small vision-language model re-orders the first ten moments: SmolVLM-256M-Instruct in $(SMOLVLM), with onnx/
+didemo-rerank:
+	$(PY) scripts/rerank.py --vlm-dir $(SMOLVLM) --videos $(DIDEMO)/train --annotations $(DIDEMO)/didemo_train.json \
+		--train-annotations $(DIDEMO)/didemo_train.json
 
 # the second round of the protocol: MobileCLIP-S2, French descriptions, then one more test run
 didemo-round2:

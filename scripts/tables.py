@@ -219,6 +219,18 @@ def explore_table() -> str | None:
                   for x in rows])  # fmt: skip
 
 
+def rerank_table() -> str | None:
+    f = RESULTS / "didemo_train_rerank.json"
+    if not f.exists():
+        return None
+    r = json.loads(f.read_text())
+    names = {"search": "the search's own order", "model alone": "SmolVLM-256M's answers alone",
+             "search + model": "the search's score + SmolVLM-256M's, weight chosen on the other half",
+             "best possible": "the best possible order, for a perfect judge"}  # fmt: skip
+    head = f"the first {r['moments_per_description']} moments of {r['descriptions']} tuning descriptions"
+    return table([head, "R@1", "R@5"], [[names[k], pct(v["R@1"]), pct(v["R@5"])] for k, v in r["orders"].items()])
+
+
 def tuning_table() -> str | None:
     runs = [("first", "didemo_tuned_first_run.json"), ("second", "didemo_tuned_second_run.json"),
             ("third", "didemo_tuned.json")]  # fmt: skip
@@ -244,6 +256,9 @@ def main() -> int:
     charades = charades_table()
     if charades:
         tables["charades"] = charades
+    rerank = rerank_table()
+    if rerank:
+        tables["didemo-rerank"] = rerank
     f2 = RESULTS / "didemo_test_round2.json"
     if f2.exists():
         tables.update(round2_tables(json.loads(f2.read_text()), json.loads(f.read_text()) if f.exists() else None))
