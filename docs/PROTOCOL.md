@@ -182,4 +182,59 @@ training or test videos was computed.
 
 ## Changes after the first test run
 
-None.
+None to the first round: its methods, parameters and numbers stand as they
+are. What follows is a second round, developed on the tuning videos only and
+written here before the test split was used a second time.
+
+## Second round
+
+**What was tried on the tuning videos first.**
+
+1. Other corrections of frame scores: nearest-neighbour normalisation
+   ([arXiv 2410.24114](https://arxiv.org/abs/2410.24114)), the dynamic inverted
+   softmax of query-bank normalisation, centring both modalities
+   ([arXiv 2507.19054](https://arxiv.org/abs/2507.19054)), a bank of all 30,431
+   training descriptions instead of 4,096, frames averaged with their
+   neighbours, a per-video offset, and alpha query expansion. None beat the
+   default search by more than 0.2 points, and none is used
+   (`scripts/explore.py`, `results/didemo_train_explore.json`).
+2. Cheaper image encoders. SigLIP 2 with 4-bit weights was no faster on this
+   CPU (362 ms per frame). SigLIP 2 quantized to int8 with calibration broke the
+   embeddings (cosine 0.66 with the float model; 12.7 % on the primary metric);
+   keeping the MLP output layers in float gave cosine 0.94 at 251 ms per frame.
+   Neither is used. MobileCLIP-S2 (Xenova/mobileclip_s2, 256 px) takes about
+   156 ms per frame.
+
+**Methods added.**
+
+- `mobileclip_bank`: `frame_window` with its tuned parameters, on MobileCLIP-S2
+  scores corrected with a query bank of the same 4,096 descriptions embedded by
+  MobileCLIP-S2; the bank's two parameters are tuned as for the other banked
+  methods (12 combinations).
+- `ensemble_bank`: `frame_window` on the sum of the two corrected scores, each
+  standardised over all frames for the query, the MobileCLIP-S2 term weighted by
+  w in {0.25, 0.5, 0.75, 1}, both banks as tuned.
+- The tool calls them the economy and precision modes; the default search
+  (standard mode) is unchanged.
+- MobileCLIP-S2 has no calibrated probability; the confidence the tool shows
+  for it comes from a sigmoid fitted on tuning pairs (`scripts/didemo.py
+  calibrate`). It does not change any ranking.
+
+**French descriptions.** The test descriptions are machine-translated into
+French with Opus-MT (Helsinki-NLP/opus-mt-en-fr, greedy decoding,
+`scripts/translate.py`) and searched with the default search and the two new
+methods. Translation errors stay in, so this measures French as typed by a
+translation system, which is probably worse than French typed by a person.
+No criterion.
+
+**Criteria for the second test run.**
+
+6. `mobileclip_bank` loses at most 2 points against the default search on the
+   primary metric.
+7. Indexing with MobileCLIP-S2 takes at most 10 minutes of CPU time per hour of
+   video (criterion 3, for the economy mode).
+8. `ensemble_bank` beats the default search by at least 1 point on the primary
+   metric.
+
+**Check.** The second test run evaluates the first round's methods again; their
+numbers must be identical to the first run's.

@@ -9,6 +9,13 @@ those are searched; the mp4 copies are often longer.
     python scripts/didemo.py extract --split test --videos DIR --annotations didemo_test.json
     python scripts/didemo.py tune    --split train
     python scripts/didemo.py evaluate --split test
+
+The second round (docs/PROTOCOL.md) adds a second encoder and French descriptions:
+
+    python scripts/didemo.py extract   --split test --model mobileclip-s2 --list results/didemo_test_videos.txt ...
+    python scripts/didemo.py translate --split test --translator-dir DIR
+    python scripts/didemo.py tune      --split train --round 2
+    python scripts/didemo.py evaluate  --split test --round 2
 """
 
 from __future__ import annotations
@@ -29,7 +36,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from benchmark import CORPUS_KS, METHODS, Frozen, cost_curve, evaluate_all, grid_search  # noqa: E402
+from benchmark import CORPUS_KS, MAIN, METHODS, SECOND, Frozen, cost_curve, evaluate_all, grid_search, run  # noqa: E402
+from translate import Translator  # noqa: E402
 
 from whenframe.encoder import Encoder  # noqa: E402
 from whenframe.video import drop_repeats, probe, sample_frames, thumbnails  # noqa: E402
@@ -75,12 +83,16 @@ def video_names(args, ann) -> list[str]:
     return names[: args.limit] if args.limit else names
 
 
+def suffix(model: str) -> str:
+    return "" if model == MAIN else f"_{model}"
+
+
 def extract(args) -> None:
     ann = json.loads(Path(args.annotations).read_text())
     folder = Path(args.videos)
     names = video_names(args, ann)
-    enc = make_encoder(args.model_dir)
-    out = CACHE / f"didemo_{args.split}.npz"
+    enc = make_encoder(args.model_dir, args.model)
+    out = CACHE / f"didemo_{args.split}{suffix(args.model)}.npz"
     cols = {k: [] for k in ("emb", "times", "keep", "thumbs", "starts", "counts", "durations", "cuts")}
     cost = {k: [] for k in ("decode_cpu", "decode_wall", "encode_cpu", "encode_wall", "scene_cpu", "scene_wall")}
     done, row = [], 0
@@ -94,7 +106,7 @@ def extract(args) -> None:
             c1, p1, w1 = children_cpu(), time.process_time(), time.time()
             e = enc.encode_images(frames)
             p2, w2 = time.process_time(), time.time()
-            cuts = scene_cuts(p)
+            cuts = scene_cuts(p) if args.model == MAIN else []  # shots are only needed once
             c3, w3 = children_cpu(), time.time()
         except Exception as ex:  # noqa: BLE001 - a broken file is skipped, not fatal
             print(f"skip {name}: {ex}", file=sys.stderr)
@@ -123,15 +135,17 @@ def extract(args) -> None:
         cuts=np.array(json.dumps(cols["cuts"])), model=np.array(enc.name),
         **{k: np.array(v) for k, v in cost.items()},
     )  # fmt: skip
-    (ROOT / "results" / f"didemo_{args.split}_videos.txt").write_text("\n".join(done) + "\n")
+    if args.model == MAIN:
+        (ROOT / "results" / f"didemo_{args.split}_videos.txt").write_text("\n".join(done) + "\n")
     print(f"wrote {out}: {len(done)} videos, {row} frames, {time.time() - t_all:.0f} s")
 
 
-def make_encoder(model_dir: str | None) -> Encoder:
-    return Encoder(folder=model_dir) if model_dir else Encoder()
+def make_encoder(model_dir: str | None, model: str = MAIN) -> Encoder:
+    """--model-dir points at the main model's files; other models come from the usual cache."""
+    return Encoder(model, folder=model_dir) if model_dir and model == MAIN else Encoder(model)
 
 
-def load(split: str, annotations: str | None = None):
+def load(split: str, annotations: str | None = None, extra: tuple[str, ...] = ()):
     z = np.load(CACHE / f"didemo_{split}.npz")
     names = z["names"].tolist()
     decoded = Frozen(
@@ -148,47 +162,63 @@ def load(split: str, annotations: str | None = None):
         if stem(a["video"]) in index:
             v = index[stem(a["video"])]
             queries.append({"text": a["description"], "video": v, "moment": reference(a["times"], frozen.durations[v])})
+    timing = ("decode_cpu", "decode_wall", "encode_cpu", "encode_wall", "scene_cpu", "scene_wall")
     cost = {  # what was decoded and encoded, which the timings cover
         "videos": len(names),
         "hours": float(decoded.durations.sum() / 3600),
         "frames": int(len(decoded.times)),
         "kept_fraction": float(frozen.keep.mean()),
-        **{k: float(z[k].sum()) for k in ("decode_cpu", "decode_wall", "encode_cpu", "encode_wall", "scene_cpu",
-                                          "scene_wall")},
-    }  # fmt: skip
+        **{k: float(z[k].sum()) for k in timing},
+    }
+    for model in extra:  # the same frames, embedded by another encoder
+        x = np.load(CACHE / f"didemo_{split}{suffix(model)}.npz")
+        assert x["names"].tolist() == names, f"{model}: not the same videos"
+        mask = x["times"] < SECONDS
+        assert np.array_equal(x["times"][mask], frozen.times), f"{model}: not the same frames"
+        frozen.extra[model] = x["emb"][mask].astype(np.float32)
+        cost[model] = {"hours": float(x["durations"].sum() / 3600), "frames": int(len(x["times"])),
+                       **{k: float(x[k].sum()) for k in timing}}  # fmt: skip
     return frozen, queries, cost
 
 
-def encode(texts: list[str], model_dir: str | None) -> np.ndarray:
-    enc = make_encoder(model_dir)
+def encode(texts: list[str], model_dir: str | None, model: str = MAIN) -> np.ndarray:
+    enc = make_encoder(model_dir, model)
     return np.concatenate([enc.encode_texts(texts[i : i + 64]) for i in range(0, len(texts), 64)]).astype(np.float32)
 
 
-def text_embeddings(queries, split: str, model_dir: str | None) -> np.ndarray:
-    path = CACHE / f"didemo_{split}_text.npy"
+def text_embeddings(queries, split: str, model_dir: str | None, model: str = MAIN, lang: str = "") -> np.ndarray:
+    """The descriptions' embeddings; lang "fr" uses their French translations (the translate stage)."""
+    path = CACHE / f"didemo_{split}_text{'_' + lang if lang else ''}{suffix(model)}.npy"
     if not path.exists():
-        np.save(path, encode([q["text"] for q in queries], model_dir))
+        texts = [q["text"] for q in queries]
+        if lang:
+            texts = json.loads((CACHE / f"didemo_{split}_{lang}.json").read_text())
+            assert len(texts) == len(queries), "translations do not match the descriptions"
+        np.save(path, encode(texts, model_dir, model))
     return np.load(path)
 
 
-def bank(args) -> np.ndarray:
+def bank_texts(args, size: int | None = BANK_SIZE) -> list[str]:
     """Descriptions of training videos outside the tuning set: what people search for, in general.
 
-    The same bank serves tuning and test, and shares no video with either.
+    The same bank serves tuning and test, and shares no video with either. size=None returns all of them.
     """
-    path = CACHE / "didemo_bank_text.npy"
+    train = json.loads(Path(args.train_annotations or DATA / "didemo_train.json").read_text())
+    tuning = {stem(n) for n in (ROOT / "results" / "didemo_train_videos.txt").read_text().split()}
+    texts = sorted({a["description"].strip() for a in train if stem(a["video"]) not in tuning})
+    return random.Random(0).sample(texts, size) if size else texts
+
+
+def bank(args, model: str = MAIN) -> np.ndarray:
+    path = CACHE / f"didemo_bank_text{suffix(model)}.npy"
     if not path.exists():
-        train = json.loads(Path(args.train_annotations or DATA / "didemo_train.json").read_text())
-        tuning = {stem(n) for n in (ROOT / "results" / "didemo_train_videos.txt").read_text().split()}
-        texts = sorted({a["description"].strip() for a in train if stem(a["video"]) not in tuning})
-        texts = random.Random(0).sample(texts, BANK_SIZE)
-        np.save(path, encode(texts, args.model_dir))
+        np.save(path, encode(bank_texts(args), args.model_dir, model))
     return np.load(path)
 
 
-def text_latency(queries, model_dir: str | None, n: int = 50) -> float:
+def text_latency(queries, model_dir: str | None, n: int = 50, model: str = MAIN) -> float:
     """Milliseconds to embed one query, as the tool does for each search."""
-    enc = make_encoder(model_dir)
+    enc = make_encoder(model_dir, model)
     enc.encode_texts([queries[0]["text"]])  # loads the text tower
     t0 = time.perf_counter()
     for q in queries[:n]:
@@ -196,45 +226,118 @@ def text_latency(queries, model_dir: str | None, n: int = 50) -> float:
     return 1000 * (time.perf_counter() - t0) / n
 
 
-def tune(args) -> None:
-    frozen, queries, _ = load(args.split, args.annotations)
-    text = text_embeddings(queries, args.split, args.model_dir)
+def prepare(args):
+    """The split, its query embeddings (one set per model in the second round) and the query banks."""
+    extra = (SECOND,) if args.round == 2 else ()
+    frozen, queries, cost = load(args.split, args.annotations, extra)
     frozen.bank = bank(args)
+    text = text_embeddings(queries, args.split, args.model_dir)
+    if extra:
+        text = {MAIN: text, SECOND: text_embeddings(queries, args.split, args.model_dir, SECOND)}
+        frozen.extra_banks[SECOND] = bank(args, SECOND)
+    return frozen, queries, cost, text
+
+
+def tuned_path(args) -> Path:
+    return ROOT / "results" / ("didemo_tuned.json" if args.round == 1 else f"didemo_tuned_round{args.round}.json")
+
+
+def tune(args) -> None:
+    frozen, queries, _, text = prepare(args)
     best = grid_search(frozen, queries, text)
     best["queries"] = len(queries)
     best["videos"] = len(frozen.names)
-    (ROOT / "results" / "didemo_tuned.json").write_text(json.dumps(best, indent=1))
-    curve = cost_curve(frozen, queries, text, best["default"], best[best["default"]]["params"])
-    (ROOT / "results" / f"didemo_{args.split}_curve.json").write_text(json.dumps(curve, indent=1))
+    tuned_path(args).write_text(json.dumps(best, indent=1))
+    if args.round == 1:
+        curve = cost_curve(frozen, queries, text, best["default"], best[best["default"]]["params"])
+        (ROOT / "results" / f"didemo_{args.split}_curve.json").write_text(json.dumps(curve, indent=1))
     print(json.dumps(best, indent=1))
 
 
 def evaluate(args) -> None:
-    frozen, queries, cost = load(args.split, args.annotations)
-    text = text_embeddings(queries, args.split, args.model_dir)
-    frozen.bank = bank(args)
-    tuned = json.loads((ROOT / "results" / "didemo_tuned.json").read_text())
+    frozen, queries, cost, text = prepare(args)
+    tuned = json.loads(tuned_path(args).read_text())
     methods = [m for m in METHODS if m in tuned]
     res = evaluate_all(frozen, queries, text, tuned, methods)
     res["curve"] = cost_curve(frozen, queries, text, tuned["default"], tuned[tuned["default"]]["params"])
     cost["text_ms"] = text_latency(queries, args.model_dir)
+    if args.round == 2:
+        cost[SECOND]["text_ms"] = text_latency(queries, args.model_dir, model=SECOND)
+        # the same searches with the descriptions machine-translated into French
+        fr = {MAIN: text_embeddings(queries, args.split, args.model_dir, lang="fr"),
+              SECOND: text_embeddings(queries, args.split, args.model_dir, SECOND, lang="fr")}  # fmt: skip
+        res["french"] = {m: run(frozen, queries, fr, m, tuned[m]["params"])
+                         for m in ("frame_window_bank", "mobileclip_bank", "ensemble_bank")}  # fmt: skip
     res.update(cost=cost, queries=len(queries), corpus_ks=CORPUS_KS, methods=methods, default=tuned["default"])
-    (ROOT / "results" / f"didemo_{args.split}.json").write_text(json.dumps(res, indent=1))
+    name = f"didemo_{args.split}.json" if args.round == 1 else f"didemo_{args.split}_round{args.round}.json"
+    (ROOT / "results" / name).write_text(json.dumps(res, indent=1))
     print(json.dumps({m: res[m]["corpus"] for m in methods}, indent=1))
 
 
-def main() -> None:
+def translate(args) -> None:
+    """French translations of the split's descriptions, in the order load() returns them."""
+    _, queries, _ = load(args.split, args.annotations)
+    out = CACHE / f"didemo_{args.split}_fr.json"
+    t0 = time.time()
+    french = Translator(args.translator_dir)([q["text"] for q in queries])
+    out.write_text(json.dumps(french, ensure_ascii=False, indent=0))
+    print(f"wrote {out}: {len(french)} descriptions in {time.time() - t0:.0f} s")
+    for q, f in list(zip(queries, french, strict=True))[:5]:
+        print(f"  {q['text']!r} -> {f!r}")
+
+
+def calibrate(args) -> None:
+    """Fit sigmoid(a * cos + b) for a model on tuning pairs: frames inside the annotated moment
+    against as many frames of other videos, for each description."""
+    model = args.model
+    frozen, queries, _ = load(args.split, args.annotations, () if model == MAIN else (model,))
+    emb = frozen.emb if model == MAIN else frozen.extra[model]
+    text = text_embeddings(queries, args.split, args.model_dir, model)
+    rng = np.random.default_rng(0)
+    video_of = np.repeat(np.arange(len(frozen.starts)), frozen.counts)
+    cos, label = [], []
+    for qi, q in enumerate(queries):
+        s, c = frozen.starts[q["video"]], frozen.counts[q["video"]]
+        t = frozen.times[s : s + c]
+        inside = s + np.flatnonzero((t >= q["moment"][0]) & (t < q["moment"][1]))
+        others = rng.choice(np.flatnonzero(video_of != q["video"]), size=len(inside), replace=False)
+        for rows, y in ((inside, 1.0), (others, 0.0)):
+            cos.append(emb[rows] @ text[qi])
+            label.append(np.full(len(rows), y))
+    x, y = np.concatenate(cos).astype(np.float64), np.concatenate(label)
+    a, b = 10.0, 0.0
+    for _ in range(50):  # Newton's method on the logistic loss, two parameters
+        p = 1 / (1 + np.exp(-(a * x + b)))
+        g = np.array([((p - y) * x).sum(), (p - y).sum()])
+        w = p * (1 - p)
+        h = np.array([[(w * x * x).sum(), (w * x).sum()], [(w * x).sum(), w.sum()]])
+        a, b = np.array([a, b]) - np.linalg.solve(h, g)
+    out = ROOT / "results" / "didemo_calibration.json"
+    fitted = json.loads(out.read_text()) if out.exists() else {}
+    fitted[model] = {"scale": float(a), "bias": float(b), "pairs": int(len(x))}
+    out.write_text(json.dumps(fitted, indent=1))
+    print(model, fitted[model])
+
+
+def main_args(argv: list[str] | None = None) -> argparse.Namespace:
     ap = argparse.ArgumentParser()
-    ap.add_argument("stage", choices=["extract", "tune", "evaluate"])
+    ap.add_argument("stage", choices=["extract", "tune", "evaluate", "translate", "calibrate"])
     ap.add_argument("--split", default="test")
     ap.add_argument("--videos")
     ap.add_argument("--annotations", help="the split's annotations (default data/didemo/didemo_SPLIT.json)")
     ap.add_argument("--train-annotations", help="training annotations, for the query bank")
-    ap.add_argument("--model-dir")
+    ap.add_argument("--model-dir", help="folder of the main model's files (default: the usual download cache)")
+    ap.add_argument("--model", default=MAIN, help="encoder to extract with, or to calibrate")
+    ap.add_argument("--round", type=int, default=1, choices=[1, 2], help="2: the second round of the protocol")
+    ap.add_argument("--translator-dir", help="folder of the Opus-MT English-French export, for translate")
     ap.add_argument("--limit", type=int, default=0, help="keep the first N videos, in name order")
     ap.add_argument("--list", help="a file naming the videos to use, one per line (overrides --limit)")
-    a = ap.parse_args()
-    {"extract": extract, "tune": tune, "evaluate": evaluate}[a.stage](a)
+    return ap.parse_args(argv)
+
+
+def main() -> None:
+    a = main_args()
+    {"extract": extract, "tune": tune, "evaluate": evaluate, "translate": translate, "calibrate": calibrate}[a.stage](a)
 
 
 if __name__ == "__main__":

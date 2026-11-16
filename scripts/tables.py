@@ -128,6 +128,74 @@ def didemo_tables(r: dict) -> dict[str, str]:
     }
 
 
+MODES = [("standard", "frame_window_bank"), ("economy", "mobileclip_bank"), ("precision", "ensemble_bank")]
+
+
+def round2_tables(r: dict, first: dict | None) -> dict[str, str]:
+    score = {m: r[m]["corpus"][PRIMARY] for m in r["methods"]}
+    c = r["cost"]
+
+    def cpu_minutes(model: str | None) -> float:
+        t = c if model is None else c[model]
+        return (t["decode_cpu"] + t["encode_cpu"]) / t["hours"] / 60
+
+    def wall_minutes(model: str | None) -> float:
+        t = c if model is None else c[model]
+        return (t["decode_wall"] + t["encode_wall"]) / t["hours"] / 60
+
+    loss = score["frame_window_bank"] - score["mobileclip_bank"]
+    gain = score["ensemble_bank"] - score["frame_window_bank"]
+    minutes = cpu_minutes("mobileclip-s2")
+    rows = [
+        ["6. the economy mode loses at most 2 points", f"{-100 * loss:+.1f} points", loss <= 0.02],
+        ["7. economy indexing takes at most 10 min of CPU time per hour of video", f"{minutes:.1f} min",
+         minutes <= 10],
+        ["8. the precision mode gains at least 1 point", f"{100 * gain:+.1f} points", gain >= 0.01],
+    ]  # fmt: skip
+    criteria = table(["criterion (fixed before the second run)", "measured on test", "met"],
+                     [[n, m, "yes" if ok else "no"] for n, m, ok in rows])  # fmt: skip
+    second = "mobileclip-s2"
+    cost = {
+        "standard": (cpu_minutes(None), wall_minutes(None), c["text_ms"]),
+        "economy": (cpu_minutes(second), wall_minutes(second), c[second]["text_ms"]),
+    }
+    cost["precision"] = tuple(a + b for a, b in zip(cost["standard"], cost["economy"], strict=True))
+    modes = table(
+        ["mode", "R@1", "R@5", "R@10", "right video in top 5", "indexing, CPU (min/h)", "indexing, 4 vCPU (min/h)",
+         "per search (ms)"],
+        [[f"{mode} (`{m}`)", pct(r[m]["corpus"]["R@1 IoU>=0.5"]), pct(r[m]["corpus"][PRIMARY]),
+          pct(r[m]["corpus"]["R@10 IoU>=0.5"]), pct(r[m]["video"]["R@5"]), f"{cost[mode][0]:.1f}",
+          f"{cost[mode][1]:.1f}", f"{cost[mode][2] + r[m]['query_ms']:.0f}"] for mode, m in MODES],
+    )  # fmt: skip
+    french = table(
+        ["mode", "English R@5", "French R@5", "change", "right video in top 5, English / French"],
+        [[mode, pct(r[m]["corpus"][PRIMARY]), pct(r["french"][m]["corpus"][PRIMARY]),
+          f"{100 * (r['french'][m]['corpus'][PRIMARY] - r[m]['corpus'][PRIMARY]):+.1f}",
+          f"{pct(r[m]['video']['R@5'])} / {pct(r['french'][m]['video']['R@5'])}"] for mode, m in MODES],
+    )  # fmt: skip
+    out = {"round2-criteria": criteria, "round2-modes": modes, "round2-french": french}
+    if first:
+
+        def numbers(res: dict, m: str) -> tuple:
+            return res[m]["corpus"], res[m]["single"], res[m]["video"]
+
+        same = [m for m in first["methods"] if numbers(r, m) == numbers(first, m)]
+        out["round2-check"] = (f"The first round's {len(first['methods'])} methods, evaluated again: "
+                               f"{len(same)} give exactly the same numbers as in the first run.")  # fmt: skip
+    return out
+
+
+def explore_table() -> str | None:
+    f = RESULTS / "didemo_train_explore.json"
+    if not f.exists():
+        return None
+    rows = json.loads(f.read_text())
+    return table(["variant (tuning videos)", "source", "R@5", "change", "won / lost", "sign test p"],
+                 [[x["variant"], x["source"], pct(x["score"]), f"{100 * x['change']:+.1f}",
+                   f"{x['wins']} / {x['losses']}", "" if not x["wins"] + x["losses"] else f"{x['p']:.2f}"]
+                  for x in rows])  # fmt: skip
+
+
 def tuning_table() -> str | None:
     runs = [("first", "didemo_tuned_first_run.json"), ("second", "didemo_tuned_second_run.json"),
             ("third", "didemo_tuned.json")]  # fmt: skip
@@ -147,6 +215,12 @@ def main() -> int:
     tuning = tuning_table()
     if tuning:
         tables["didemo-tuning"] = tuning
+    explore = explore_table()
+    if explore:
+        tables["didemo-explore"] = explore
+    f2 = RESULTS / "didemo_test_round2.json"
+    if f2.exists():
+        tables.update(round2_tables(json.loads(f2.read_text()), json.loads(f.read_text()) if f.exists() else None))
 
     def fill(m):
         name = m.group(1)

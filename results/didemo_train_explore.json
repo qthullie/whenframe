@@ -1,0 +1,101 @@
+[
+ {
+  "variant": "default search",
+  "source": "",
+  "score": 0.31527848748083803,
+  "change": 0.0,
+  "wins": 0,
+  "losses": 0,
+  "p": 1.0
+ },
+ {
+  "variant": "no query bank",
+  "source": "",
+  "score": 0.29024016351558507,
+  "change": -0.025038323965252962,
+  "wins": 90,
+  "losses": 139,
+  "p": 0.001459814223148144
+ },
+ {
+  "variant": "bias = mean of the 8 best bank scores",
+  "source": "NNN, arXiv 2410.24114",
+  "score": 0.29330608073582015,
+  "change": -0.02197240674501788,
+  "wins": 55,
+  "losses": 98,
+  "p": 0.0006366069157043575
+ },
+ {
+  "variant": "bias = mean of the 32 best bank scores",
+  "source": "NNN, arXiv 2410.24114",
+  "score": 0.31119059785385794,
+  "change": -0.00408788962698009,
+  "wins": 51,
+  "losses": 59,
+  "p": 0.5046848075879912
+ },
+ {
+  "variant": "bias = mean of the 128 best bank scores",
+  "source": "NNN, arXiv 2410.24114",
+  "score": 0.3168114460909555,
+  "change": 0.0015329586101174852,
+  "wins": 36,
+  "losses": 33,
+  "p": 0.8099490529189247
+ },
+ {
+  "variant": "correct only frames ranked first by a bank text",
+  "source": "QB-Norm, arXiv 2112.12777",
+  "score": 0.28104241185487994,
+  "change": -0.034236075625958096,
+  "wins": 98,
+  "losses": 165,
+  "p": 4.308637813644203e-05
+ },
+ {
+  "variant": "centre both modalities, then the bank",
+  "source": "GR-CLIP, arXiv 2507.19054",
+  "score": 0.31221257026060295,
+  "change": -0.0030659172202350815,
+  "wins": 63,
+  "losses": 69,
+  "p": 0.6635853603383616
+ },
+ {
+  "variant": "bank of 30,431 descriptions instead of 4,096",
+  "source": "",
+  "score": 0.3168114460909555,
+  "change": 0.0015329586101174852,
+  "wins": 15,
+  "losses": 12,
+  "p": 0.7011080384254456
+ },
+ {
+  "variant": "each frame averaged with its neighbours",
+  "source": "",
+  "score": 0.3065917220235054,
+  "change": -0.008686765457332657,
+  "wins": 74,
+  "losses": 91,
+  "p": 0.21278579701152125
+ },
+ {
+  "variant": "also subtract the video's mean offset (x 0.5)",
+  "source": "",
+  "score": 0.3096576392437404,
+  "change": -0.005620848237097631,
+  "wins": 33,
+  "losses": 44,
+  "p": 0.25430466614770003
+ },
+ {
+  "variant": "add 0.05 x similarity to the 10 best frames",
+  "source": "alpha-QE",
+  "score": 0.3137455288707205,
+  "change": -0.0015329586101175408,
+  "wins": 26,
+  "losses": 29,
+  "p": 0.7877061896700435
+ }
+]

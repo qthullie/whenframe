@@ -13,6 +13,11 @@ only differ in how they turn per-frame scores into ranked moments.
     frame_window_bank  frame_window on the same corrected scores
     whenframe_dedup    the default search (the best of the above on the tuning
                        videos) on the frames left after skipping repeats
+
+Second round (docs/PROTOCOL.md), with a second image encoder:
+
+    mobileclip_bank    frame_window on MobileCLIP-S2 scores corrected with its own query bank
+    ensemble_bank      frame_window on the two corrected scores, standardised and added
 """
 
 from __future__ import annotations
@@ -30,7 +35,9 @@ from whenframe.video import RepeatFilter
 
 CORPUS_KS = [1, 5, 10, 100]
 SHORTLIST = 64
-METHODS = ["scene", "frame_window", "whenframe", "whenframe_bank", "frame_window_bank", "whenframe_dedup"]
+MAIN, SECOND = "siglip2-base", "mobileclip-s2"
+METHODS = ["scene", "frame_window", "whenframe", "whenframe_bank", "frame_window_bank", "whenframe_dedup",
+           "mobileclip_bank", "ensemble_bank"]  # fmt: skip
 CANDIDATES = ["frame_window", "whenframe", "whenframe_bank", "frame_window_bank"]  # for the default search
 BANKED = {"whenframe_bank", "frame_window_bank"}
 PRIMARY = ("corpus", "R@5 IoU>=0.5")
@@ -48,6 +55,8 @@ class Frozen:
     cuts: list
     thumbs: np.ndarray | None = None
     bank: np.ndarray | None = None  # text embeddings of descriptions of other videos
+    extra: dict = field(default_factory=dict)  # model -> embeddings of the same frames by another encoder
+    extra_banks: dict = field(default_factory=dict)  # model -> its query bank
     _offsets: dict = field(default_factory=dict, repr=False)
 
     def select(self, mask: np.ndarray) -> Frozen:
@@ -58,7 +67,8 @@ class Frozen:
         starts = np.concatenate([[0], np.cumsum(counts)[:-1]])
         thumbs = None if self.thumbs is None else self.thumbs[idx]
         return replace(self, emb=self.emb[idx], times=self.times[idx], starts=starts, counts=counts,
-                       keep=self.keep[idx], thumbs=thumbs, _offsets={})  # fmt: skip
+                       keep=self.keep[idx], thumbs=thumbs, extra={m: e[idx] for m, e in self.extra.items()},
+                       _offsets={})  # fmt: skip
 
     def only_kept(self) -> Frozen:
         return self.select(self.keep)
@@ -75,15 +85,16 @@ class Frozen:
             mask[s : s + c : k] = True
         return mask
 
-    def offsets(self, beta: float) -> np.ndarray:
+    def offsets(self, beta: float, model: str = MAIN) -> np.ndarray:
         """How well each frame matches descriptions in general: a soft maximum of its scores against the bank.
 
         In cosine units, (1 / beta) * log(mean_b exp(beta * cos(b, frame))). Subtracting it
         from a query's score is the inverted softmax of query-bank normalisation.
         """
-        if beta not in self._offsets:
-            self._offsets[beta] = bank_offsets(self.emb, self.bank, beta)
-        return self._offsets[beta]
+        if (model, beta) not in self._offsets:
+            emb, bank = (self.emb, self.bank) if model == MAIN else (self.extra[model], self.extra_banks[model])
+            self._offsets[(model, beta)] = bank_offsets(emb, bank, beta)
+        return self._offsets[(model, beta)]
 
 
 def iou(a: tuple[float, float], b: tuple[float, float]) -> float:
@@ -123,7 +134,8 @@ def whenframe(f: Frozen, scores: np.ndarray, v: int, p: dict) -> list[tuple[floa
 
 
 PREDICT = {"frame_window": frame_window, "scene": scene, "whenframe": whenframe, "whenframe_bank": whenframe,
-           "frame_window_bank": frame_window}  # fmt: skip
+           "frame_window_bank": frame_window, "mobileclip_bank": frame_window,
+           "ensemble_bank": frame_window}  # fmt: skip
 
 # The grids of the second tuning run (see "Changes made before the first test run" in docs/PROTOCOL.md).
 SPACE = {
@@ -133,24 +145,49 @@ SPACE = {
                   "contrast": [0.0, 0.5, 1.0], "min_length": [5.0, 7.5, 10.0], "per_video": [2, 3]},
     # tried on top of the tuned parameters of whenframe and of frame_window
     "bank": {"beta": [10.0, 20.0, 50.0, 100.0], "lam": [0.25, 0.5, 1.0]},
+    # second round: weight of the second model's standardised scores, on top of both tuned banks
+    "weight": [0.25, 0.5, 0.75, 1.0],
 }  # fmt: skip
 
 
-def frame_scores(f: Frozen, text: np.ndarray, method: str, p: dict) -> np.ndarray:
-    """frames x queries."""
-    scores = f.emb @ text.T
+def standardise(s: np.ndarray) -> np.ndarray:
+    """Per query (column): centred and scaled over all frames, so two models' scores can be added."""
+    return (s - s.mean(axis=0)) / s.std(axis=0)
+
+
+def corrected(f: Frozen, texts: dict, model: str, beta: float, lam: float) -> np.ndarray:
+    emb = f.emb if model == MAIN else f.extra[model]
+    return emb @ texts[model].T - lam * f.offsets(beta, model)[:, None]
+
+
+def frame_scores(f: Frozen, text, method: str, p: dict) -> np.ndarray:
+    """frames x queries. `text` is the main model's query embeddings, or a dict of them per model."""
+    texts = text if isinstance(text, dict) else {MAIN: text}
+    if method == "mobileclip_bank":
+        return corrected(f, texts, SECOND, p["beta"], p["lam"])
+    if method == "ensemble_bank":
+        main = corrected(f, texts, MAIN, p["beta"], p["lam"])
+        second = corrected(f, texts, SECOND, p["beta2"], p["lam2"])
+        return standardise(main) + p["weight"] * standardise(second)
+    scores = f.emb @ texts[MAIN].T
     if method in BANKED:
         scores -= p["lam"] * f.offsets(p["beta"])[:, None]
     return scores
 
 
+def one_query(text, qi: int):
+    return {m: t[qi : qi + 1] for m, t in text.items()} if isinstance(text, dict) else text[qi : qi + 1]
+
+
 # ---------------------------------------------------------------- evaluation
-def run(f: Frozen, queries: list, text: np.ndarray, method: str, p: dict, scores: np.ndarray | None = None) -> dict:
+def run(f: Frozen, queries: list, text, method: str, p: dict, scores: np.ndarray | None = None,
+        per_query: bool = False) -> dict:  # fmt: skip
+    """Metrics of one method; per_query adds, for each description, whether R@5 at IoU >= 0.5 was met."""
     predict = PREDICT[method]
     if scores is None:
         scores = frame_scores(f, text, method, p)
     best = np.maximum.reduceat(scores, f.starts, axis=0)  # videos x queries
-    single_iou, hits = [], {(k, th): 0 for k in CORPUS_KS for th in (0.5, 0.7)}
+    single_iou, found, hits = [], [], {(k, th): 0 for k in CORPUS_KS for th in (0.5, 0.7)}
     video_hits = dict.fromkeys(CORPUS_KS, 0)
     for qi, q in enumerate(queries):
         col = scores[:, qi]
@@ -171,13 +208,15 @@ def run(f: Frozen, queries: list, text: np.ndarray, method: str, p: dict, scores
         for th, r in first_ok.items():
             for k in CORPUS_KS:
                 hits[(k, th)] += r is not None and r < k
+        found.append(first_ok[0.5] is not None and first_ok[0.5] < 5)
         order = list(dict.fromkeys(v for v, *_ in ranked))
         rank_v = order.index(q["video"]) if q["video"] in order else None
         for k in CORPUS_KS:
             video_hits[k] += rank_v is not None and rank_v < k
     n = len(queries)
     single = np.array(single_iou)
-    return {
+    extra = {"found": found} if per_query else {}
+    return {**extra,
         "params": p,
         "single": {"R1 IoU>=0.5": float((single >= 0.5).mean()), "R1 IoU>=0.7": float((single >= 0.7).mean()),
                    "mIoU": float(single.mean())},
@@ -192,13 +231,11 @@ def latency(f: Frozen, text: np.ndarray, method: str, p: dict, n: int = 200) -> 
     The text encoder is timed separately; the bank offsets are computed when indexing.
     """
     predict = PREDICT[method]
-    offsets = p["lam"] * f.offsets(p["beta"]) if method in BANKED else None
-    n = min(n, len(text))
+    frame_scores(f, one_query(text, 0), method, p)  # the offsets are computed when indexing, not per query
+    n = min(n, len(text[MAIN] if isinstance(text, dict) else text))
     t0 = time.perf_counter()
     for qi in range(n):
-        col = f.emb @ text[qi]
-        if offsets is not None:
-            col = col - offsets
+        col = frame_scores(f, one_query(text, qi), method, p)[:, 0]
         best = np.maximum.reduceat(col, f.starts)
         ranked = []
         for v in np.argsort(-best)[:SHORTLIST]:
@@ -216,7 +253,7 @@ def search_space(method: str, budget: int, rng: random.Random) -> list[dict]:
 def grid_search(f: Frozen, queries: list, text: np.ndarray, budget: int = 60, seed: int = 0) -> dict:
     """Best parameters of each method for the primary metric. Exhaustive when small, random otherwise."""
     rng = random.Random(seed)
-    scores = f.emb @ text.T
+    scores = frame_scores(f, text, "frame_window", {})
     best = {}
 
     def pick(method, combos, shared):
@@ -237,6 +274,12 @@ def grid_search(f: Frozen, queries: list, text: np.ndarray, budget: int = 60, se
     default = max((m for m in CANDIDATES if m in best), key=lambda m: best[m]["train_score"])
     best["default"] = default
     best["whenframe_dedup"] = {**best[default], "method": default}
+    if SECOND in f.extra:  # second round: the cheaper encoder alone, then both together
+        bank = search_space("bank", budget, rng)
+        pick("mobileclip_bank", [{**best["frame_window"]["params"], **p} for p in bank], shared=False)
+        main, second = best["frame_window_bank"]["params"], best["mobileclip_bank"]["params"]
+        pick("ensemble_bank", [{**main, "beta2": second["beta"], "lam2": second["lam"], "weight": w}
+                               for w in SPACE["weight"]], shared=False)  # fmt: skip
     return best
 
 
