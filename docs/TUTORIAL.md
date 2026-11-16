@@ -138,4 +138,11 @@ make didemo-round2    # MobileCLIP-S2, French descriptions, calibration, tuning,
 make tables
 ```
 
+Charades-STA comes from the `lmms-eval/charades_sta` copy on the Hugging Face
+Hub: `data/test-00000-of-00001.parquet` as `data/charades/test.parquet`, and,
+from the four `Charades_v1_480_part_N.zip` archives (16 GB), the 1,334 videos
+it names, in `data/charades/videos/`. Charades is licensed for non-commercial
+research. `make charades` embeds the videos and runs the methods with the
+parameters tuned on DiDeMo (pyarrow, in the dev extras, reads the annotations).
+
 The protocol, including the success criteria, is in [PROTOCOL.md](PROTOCOL.md).

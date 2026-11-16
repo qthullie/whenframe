@@ -288,3 +288,43 @@ trained on English only, keeps 40 %.
 | also subtract the video's mean offset (x 0.5) |  | 31.0 | -0.6 | 33 / 44 | 0.25 |
 | add 0.05 x similarity to the 10 best frames | alpha-QE | 31.4 | -0.2 | 26 / 29 | 0.79 |
 <!-- /table -->
+
+## Charades-STA, with DiDeMo's parameters
+
+The usual benchmark for placing a described moment in a given video: 3,720
+sentences in 1,334 Charades videos of people at home. Nothing was tuned on it
+([PROTOCOL.md](PROTOCOL.md)); the methods run with their DiDeMo parameters and
+the DiDeMo query bank.
+
+<!-- table charades -->
+| method (parameters from DiDeMo, unchanged) | R1 IoU>=0.5 | R1 IoU>=0.7 | mean IoU | all 1,334 videos at once: R@5 IoU>=0.5 |
+|---|---|---|---|---|
+| fixed windows | 46.0 | 18.9 | 40.6 | 3.9 |
+| fixed windows + query bank | 45.7 | 19.5 | 40.5 | 4.1 |
+| adaptive spans | 47.3 | 22.5 | 41.0 | 3.5 |
+| adaptive spans + query bank | 47.2 | 23.0 | 41.3 | 3.6 |
+| *10 seconds in the middle, ignoring the description (reference added after the run)* | 15.2 | 4.2 | 20.1 |  |
+<!-- /table -->
+
+In a given video, the default search (fixed windows and the query bank) places
+45.7 % of the sentences at IoU >= 0.5, and the adaptive spans 47.2 %. A
+10-second window in the middle of the video, which ignores the sentence, places
+15.2 %: the frames do most of the work. For comparison, "Your VLM Already Knows
+When" reports 56.8 % at IoU >= 0.5 by asking a 7-billion-parameter
+vision-language model yes-or-no questions about the frames, for every sentence
+([RESEARCH.md](RESEARCH.md)); whenframe embeds each frame once, and then answers
+in milliseconds.
+
+Unlike on DiDeMo, the adaptive spans beat the fixed windows here: by 1.3 to 1.5
+points at IoU >= 0.5 and by 3.5 to 3.6 at 0.7. DiDeMo's moments are cut on a
+5-second grid, which a 10-second window fits; Charades-STA's are not, and their
+length varies.
+
+Searching the 1,334 videos at once puts the moment among the first five results
+3.5 to 4.1 % of the time. Charades videos look alike: people at home, in similar
+rooms, doing the same everyday things. "Person closes the door" is word for word
+the sentence of 38 moments, and 291 of the videos have a sentence about a door,
+so the annotated video is one of many that fit, and the metric counts the others
+as wrong. This number does not compare with the 27.2 % of DiDeMo, whose videos
+differ much more from each other; it does say that whenframe cannot tell apart
+videos that show the same thing.

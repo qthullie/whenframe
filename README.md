@@ -111,6 +111,11 @@ Second round (two more modes, French descriptions):
 | 8. the precision mode gains at least 1 point | +0.1 points | no |
 <!-- /table -->
 
+On Charades-STA, with the parameters chosen on DiDeMo and nothing tuned, it
+places the moment in a given video 45.7 % of the time at IoU >= 0.5; a
+7-billion-parameter vision-language model, run over the video's frames for each
+sentence, is reported at 56.8 %.
+
 All tables, the costs and the figures: [docs/RESULTS.md](docs/RESULTS.md).
 
 ## Limits
@@ -119,6 +124,9 @@ All tables, the costs and the figures: [docs/RESULTS.md](docs/RESULTS.md).
   laughs" are out of its reach.
 - It was measured on the first 30 seconds of short personal videos (DiDeMo);
   long videos were not measured.
+- It cannot tell apart videos that show the same thing: among Charades'
+  1,334 look-alike videos of people at home, the right one is in the first five
+  results 4 % of the time.
 - Indexing is slow on a small machine (see the modes above, measured on 4 vCPUs).
 - Descriptions in French were measured through machine translation only.
 - Several criteria set in advance were not met; the results page says which and

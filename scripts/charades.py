@@ -7,6 +7,7 @@ IoU); the whole-library search is reported as well.
 
     python scripts/charades.py extract  --videos DIR --annotations test.parquet
     python scripts/charades.py evaluate --annotations test.parquet
+    python scripts/charades.py prior    --annotations test.parquet   # a reference added after the run
 
 The annotations and an mp4 copy of the videos are on the Hugging Face Hub
 (lmms-eval/charades_sta). Charades is licensed for non-commercial research.
@@ -27,7 +28,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import didemo  # noqa: E402
-from benchmark import CORPUS_KS, Frozen, latency, run  # noqa: E402
+from benchmark import CORPUS_KS, Frozen, iou, latency, run  # noqa: E402
 
 from whenframe.video import drop_repeats, probe, sample_frames  # noqa: E402
 
@@ -101,15 +102,39 @@ def evaluate(args) -> None:
     (ROOT / "results" / "charades_test.json").write_text(json.dumps(res, indent=1))
 
 
+def prior(args) -> None:
+    """What the window alone scores: 10 seconds in the middle of the video, whatever the description.
+
+    Not in the protocol; added after the evaluation, as a reference for its numbers. Charades-STA
+    moments last about 8 seconds in videos of about 30, so a fixed window already overlaps many.
+    """
+    z = np.load(CACHE / "charades_test.npz")
+    durations = dict(zip(z["names"].tolist(), z["durations"].astype(float), strict=True))
+    ious = []
+    for a in annotations(args.annotations):
+        if a["video"] in durations:
+            d = durations[a["video"]]
+            start = max(0.0, (d - 10.0) / 2)
+            ious.append(iou((start, min(d, start + 10.0)), (max(0.0, a["moment"][0]), min(a["moment"][1], d))))
+    ious = np.array(ious)
+    out = ROOT / "results" / "charades_test.json"
+    res = json.loads(out.read_text())
+    single = {"R1 IoU>=0.5": float((ious >= 0.5).mean()), "R1 IoU>=0.7": float((ious >= 0.7).mean()),
+              "mIoU": float(ious.mean())}  # fmt: skip
+    res["middle_window"] = {"single": single}
+    out.write_text(json.dumps(res, indent=1))
+    print("middle_window", res["middle_window"]["single"])
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("stage", choices=["extract", "evaluate"])
+    ap.add_argument("stage", choices=["extract", "evaluate", "prior"])
     ap.add_argument("--videos")
     ap.add_argument("--annotations", required=True, help="lmms-eval/charades_sta data/test-00000-of-00001.parquet")
     ap.add_argument("--train-annotations", help="DiDeMo training annotations, for the query bank")
     ap.add_argument("--model-dir")
     a = ap.parse_args()
-    {"extract": extract, "evaluate": evaluate}[a.stage](a)
+    {"extract": extract, "evaluate": evaluate, "prior": prior}[a.stage](a)
 
 
 if __name__ == "__main__":

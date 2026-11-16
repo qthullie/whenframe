@@ -200,12 +200,14 @@ def charades_table() -> str | None:
     if not f.exists():
         return None
     r = json.loads(f.read_text())
-    return table(
-        ["method (parameters from DiDeMo, unchanged)", "R1 IoU>=0.5", "R1 IoU>=0.7", "mean IoU",
-         f"all {r['videos']:,} videos at once: R@5 IoU>=0.5"],
-        [[LABEL[m], pct(r[m]["single"]["R1 IoU>=0.5"]), pct(r[m]["single"]["R1 IoU>=0.7"]), pct(r[m]["single"]["mIoU"]),
-          pct(r[m]["corpus"][PRIMARY])] for m in r["methods"]],
-    )  # fmt: skip
+    rows = [[LABEL[m], pct(r[m]["single"]["R1 IoU>=0.5"]), pct(r[m]["single"]["R1 IoU>=0.7"]),
+             pct(r[m]["single"]["mIoU"]), pct(r[m]["corpus"][PRIMARY])] for m in r["methods"]]  # fmt: skip
+    if "middle_window" in r:  # added after the run, as a reference
+        x = r["middle_window"]["single"]
+        rows.append(["*10 seconds in the middle, ignoring the description (reference added after the run)*",
+                     pct(x["R1 IoU>=0.5"]), pct(x["R1 IoU>=0.7"]), pct(x["mIoU"]), ""])  # fmt: skip
+    return table(["method (parameters from DiDeMo, unchanged)", "R1 IoU>=0.5", "R1 IoU>=0.7", "mean IoU",
+                  f"all {r['videos']:,} videos at once: R@5 IoU>=0.5"], rows)  # fmt: skip
 
 
 def explore_table() -> str | None:
