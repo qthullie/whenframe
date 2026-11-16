@@ -28,12 +28,15 @@ from urllib.parse import parse_qs, urlparse
 
 from .library import Library
 from .search import SearchConfig, Searcher
+from .video import is_photo
 
 CHUNK = 1 << 20
 
 
 def thumbnail(path: str, at: float, width: int = 480) -> bytes:
-    cmd = ["ffmpeg", "-v", "error", "-nostdin", "-ss", f"{max(at, 0.0):.2f}", "-i", path, "-frames:v", "1",
+    # no seeking in a photo: ffmpeg drops the only frame of some JPEGs when asked to seek, even to 0
+    seek = [] if is_photo(path) else ["-ss", f"{max(at, 0.0):.2f}"]
+    cmd = ["ffmpeg", "-v", "error", "-nostdin", *seek, "-i", path, "-frames:v", "1",
            "-vf", f"scale={width}:-2", "-f", "image2pipe", "-vcodec", "mjpeg", "-q:v", "4", "-"]  # fmt: skip
     return subprocess.run(cmd, capture_output=True, timeout=30).stdout
 

@@ -18,9 +18,9 @@ from whenframe.video import find_media, read_photo
 pytestmark = pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="needs ffmpeg")
 
 
-def make_photo(path, colour):
+def make_photo(path, colour, size="64x48"):
     r, g, b = COLORS[colour]
-    cmd = ["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", f"color=c=0x{r:02x}{g:02x}{b:02x}:s=64x48",
+    cmd = ["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", f"color=c=0x{r:02x}{g:02x}{b:02x}:s={size}",
            "-frames:v", "1", str(path)]  # fmt: skip
     subprocess.run(cmd, check=True)
 
@@ -28,7 +28,7 @@ def make_photo(path, colour):
 @pytest.fixture
 def media(tmp_path):
     make_video(str(tmp_path / "a.mp4"), [("grey", 6), ("green", 4)])
-    make_photo(tmp_path / "red.jpg", "red")
+    make_photo(tmp_path / "red.jpg", "red", "1280x544")  # one whose only frame a seek would drop
     make_photo(tmp_path / "blue.png", "blue")
     return tmp_path
 

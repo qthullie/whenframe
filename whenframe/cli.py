@@ -65,15 +65,20 @@ def cmd_index(args) -> int:
 
 def cmd_search(args) -> int:
     lib = Library(args.library)
-    hits = Searcher(lib, SearchConfig()).search(" ".join(args.query), k=args.k)
-    if not hits:
+    found = Searcher(lib, SearchConfig()).search(" ".join(args.query), k=args.k)
+    if not found:
         print("no video indexed yet: run `whenframe index <folder>` first")
         return 1
+    hits = found if args.all else [h for h in found if h.confidence >= 0.005]
     for h in hits:
         when = f"{'photo':>17}" if h.photo else f"{clock(h.start):>7} - {clock(h.end):<7}"
         print(f"{h.confidence:5.0%}  {when}  {h.path}")
         if h.said:
             print(f"{'':16}said: “{h.said}”")
+    if not hits:
+        print("nothing in the library matches this well")
+    if len(hits) < len(found):  # under 0.5 %, shown as 0 %: rarely right (0.8 % of the right moments on DiDeMo)
+        print(f"({len(found) - len(hits)} more at 0 % left out; --all shows them)")
     return 0
 
 
@@ -172,6 +177,7 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("search", help="find moments matching a description")
     p.add_argument("query", nargs="+")
     p.add_argument("-k", type=int, default=10, help="number of moments to show")
+    p.add_argument("--all", action="store_true", help="also show the moments the model is 0 %% sure of")
     p.set_defaults(fn=cmd_search)
     p = sub.add_parser("serve", help="a search page in the browser, with the model kept loaded")
     p.add_argument("--host", default="127.0.0.1", help="address to listen on (default: this computer only)")

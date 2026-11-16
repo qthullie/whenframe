@@ -95,6 +95,8 @@ const el = (tag, cls, text) => {
   return e;
 };
 let current = null;
+let last = null, showAll = false;  // the last results, and whether the 0 % ones are shown
+const HIDDEN_BELOW = 0.005;  // shown as "0 %": on DiDeMo, 0.8 % of the right moments found were that low
 
 async function search(q) {
   history.replaceState(null, "", q ? `?q=${encodeURIComponent(q)}` : location.pathname);
@@ -104,6 +106,7 @@ async function search(q) {
     const r = await fetch(`/api/search?k=12&q=${encodeURIComponent(q)}`);
     const data = await r.json();
     if (data.query !== $("q").value.trim()) return;  // a newer search is on its way
+    showAll = false;
     render(data);
   } catch (e) {
     $("status").textContent = "The search failed: is whenframe serve still running?";
@@ -111,12 +114,21 @@ async function search(q) {
 }
 
 function render(data) {
+  last = data;
   const box = $("results");
   box.replaceChildren();
-  $("status").textContent = data.hits.length
-    ? `${data.hits.length} moments in ${data.ms} ms`
-    : "No video indexed yet: run whenframe index <folder>, then reload.";
-  data.hits.forEach((h, i) => {
+  const hits = showAll ? data.hits : data.hits.filter((h) => h.confidence >= HIDDEN_BELOW);
+  const hidden = data.hits.length - hits.length;
+  const status = $("status");
+  status.textContent = !data.hits.length ? "No video indexed yet: run whenframe index <folder>, then reload."
+    : hits.length ? `${hits.length} moments in ${data.ms} ms` : "Nothing in the library matches this well";
+  if (hidden) {
+    const more = el("button", "plain", `show them`);
+    more.type = "button";
+    more.addEventListener("click", () => { showAll = true; render(last); });
+    status.append(` (${hidden} more at 0 % left out: `, more, ")");
+  }
+  hits.forEach((h, i) => {
     const card = el("button", h.confidence < 0.05 ? "card unlikely" : "card");
     card.type = "button";
     const shot = el("div", "shot");
