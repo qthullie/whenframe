@@ -24,6 +24,7 @@ import argparse
 import json
 import random
 import resource
+import shutil
 import subprocess
 import sys
 import time
@@ -58,6 +59,7 @@ DATA = ROOT / "data" / "didemo"
 SEGMENT = 5.0
 SECONDS = 30.0  # what the annotators saw
 BANK_SIZE = 4096
+TIMING = ("decode_cpu", "decode_wall", "encode_cpu", "encode_wall", "scene_cpu", "scene_wall")
 
 
 def reference(times: list[list[int]], duration: float) -> tuple[float, float]:
@@ -100,17 +102,20 @@ def suffix(model: str, backend: str = "onnxruntime") -> str:
 
 
 def extract(args) -> None:
+    """Frames, embeddings, shots and timings of each video; resumes where it stopped (one file per video)."""
     ann = json.loads(Path(args.annotations).read_text())
     folder = Path(args.videos)
     names = video_names(args, ann)
     enc = make_encoder(args.model_dir, args.model, args.backend)
     out = CACHE / f"didemo_{args.split}{suffix(args.model, args.backend)}.npz"
+    parts = CACHE / f"{out.stem}_parts"
+    parts.mkdir(parents=True, exist_ok=True)
     main = args.model == MAIN and args.backend == "onnxruntime"  # the run the other caches are compared with
-    cols = {k: [] for k in ("emb", "times", "keep", "thumbs", "starts", "counts", "durations", "cuts")}
-    cost = {k: [] for k in ("decode_cpu", "decode_wall", "encode_cpu", "encode_wall", "scene_cpu", "scene_wall")}
-    done, row = [], 0
-    t_all = time.time()
-    for name in names:
+    t_all, n_new = time.time(), 0
+    for n, name in enumerate(names, 1):
+        part = parts / f"{Path(name).stem}.npz"
+        if part.exists():
+            continue
         p = folder / name
         try:
             info = probe(p)
@@ -129,28 +134,30 @@ def extract(args) -> None:
             continue
         keep = np.zeros(len(frames), dtype=bool)
         keep[drop_repeats(frames)] = True
-        for k, v in (("emb", e.astype(np.float16)), ("times", t.astype(np.float32)), ("keep", keep),
-                     ("thumbs", thumbnails(frames).astype(np.float16)), ("starts", row), ("counts", len(frames)),
-                     ("durations", min(info.duration or len(frames), SECONDS)), ("cuts", cuts)):  # fmt: skip
-            cols[k].append(v)
-        for k, v in (("decode_cpu", c1 - c0 + p1 - p0), ("decode_wall", w1 - w0), ("encode_cpu", p2 - p1),
-                     ("encode_wall", w2 - w1), ("scene_cpu", c3 - c1), ("scene_wall", w3 - w2)):  # fmt: skip
-            cost[k].append(v)
-        done.append(name)
-        row += len(frames)
-        if len(done) % 50 == 0:
-            print(f"{len(done)}/{len(names)} videos, {row} frames, {time.time() - t_all:.0f} s", flush=True)
-    CACHE.mkdir(parents=True, exist_ok=True)
+        tmp = part.with_suffix(".tmp.npz")
+        np.savez(tmp, emb=e.astype(np.float16), times=t.astype(np.float32), keep=keep,
+                 thumbs=thumbnails(frames).astype(np.float16), duration=min(info.duration or len(frames), SECONDS),
+                 cuts=np.array(json.dumps(cuts)), decode_cpu=c1 - c0 + p1 - p0, decode_wall=w1 - w0,
+                 encode_cpu=p2 - p1, encode_wall=w2 - w1, scene_cpu=c3 - c1, scene_wall=w3 - w2)  # fmt: skip
+        tmp.replace(part)  # a video is either done or not started
+        n_new += 1
+        if n_new % 50 == 0:
+            print(f"{n}/{len(names)} videos, {n_new} new, {time.time() - t_all:.0f} s", flush=True)
+    done = [name for name in names if (parts / f"{Path(name).stem}.npz").exists()]
+    z = [np.load(parts / f"{Path(name).stem}.npz") for name in done]
+    counts = np.array([len(x["times"]) for x in z])
     np.savez_compressed(
-        out, emb=np.concatenate(cols["emb"]), times=np.concatenate(cols["times"]), keep=np.concatenate(cols["keep"]),
-        thumbs=np.concatenate(cols["thumbs"]), starts=np.array(cols["starts"]), counts=np.array(cols["counts"]),
-        durations=np.array(cols["durations"], dtype=np.float32), names=np.array(done),
-        cuts=np.array(json.dumps(cols["cuts"])), model=np.array(enc.name),
-        **{k: np.array(v) for k, v in cost.items()},
+        out, emb=np.concatenate([x["emb"] for x in z]), times=np.concatenate([x["times"] for x in z]),
+        keep=np.concatenate([x["keep"] for x in z]), thumbs=np.concatenate([x["thumbs"] for x in z]),
+        starts=np.concatenate([[0], np.cumsum(counts)[:-1]]), counts=counts,
+        durations=np.array([float(x["duration"]) for x in z], dtype=np.float32), names=np.array(done),
+        cuts=np.array(json.dumps([json.loads(str(x["cuts"])) for x in z])), model=np.array(enc.name),
+        **{k: np.array([float(x[k]) for x in z]) for k in TIMING},
     )  # fmt: skip
     if main:
         (ROOT / "results" / f"didemo_{args.split}_videos.txt").write_text("\n".join(done) + "\n")
-    print(f"wrote {out}: {len(done)} videos, {row} frames, {time.time() - t_all:.0f} s")
+    shutil.rmtree(parts)
+    print(f"wrote {out}: {len(done)} videos, {counts.sum()} frames, {time.time() - t_all:.0f} s")
 
 
 def make_encoder(model_dir: str | None, model: str = MAIN, backend: str = "onnxruntime") -> Encoder:
@@ -176,7 +183,7 @@ def load(split: str, annotations: str | None = None, extra: tuple[str, ...] = ()
         if stem(a["video"]) in index:
             v = index[stem(a["video"])]
             queries.append({"text": a["description"], "video": v, "moment": reference(a["times"], frozen.durations[v])})
-    timing = ("decode_cpu", "decode_wall", "encode_cpu", "encode_wall", "scene_cpu", "scene_wall")
+    timing = TIMING
     cost = {  # what was decoded and encoded, which the timings cover
         "videos": len(names),
         "hours": float(decoded.durations.sum() / 3600),

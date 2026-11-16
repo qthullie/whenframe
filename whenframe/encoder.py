@@ -1,4 +1,4 @@
-"""Image and text towers run with ONNX Runtime: SigLIP 2 at two sizes, and MobileCLIP-S2 for research use.
+"""Image and text towers run with ONNX Runtime: SigLIP 2 at three sizes, and MobileCLIP-S2 for research use.
 
 SigLIP scores an image-text pair with a sigmoid, sigmoid(scale * cos + bias),
 trained on each pair independently, so its score is an absolute "does this
@@ -7,6 +7,12 @@ bias out; they are those of the original google/siglip2 checkpoint.
 
 SigLIP 2 B/32 (256 px, 64 patches instead of 196) is the cheaper model of the
 economy and precision modes; its scale and bias are its own checkpoint's.
+
+SigLIP 2 So400m (400 million parameters in the image tower, 5 times the base
+model's) comes from Immich's ONNX export of the open_clip weights, which takes
+one image or one text at a time; its texts are cleaned as open_clip does
+("canonicalize": lower case, no punctuation), and its scale and bias are those
+of google/siglip2-so400m-patch14-224.
 
 MobileCLIP-S2 is measured in the benchmark but is not used by any mode: Apple
 licenses its weights for non-commercial research only. It was trained with a
@@ -21,8 +27,11 @@ text tower always runs with ONNX Runtime in float32.
 
 from __future__ import annotations
 
+import html
 import importlib.util
+import json
 import os
+import string
 import sys
 import urllib.request
 from dataclasses import dataclass
@@ -49,7 +58,12 @@ class ModelSpec:
     text_output: str = "pooler_output"
     text_length: int = 64
     pad_token: str | None = "<pad>"  # None pads with id 0
-    lowercase: bool = True  # SigLIP was trained on lower-cased text; CLIP tokenizers lower-case by themselves
+    clean: str = "lower"  # "lower": as SigLIP was trained; "none": CLIP tokenizers clean by themselves; "canonical"
+    tokenizer_file: str = "tokenizer.json"
+    image_input: str = "pixel_values"
+    text_input: str = "input_ids"
+    text_dtype: str = "int64"
+    weights_folder: str | None = None  # a folder of weights stored next to the ONNX graphs, fetched whole
     bank_beta: float = 50.0  # query-bank correction, as tuned on DiDeMo training videos
     bank_lambda: float = 1.0
     spans_lambda: float | None = None  # its strength when moments are adaptive spans; None: as bank_lambda
@@ -63,7 +77,13 @@ MODELS = {
     # research use only (Apple Machine Learning Research Model licence)
     "mobileclip-s2": ModelSpec(
         "Xenova/mobileclip_s2", 256, 66.86, -19.567, pixels="unit", image_output="image_embeds",
-        text_output="text_embeds", text_length=77, pad_token=None, lowercase=False, bank_beta=10.0,
+        text_output="text_embeds", text_length=77, pad_token=None, clean="none", bank_beta=10.0,
+    ),
+    "siglip2-so400m": ModelSpec(
+        "immich-app/ViT-SO400M-14-SigLIP2__webli", 224, 109.8812, -15.9324, vision_file="visual/model.onnx",
+        text_file="textual/model.onnx", tokenizer_file="textual/tokenizer.json", image_input="image",
+        text_input="text", text_dtype="int32", image_output="embedding", text_output="embedding",
+        clean="canonical", weights_folder="textual",
     ),
 }  # fmt: skip
 DEFAULT_MODEL = "siglip2-base"
@@ -80,7 +100,10 @@ def cache_dir() -> Path:
 
 def fetch(spec: ModelSpec) -> Path:
     """Download the model files once into the cache and return their folder."""
-    return fetch_files(spec.repo, ("tokenizer.json", spec.vision_file, spec.text_file))
+    folder = fetch_files(spec.repo, (spec.tokenizer_file, spec.vision_file, spec.text_file))
+    if spec.weights_folder:
+        fetch_folder(spec.repo, spec.weights_folder)
+    return folder
 
 
 def fetch_files(repo: str, names: tuple[str, ...]) -> Path:
@@ -97,6 +120,19 @@ def fetch_files(repo: str, names: tuple[str, ...]) -> Path:
             while chunk := r.read(1 << 20):
                 f.write(chunk)
         tmp.replace(dest)
+    return folder
+
+
+def fetch_folder(repo: str, sub: str) -> Path:
+    """Download every file of a folder of a Hugging Face repository once, as listed by the Hub."""
+    folder = cache_dir() / "models" / repo.replace("/", "--")
+    done = folder / sub / ".complete"
+    if not done.exists():
+        url = f"https://huggingface.co/api/models/{repo}/tree/main/{sub}"
+        with urllib.request.urlopen(url, timeout=60) as r:  # noqa: S310 (fixed host)
+            listing = json.load(r)
+        fetch_files(repo, tuple(e["path"] for e in listing if e.get("type") == "file"))
+        done.touch()
     return folder
 
 
@@ -136,31 +172,79 @@ def _import_openvino():
     return openvino
 
 
-class _OnnxRuntimeImages:
+class _OnnxRuntime:
+    """A tower run by ONNX Runtime, on any number of inputs at once or, if its graph says so, one at a time."""
+
     precision = "f32"
 
-    def __init__(self, path: Path, output: str, threads: int | None):
+    def __init__(self, path: Path, input: str, output: str, threads: int | None):
         self._session = _session(path, threads)
-        self._output = output
+        self._input, self._output = input, output
+        self.one_at_a_time = next(i for i in self._session.get_inputs() if i.name == input).shape[0] == 1
         self.dim = next(o for o in self._session.get_outputs() if o.name == output).shape[-1]
 
     def __call__(self, x: np.ndarray) -> np.ndarray:
-        return self._session.run([self._output], {"pixel_values": x})[0]
+        if self.one_at_a_time:
+            return np.concatenate([self._session.run([self._output], {self._input: x[i : i + 1]})[0]
+                                   for i in range(len(x))])  # fmt: skip
+        return self._session.run([self._output], {self._input: x})[0]
 
 
 class _OpenVINOImages:
-    """The image tower compiled by OpenVINO, in the precision OpenVINO picks for this processor."""
+    """The image tower compiled by OpenVINO, in the precision OpenVINO picks for this processor.
 
-    def __init__(self, path: Path, output: str, threads: int | None):
-        core = _import_openvino().Core()
+    A graph that takes one image at a time runs several images at once, each in a
+    request of its own (OpenVINO's throughput mode): 321 ms of CPU time per frame
+    instead of 426 for SigLIP 2 So400m on 4 cores.
+    """
+
+    def __init__(self, path: Path, input: str, output: str, threads: int | None):
+        ov = _import_openvino()
+        core = ov.Core()
+        model = core.read_model(str(path))
+        batch = model.input(input).get_partial_shape()[0]
+        self.one_at_a_time = batch.is_static and batch.get_length() == 1
         config = {"INFERENCE_NUM_THREADS": threads} if threads else {}
-        self._compiled = core.compile_model(core.read_model(str(path)), "CPU", config)
+        if self.one_at_a_time:
+            config["PERFORMANCE_HINT"] = "THROUGHPUT"
+        self._compiled = core.compile_model(model, "CPU", config)
         self._output = self._compiled.output(output)
         self.dim = self._output.get_partial_shape()[-1].get_length()
         self.precision = self._compiled.get_property("INFERENCE_PRECISION_HINT").get_type_name()  # bf16, f32
+        if self.one_at_a_time:
+            requests = self._compiled.get_property("OPTIMAL_NUMBER_OF_INFER_REQUESTS")
+            self._queue = ov.AsyncInferQueue(self._compiled, requests)
+            self._queue.set_callback(self._done)
+            self._out: dict[int, np.ndarray] = {}
+
+    def _done(self, request, i: int) -> None:
+        self._out[i] = request.get_tensor(self._output).data.copy()
 
     def __call__(self, x: np.ndarray) -> np.ndarray:
-        return self._compiled(x)[self._output]
+        if not self.one_at_a_time:
+            return self._compiled(x)[self._output]
+        self._out.clear()
+        for i in range(len(x)):
+            self._queue.start_async({0: x[i : i + 1]}, i)
+        self._queue.wait_all()
+        return np.concatenate([self._out[i] for i in range(len(x))])
+
+
+_PUNCTUATION = str.maketrans("", "", string.punctuation)
+
+
+def clean(text: str, how: str) -> str:
+    """A description as the text tower was trained to read it.
+
+    "canonical" is open_clip's "canonicalize" for SigLIP 2 (after big_vision):
+    underscores as spaces, ASCII punctuation removed, lower case, single spaces.
+    """
+    if how == "lower":
+        return text.lower()
+    if how == "canonical":
+        text = html.unescape(html.unescape(text)).replace("_", " ").translate(_PUNCTUATION).lower()
+        return " ".join(text.split())
+    return text
 
 
 def _normalize(x: np.ndarray) -> np.ndarray:
@@ -179,7 +263,7 @@ class Encoder:
         self._text = None
         self._text_path = folder / self.spec.text_file
         self._threads = threads
-        self._tokenizer = Tokenizer.from_file(str(folder / "tokenizer.json"))
+        self._tokenizer = Tokenizer.from_file(str(folder / self.spec.tokenizer_file))
         # fixed-length input ending with the end-of-text token, as both models were trained
         n = self.spec.text_length
         pad = self.spec.pad_token
@@ -191,11 +275,11 @@ class Encoder:
         return self.spec.image_size
 
     @property
-    def images(self) -> _OnnxRuntimeImages | _OpenVINOImages:
+    def images(self) -> _OnnxRuntime | _OpenVINOImages:
         """The image tower, loaded on first use."""
         if self._vision is None:
-            runtime = _OpenVINOImages if self.backend == "openvino" else _OnnxRuntimeImages
-            self._vision = runtime(self._vision_path, self.spec.image_output, self._threads)
+            runtime = _OpenVINOImages if self.backend == "openvino" else _OnnxRuntime
+            self._vision = runtime(self._vision_path, self.spec.image_input, self.spec.image_output, self._threads)
         return self._vision
 
     def encode_images(self, frames: np.ndarray, batch: int = 32) -> np.ndarray:
@@ -210,14 +294,13 @@ class Encoder:
         return _normalize(np.concatenate(out))
 
     def tokenize(self, texts: list[str]) -> np.ndarray:
-        texts = [t.lower() for t in texts] if self.spec.lowercase else list(texts)
-        return np.array([e.ids for e in self._tokenizer.encode_batch(texts)], dtype=np.int64)
+        texts = [clean(t, self.spec.clean) for t in texts]
+        return np.array([e.ids for e in self._tokenizer.encode_batch(texts)], dtype=self.spec.text_dtype)
 
     def encode_texts(self, texts: list[str]) -> np.ndarray:
         if self._text is None:  # the text tower is only needed at query time
-            self._text = _session(self._text_path, self._threads)
-        out = self._text.run([self.spec.text_output], {"input_ids": self.tokenize(texts)})[0]
-        return _normalize(out)
+            self._text = _OnnxRuntime(self._text_path, self.spec.text_input, self.spec.text_output, self._threads)
+        return _normalize(self._text(self.tokenize(texts)))
 
     @property
     def dim(self) -> int:
