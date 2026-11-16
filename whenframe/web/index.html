@@ -50,7 +50,8 @@
   dialog { border: none; border-radius: 14px; padding: 0; background: var(--card); color: var(--ink);
            width: min(960px, 94vw); }
   dialog::backdrop { background: var(--shade); }
-  video { width: 100%; display: block; background: #000; max-height: 70vh; }
+  video, #photo { width: 100%; display: block; background: #000; max-height: 70vh; object-fit: contain; }
+  [hidden] { display: none !important; }
   .bar { display: flex; gap: 12px; align-items: center; padding: 12px 16px; flex-wrap: wrap; }
   .bar .grow { flex: 1; min-width: 200px; }
   button.plain { font: inherit; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--line);
@@ -71,6 +72,7 @@
 <main id="results"></main>
 <dialog id="player">
   <video id="video" controls preload="metadata"></video>
+  <img id="photo" alt="" hidden>
   <div class="bar">
     <div class="grow"><div class="name" id="p-name"></div><div class="folder" id="p-where"></div>
       <div class="folder" id="p-links"></div></div>
@@ -122,10 +124,11 @@ function render(data) {
     img.loading = "lazy";
     img.alt = `${h.name} at ${clock(h.at)}`;
     img.src = `/thumb?video=${h.video}&t=${h.at.toFixed(1)}`;
-    shot.append(img, el("span", "rank", String(i + 1)), el("span", "when", `${clock(h.start)} – ${clock(h.end)}`));
+    shot.append(img, el("span", "rank", String(i + 1)),
+                el("span", "when", h.photo ? "photo" : `${clock(h.start)} – ${clock(h.end)}`));
     const meta = el("div", "meta");
     meta.append(el("div", "name", h.name), el("div", "folder", h.folder),
-                el("div", "conf", `${Math.round(100 * h.confidence)} % sure the best frame matches`));
+                el("div", "conf", `${Math.round(100 * h.confidence)} % sure the ${h.photo ? "photo" : "best frame"} matches`));
     if (h.said) meta.append(el("div", "said", `“${h.said}”`));
     card.append(shot, meta);
     card.addEventListener("click", () => play(h));
@@ -134,9 +137,12 @@ function render(data) {
 }
 
 function play(h) {
-  current = h;
+  current = h.photo ? null : h;
   const v = $("video");
-  $("p-name").textContent = `${h.name}, ${clock(h.start)} – ${clock(h.end)}`;
+  v.hidden = h.photo;
+  $("photo").hidden = !h.photo;
+  $("again").hidden = h.photo;
+  $("p-name").textContent = h.photo ? h.name : `${h.name}, ${clock(h.start)} – ${clock(h.end)}`;
   $("p-where").textContent = h.folder;
   $("p-links").replaceChildren(...(h.links || []).map((l) => {
     const a = el("a", "", `Open in ${l.name}`);
@@ -145,6 +151,11 @@ function play(h) {
     a.rel = "noopener";
     return a;
   }));
+  if (h.photo) {
+    $("photo").src = `/video?id=${h.video}`;
+    $("player").showModal();
+    return;
+  }
   v.src = `/video?id=${h.video}`;
   v.onloadedmetadata = () => { v.currentTime = h.start; v.play().catch(() => {}); };
   v.onerror = () => { $("p-where").textContent = `${h.folder} (this browser cannot play this file: open it in your video player)`; };
@@ -160,14 +171,20 @@ $("again").addEventListener("click", () => {
   if (current) { v.currentTime = current.start; v.play().catch(() => {}); }
 });
 $("close").addEventListener("click", () => $("player").close());
-$("player").addEventListener("close", () => { const v = $("video"); v.pause(); v.removeAttribute("src"); v.load(); });
+$("player").addEventListener("close", () => {
+  const v = $("video");
+  v.pause();
+  v.removeAttribute("src");
+  v.load();
+  $("photo").removeAttribute("src");
+});
 $("form").addEventListener("submit", (e) => { e.preventDefault(); search($("q").value.trim()); });
 document.addEventListener("keydown", (e) => {
   if (e.key === "/" && document.activeElement !== $("q")) { e.preventDefault(); $("q").focus(); $("q").select(); }
 });
 
 fetch("/api/stats").then((r) => r.json()).then((s) => {
-  $("library").textContent = `${s.videos} videos, ${s.hours.toFixed(1)} h indexed`;
+  $("library").textContent = `${s.videos} videos (${s.hours.toFixed(1)} h)` + (s.photos ? ` and ${s.photos} photos` : "");
 }).catch(() => {});
 const start = new URLSearchParams(location.search).get("q");
 if (start) { $("q").value = start; search(start); }

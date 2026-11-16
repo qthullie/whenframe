@@ -11,7 +11,7 @@ from pathlib import Path
 from .encoder import BACKENDS, MODES
 from .library import Library, Settings
 from .search import SearchConfig, Searcher
-from .video import find_videos
+from .video import find_media
 
 
 def default_library() -> Path:
@@ -30,6 +30,8 @@ def open_library(args) -> Library:
     overrides = {k: v for k, v in (("fps", args.fps), ("dedup", args.dedup)) if v is not None}
     if args.mode:
         overrides["model"] = MODES[args.mode]
+    if args.no_photos:
+        overrides["photos"] = False
     lib = Library(args.library, Settings(**overrides) if overrides else None, backend=args.backend)
     if args.speech:
         lib.enable_speech(args.speech)
@@ -38,9 +40,9 @@ def open_library(args) -> Library:
 
 def cmd_index(args) -> int:
     lib = open_library(args)
-    paths = find_videos(args.paths)
+    paths = find_media(args.paths, photos=lib.settings.photos)
     todo = [p for p in paths if lib.needs_indexing(p.resolve()) or lib.needs_transcript(p.resolve())]
-    print(f"{len(paths)} videos found, {len(todo)} to index")
+    print(f"{len(paths)} videos and photos found, {len(todo)} to index")
     if todo:
         enc = lib.encoder
         print(f"image encoder: {enc.name} on {enc.backend} ({enc.images.precision})")
@@ -53,7 +55,8 @@ def cmd_index(args) -> int:
             failed += 1
             print(f"  skipped {path}: {err}", file=sys.stderr)
         elif video:
-            print(f"  {path.name}  {clock(video.duration)}  {video.count} frames")
+            what = "photo" if video.duration == 0 else f"{clock(video.duration)}  {video.count} frames"
+            print(f"  {path.name}  {what}")
 
     lib.add_many(todo, report)
     print(f"done in {time.time() - t0:.0f} s" + (f", {failed} failed" if failed else ""))
@@ -67,7 +70,8 @@ def cmd_search(args) -> int:
         print("no video indexed yet: run `whenframe index <folder>` first")
         return 1
     for h in hits:
-        print(f"{h.confidence:5.0%}  {clock(h.start):>7} - {clock(h.end):<7}  {h.path}")
+        when = f"{'photo':>17}" if h.photo else f"{clock(h.start):>7} - {clock(h.end):<7}"
+        print(f"{h.confidence:5.0%}  {when}  {h.path}")
         if h.said:
             print(f"{'':16}said: “{h.said}”")
     return 0
@@ -76,7 +80,8 @@ def cmd_search(args) -> int:
 def cmd_stats(args) -> int:
     s = Library(args.library).stats()
     size = s["index_bytes"] / 1e6
-    print(f"{s['videos']} videos, {s['hours']:.1f} h, {s['embeddings']} frames indexed, {size:.1f} MB on disk")
+    print(f"{s['videos']} videos ({s['hours']:.1f} h) and {s['photos']} photos, {s['embeddings']} frames indexed, "
+          f"{size:.1f} MB on disk")  # fmt: skip
     print(f"settings: {s['settings']}")
     return 0
 
@@ -143,6 +148,8 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--backend", choices=BACKENDS, default=None,
                        help="runtime of the image encoder: OpenVINO if installed (auto, the default), else ONNX "
                             "Runtime; also $WHENFRAME_BACKEND")  # fmt: skip
+        p.add_argument("--no-photos", action="store_true", help="index videos only, not the photos next to them "
+                       "(fixed for a library)")  # fmt: skip
         p.add_argument("--speech", choices=["base", "small"], default=None,
                        help="also transcribe what is said, with this Whisper model (pip install whenframe[speech]); "
                             "kept for the library from then on")  # fmt: skip

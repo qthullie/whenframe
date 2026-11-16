@@ -61,6 +61,7 @@ class App:
             "ms": round(1000 * (time.perf_counter() - t0)),
             "hits": [{"video": h.video_id, "name": Path(h.path).name, "folder": str(Path(h.path).parent),
                       "start": h.start, "end": h.end, "at": h.at, "confidence": h.confidence, "said": h.said,
+                      "photo": h.photo,
                       "links": [{"name": s.name, "url": u} for s in self.links if (u := s.link(h.path))]}
                      for h in hits],
         }  # fmt: skip

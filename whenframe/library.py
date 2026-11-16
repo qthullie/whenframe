@@ -27,7 +27,7 @@ import numpy as np
 from . import bank as qbank
 from . import speech
 from .encoder import DEFAULT_MODEL, Encoder
-from .video import RepeatFilter, VideoError, iter_frames, probe, thumbnails
+from .video import RepeatFilter, VideoError, is_photo, iter_frames, probe, read_photo, thumbnails
 
 
 @dataclass
@@ -37,6 +37,7 @@ class Settings:
     dedup: float = 4.0  # 0 encodes every sampled frame
     max_gap: int = 4
     speech: str = ""  # Whisper model transcribing the videos ("base", "small"), or "" for none
+    photos: bool = True  # photos are indexed with the videos, each as a single frame
 
     @property
     def models(self) -> tuple[str, ...]:
@@ -127,7 +128,7 @@ class Library:
         return row is None or row[0] != st.st_size or abs(row[1] - st.st_mtime) > 1e-6
 
     def needs_transcript(self, path: Path) -> bool:
-        if not self.settings.speech:
+        if not self.settings.speech or is_photo(path):
             return False
         row = self.db.execute("select t.model from videos v left join transcribed t on t.video_id = v.id"
                               " where v.path = ?", (str(path),)).fetchone()  # fmt: skip
@@ -159,6 +160,8 @@ class Library:
             return self.db.execute("select 1 from speech limit 1").fetchone() is not None
 
     def _add_frames(self, path: Path) -> Video:
+        if is_photo(path):
+            return self._add_photo(path)
         info = probe(path)
         s = self.settings
         encoders = [self.encoder_for(m) for m in s.models]
@@ -183,14 +186,25 @@ class Library:
                 stream.close()
         if not seen:
             raise VideoError(f"{path}: no frame decoded")
-        times = np.concatenate(kept_times)
+        return self._store(path, {m: np.concatenate(e) for m, e in embs.items()}, np.concatenate(kept_times),
+                           info.duration or float(seen / s.fps))  # fmt: skip
+
+    def _add_photo(self, path: Path) -> Video:
+        """A photo is a video of one frame and no duration: its moment is the photo itself."""
+        embs = {}
+        for model in self.settings.models:
+            enc = self.encoder_for(model)
+            embs[model] = enc.encode_images(read_photo(path, enc.size)).astype(np.float16)
+        return self._store(path, embs, np.zeros(1, dtype=np.float32), 0.0)
+
+    def _store(self, path: Path, embs: dict[str, np.ndarray], times: np.ndarray, duration: float) -> Video:
+        s = self.settings
         st = path.stat()
-        duration = info.duration or float(seen / s.fps)
         with self._lock:  # readers see the video with all its rows, or not at all
             start = self._rows()
             for model in s.models:
                 with open(self.folder / f"frames.{model}.f16", "ab") as f:
-                    f.write(np.concatenate(embs[model]).tobytes())
+                    f.write(embs[model].astype(np.float16).tobytes())
             with open(self.folder / "times.f32", "ab") as f:
                 f.write(times.tobytes())
             self.db.execute(
@@ -313,7 +327,8 @@ class Library:
         videos = self.videos()
         files = [*self.folder.glob("frames.*.f16"), self.folder / "times.f32"]
         return {
-            "videos": len(videos),
+            "videos": sum(not is_photo(v.path) for v in videos),
+            "photos": sum(is_photo(v.path) for v in videos),
             "hours": sum(v.duration for v in videos) / 3600,
             "embeddings": sum(v.count for v in videos),
             "index_bytes": sum(f.stat().st_size for f in files if f.exists()),

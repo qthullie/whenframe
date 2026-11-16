@@ -1,4 +1,4 @@
-"""Ranking moments across a whole library for one text query.
+"""Ranking moments across a whole library for one text query; a photo is a moment of its own.
 
 1. One matrix-vector product per model scores every indexed frame against the query.
 2. Frames that match almost any description are marked down (query-bank
@@ -58,6 +58,7 @@ class Hit:
     video_id: int
     at: float = 0.0  # the instant of the moment's best frame
     said: str = ""  # what is said there that matches the query, when the library is transcribed
+    photo: bool = False  # a photo: start and end are 0, the moment is the photo itself
 
 
 def standardise(x: np.ndarray) -> np.ndarray:
@@ -113,6 +114,8 @@ class Searcher:
         c = self.config
         sl = slice(video.start, video.start + video.count)
         t, v = times[sl].astype(np.float64), scores[sl].astype(np.float64)
+        if video.duration == 0:  # a photo
+            return [Span(0.0, 0.0, float(v.max()), float(v.max()), float(v.max()))]
         if c.moments == "windows":
             return windows(t, v, video.duration, c.window, c.per_video, 1.0 / self.library.settings.fps)
         grid, values = on_grid(t, v, video.duration, c.step)
@@ -155,7 +158,8 @@ class Searcher:
                 inside = inside if len(inside) else np.arange(len(t))
                 top = r[inside].max()
                 at = float(t[inside[np.argmax(g[inside])]])
-                hit = Hit(v.path, s.start, s.end, self.rank_score(s), float(prob(np.float64(top))), v.id, at)
+                hit = Hit(v.path, s.start, s.end, self.rank_score(s), float(prob(np.float64(top))), v.id, at,
+                          photo=v.duration == 0)  # fmt: skip
                 hits.append(hit)
         hits.sort(key=lambda h: -h.score)
         return [self._with_quote(h, segments) for h in hits[:k]]

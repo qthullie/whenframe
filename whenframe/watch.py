@@ -1,4 +1,4 @@
-"""Keeping a library in step with folders: new and changed videos are indexed, removed ones forgotten.
+"""Keeping a library in step with folders: new and changed videos and photos indexed, removed ones forgotten.
 
 `whenframe watch` runs a pass every few minutes; `whenframe serve --watch` runs the
 same passes in the background while it serves the page. Folders are scanned rather
@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .library import Library
-from .video import find_videos
+from .video import find_media
 
 SETTLE = 60.0  # seconds a file has to stay unchanged before it is indexed
 COMPACT_ABOVE = 0.25  # share of dead rows in the index files that triggers a compaction
@@ -63,7 +63,7 @@ class Watcher:
                 result.forgotten.append(p)
                 self.report("forgotten", p, "")
             now = time.time()
-            for p in find_videos([root]):
+            for p in find_media([root], photos=self.library.settings.photos):
                 p = p.resolve()
                 try:
                     if not self.library.needs_indexing(p):

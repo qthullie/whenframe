@@ -15,6 +15,8 @@ from pathlib import Path
 import numpy as np
 
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".m4v", ".mkv", ".webm", ".avi", ".3gp", ".mts", ".m2ts", ".mpg", ".mpeg", ".wmv"}
+# read by ffmpeg as well; HEIC and HEIF only where ffmpeg was built to read them
+PHOTO_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif", ".avif", ".tif", ".tiff", ".bmp"}
 
 
 class VideoError(RuntimeError):
@@ -127,11 +129,32 @@ def drop_repeats(frames: np.ndarray, threshold: float = 4.0, max_gap: int = 4) -
     return RepeatFilter(threshold, max_gap)(thumbnails(frames))
 
 
-def find_videos(paths: list[str | Path]) -> list[Path]:
+def is_photo(path: str | Path) -> bool:
+    return Path(path).suffix.lower() in PHOTO_EXTENSIONS
+
+
+def read_photo(path: str | Path, size: int = 224) -> np.ndarray:
+    """A photo as a single frame (1, size, size, 3), squashed like video frames and turned as its EXIF says."""
+    cmd = ["ffmpeg", "-v", "error", "-nostdin", "-i", str(path), "-frames:v", "1",
+           "-vf", f"scale={size}:{size}:flags=bilinear", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"]  # fmt: skip
+    run = subprocess.run(cmd, capture_output=True)
+    n = size * size * 3
+    if run.returncode != 0 or len(run.stdout) < n:
+        raise VideoError(f"{path}: {run.stderr.decode(errors='replace').strip() or 'not a photo ffmpeg can read'}")
+    return np.frombuffer(run.stdout[:n], dtype=np.uint8).reshape(1, size, size, 3)
+
+
+def find_media(paths: list[str | Path], photos: bool = True) -> list[Path]:
+    """The videos under these folders or among these files, and the photos too unless photos=False."""
+    kinds = VIDEO_EXTENSIONS | PHOTO_EXTENSIONS if photos else VIDEO_EXTENSIONS
     found = []
     for p in map(Path, paths):
         if p.is_dir():
-            found.extend(f for f in sorted(p.rglob("*")) if f.suffix.lower() in VIDEO_EXTENSIONS and f.is_file())
-        elif p.is_file():
+            found.extend(f for f in sorted(p.rglob("*")) if f.suffix.lower() in kinds and f.is_file())
+        elif p.is_file() and (photos or not is_photo(p)):
             found.append(p)
     return found
+
+
+def find_videos(paths: list[str | Path]) -> list[Path]:
+    return find_media(paths, photos=False)
