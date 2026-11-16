@@ -16,11 +16,12 @@ ROOT = Path(__file__).resolve().parents[1]
 RESULTS = ROOT / "results"
 DOC = ROOT / "docs" / "RESULTS.md"
 LABEL = {
-    "frame_window": "best frame, fixed window",
-    "scene": "best shot (scene detection)",
-    "whenframe": "**whenframe**",
-    "whenframe_dedup": "**whenframe**, repeated frames skipped",
-    "whenframe_bank": "**whenframe**, query-bank correction",
+    "scene": "shots (scene detection)",
+    "frame_window": "fixed windows",
+    "whenframe": "adaptive spans",
+    "whenframe_bank": "adaptive spans + query bank",
+    "frame_window_bank": "fixed windows + query bank",
+    "whenframe_dedup": "default search, repeats skipped",
 }
 PRIMARY = "R@5 IoU>=0.5"
 
@@ -39,39 +40,46 @@ def per_hour(seconds: float, hours: float) -> str:
     return f"{seconds / hours / 60:.1f}"
 
 
+def label(r: dict, m: str) -> str:
+    return f"**{LABEL[m]}** (default)" if m == r.get("default") else LABEL[m]
+
+
 def criteria(r: dict) -> list[list[str]]:
     score = {m: r[m]["corpus"][PRIMARY] for m in r["methods"]}
     c = r["cost"]
-    rows = []
+
+    def gain(a: str, b: str) -> float:
+        return score[a] - score[b]
+
     margin = score["whenframe"] - max(score["frame_window"], score["scene"])
-    rows.append(["1. `whenframe` beats both baselines by at least 2 points", f"{100 * margin:+.1f} points",
-                 "yes" if margin >= 0.02 else "no"])  # fmt: skip
-    loss = score["whenframe"] - score["whenframe_dedup"]
+    loss = gain(r["default"], "whenframe_dedup")
     kept = c["kept_fraction"]
-    rows.append(["2. skipping repeats encodes at most 70 % of frames and loses at most 1 point",
-                 f"{100 * kept:.0f} % of frames, {100 * -loss:+.1f} points",
-                 "yes" if kept <= 0.70 and loss <= 0.01 else "no"])  # fmt: skip
     minutes = (c["decode_cpu"] + c["encode_cpu"]) / c["hours"] / 60
-    rows.append(["3. indexing takes at most 10 min of CPU time per hour of video",
-                 f"{minutes:.1f} min", "yes" if minutes <= 10 else "no"])  # fmt: skip
-    if "whenframe_bank" in score:
-        gain = score["whenframe_bank"] - score["whenframe"]
-        rows.append(["4. the query-bank correction adds at least 1 point", f"{100 * gain:+.1f} points",
-                     "yes" if gain >= 0.01 else "no"])  # fmt: skip
-    return rows
+    rows = [
+        ["1. adaptive spans beat both baselines by at least 2 points", f"{100 * margin:+.1f} points", margin >= 0.02],
+        ["2. skipping repeats encodes at most 70 % of frames and loses at most 1 point",
+         f"{100 * kept:.0f} % of frames, {-100 * loss:+.1f} points", kept <= 0.70 and loss <= 0.01],
+        ["3. indexing takes at most 10 min of CPU time per hour of video", f"{minutes:.1f} min", minutes <= 10],
+        ["4. the query bank adds at least 1 point to adaptive spans",
+         f"{100 * gain('whenframe_bank', 'whenframe'):+.1f} points", gain("whenframe_bank", "whenframe") >= 0.01],
+        ["5. the query bank adds at least 1 point to fixed windows",
+         f"{100 * gain('frame_window_bank', 'frame_window'):+.1f} points",
+         gain("frame_window_bank", "frame_window") >= 0.01],
+    ]  # fmt: skip
+    return [[name, measured, "yes" if ok else "no"] for name, measured, ok in rows]
 
 
 def didemo_tables(r: dict) -> dict[str, str]:
     methods = r["methods"]
     corpus = table(
         ["method", "R@1", "R@5", "R@10", "R@100", "R@1 (0.7)", "R@5 (0.7)", "right video in top 5"],
-        [[LABEL[m], *(pct(r[m]["corpus"][f"R@{k} IoU>=0.5"]) for k in (1, 5, 10, 100)),
+        [[label(r, m), *(pct(r[m]["corpus"][f"R@{k} IoU>=0.5"]) for k in (1, 5, 10, 100)),
           pct(r[m]["corpus"]["R@1 IoU>=0.7"]), pct(r[m]["corpus"]["R@5 IoU>=0.7"]), pct(r[m]["video"]["R@5"])]
          for m in methods],
     )  # fmt: skip
     single = table(
         ["method", "R1 IoU>=0.5", "R1 IoU>=0.7", "mean IoU"],
-        [[LABEL[m], pct(r[m]["single"]["R1 IoU>=0.5"]), pct(r[m]["single"]["R1 IoU>=0.7"]),
+        [[label(r, m), pct(r[m]["single"]["R1 IoU>=0.5"]), pct(r[m]["single"]["R1 IoU>=0.7"]),
           pct(r[m]["single"]["mIoU"])] for m in methods],
     )  # fmt: skip
     c = r["cost"]

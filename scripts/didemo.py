@@ -204,7 +204,7 @@ def tune(args) -> None:
     best["queries"] = len(queries)
     best["videos"] = len(frozen.names)
     (ROOT / "results" / "didemo_tuned.json").write_text(json.dumps(best, indent=1))
-    curve = cost_curve(frozen, queries, text, best["whenframe"]["params"])
+    curve = cost_curve(frozen, queries, text, best["default"], best[best["default"]]["params"])
     (ROOT / "results" / f"didemo_{args.split}_curve.json").write_text(json.dumps(curve, indent=1))
     print(json.dumps(best, indent=1))
 
@@ -216,9 +216,9 @@ def evaluate(args) -> None:
     tuned = json.loads((ROOT / "results" / "didemo_tuned.json").read_text())
     methods = [m for m in METHODS if m in tuned]
     res = evaluate_all(frozen, queries, text, tuned, methods)
-    res["curve"] = cost_curve(frozen, queries, text, tuned["whenframe"]["params"])
+    res["curve"] = cost_curve(frozen, queries, text, tuned["default"], tuned[tuned["default"]]["params"])
     cost["text_ms"] = text_latency(queries, args.model_dir)
-    res.update(cost=cost, queries=len(queries), corpus_ks=CORPUS_KS, methods=methods)
+    res.update(cost=cost, queries=len(queries), corpus_ks=CORPUS_KS, methods=methods, default=tuned["default"])
     (ROOT / "results" / f"didemo_{args.split}.json").write_text(json.dumps(res, indent=1))
     print(json.dumps({m: res[m]["corpus"] for m in methods}, indent=1))
 

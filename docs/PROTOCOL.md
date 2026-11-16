@@ -53,7 +53,9 @@ per-frame scores become ranked moments.
 | `frame_window` | a fixed window around the best frame of the video; since change 8, up to three windows, each around the best frame at least a window away from the previous ones | score of that frame |
 | `scene` | shots found by ffmpeg's scene detector (threshold 0.3) | score of the frame in the middle of the shot |
 | `whenframe` | grown around peaks of the smoothed curve until it falls back towards the video's median | peak score + contrast x (peak - median) |
-| `whenframe_dedup` | as `whenframe`, using only frames that differ from the previous kept one | same |
+| `whenframe_dedup` | as `whenframe` (since change 9: as the default search), using only frames that differ from the previous kept one | same |
+| `whenframe_bank` (change 2) | as `whenframe`, on scores corrected with a query bank | same, corrected |
+| `frame_window_bank` (change 9) | as `frame_window`, on the same corrected scores | same, corrected |
 
 Each method gets the same tuning budget: every combination when its grid has
 at most 60 points, 60 random combinations otherwise (seed 0). The `scene`
@@ -145,6 +147,28 @@ training or test videos was computed.
    primary metric on the tuning videos in the second run, among
    `frame_window`, `whenframe` and `whenframe_bank`, and is written here
    before the test run.
+
+9. **After the second tuning run.** On the tuning videos: `frame_window`
+   29.0 %, `whenframe` 28.3 %, `whenframe_bank` 30.4 %
+   (`results/didemo_tuned_second_run.json`), so the rule of change 8 would
+   have made `whenframe_bank` the default. But the query bank helps the fixed
+   windows as much: with the bank parameters found for `whenframe_bank`
+   (beta 50, lambda 0.5), tried by hand, `frame_window` rose to 31.2 %. Before
+   the test run, therefore:
+   - a sixth method, `frame_window_bank`: the tuned `frame_window` parameters
+     with the query bank, whose two parameters are tuned as for
+     `whenframe_bank` (the same 12 combinations);
+   - the default search is the best of `frame_window`, `whenframe`,
+     `whenframe_bank` and `frame_window_bank` on the tuning videos, chosen by
+     the script and saved as `"default"` in `results/didemo_tuned.json`;
+   - `whenframe_dedup` runs the default search, instead of `whenframe`, on the
+     frames left after skipping repeats, and the cost curve uses the default
+     search: both are about what the tool does. Criterion 2 compares
+     `whenframe_dedup` with the default search;
+   - **criterion 5:** `frame_window_bank` beats `frame_window` by at least
+     1 point on the primary metric on the test split.
+   The grids and random draws of the second run are unchanged, so the third
+   run repeats its results and adds `frame_window_bank`.
 
 ## Changes after the first test run
 
