@@ -16,8 +16,10 @@ only differ in how they turn per-frame scores into ranked moments.
 
 Second round (docs/PROTOCOL.md), with a second image encoder:
 
-    mobileclip_bank    frame_window on MobileCLIP-S2 scores corrected with its own query bank
-    ensemble_bank      frame_window on the two corrected scores, standardised and added
+    siglip32_bank      frame_window on SigLIP 2 B/32 scores corrected with its own query bank
+    ensemble32_bank    frame_window on the B/16 and B/32 corrected scores, standardised and added
+    mobileclip_bank    the same as siglip32_bank with MobileCLIP-S2 (research-only weights)
+    ensemble_bank      the same as ensemble32_bank with MobileCLIP-S2
 """
 
 from __future__ import annotations
@@ -35,9 +37,11 @@ from whenframe.video import RepeatFilter
 
 CORPUS_KS = [1, 5, 10, 100]
 SHORTLIST = 64
-MAIN, SECOND = "siglip2-base", "mobileclip-s2"
+MAIN = "siglip2-base"
+SECOND = {"siglip32_bank": "siglip2-b32", "mobileclip_bank": "mobileclip-s2"}  # one other encoder alone
+ENSEMBLE = {"ensemble32_bank": "siglip32_bank", "ensemble_bank": "mobileclip_bank"}  # MAIN plus that one
 METHODS = ["scene", "frame_window", "whenframe", "whenframe_bank", "frame_window_bank", "whenframe_dedup",
-           "mobileclip_bank", "ensemble_bank"]  # fmt: skip
+           "siglip32_bank", "ensemble32_bank", "mobileclip_bank", "ensemble_bank"]  # fmt: skip
 CANDIDATES = ["frame_window", "whenframe", "whenframe_bank", "frame_window_bank"]  # for the default search
 BANKED = {"whenframe_bank", "frame_window_bank"}
 PRIMARY = ("corpus", "R@5 IoU>=0.5")
@@ -134,8 +138,7 @@ def whenframe(f: Frozen, scores: np.ndarray, v: int, p: dict) -> list[tuple[floa
 
 
 PREDICT = {"frame_window": frame_window, "scene": scene, "whenframe": whenframe, "whenframe_bank": whenframe,
-           "frame_window_bank": frame_window, "mobileclip_bank": frame_window,
-           "ensemble_bank": frame_window}  # fmt: skip
+           "frame_window_bank": frame_window, **dict.fromkeys([*SECOND, *ENSEMBLE], frame_window)}  # fmt: skip
 
 # The grids of the second tuning run (see "Changes made before the first test run" in docs/PROTOCOL.md).
 SPACE = {
@@ -163,11 +166,11 @@ def corrected(f: Frozen, texts: dict, model: str, beta: float, lam: float) -> np
 def frame_scores(f: Frozen, text, method: str, p: dict) -> np.ndarray:
     """frames x queries. `text` is the main model's query embeddings, or a dict of them per model."""
     texts = text if isinstance(text, dict) else {MAIN: text}
-    if method == "mobileclip_bank":
-        return corrected(f, texts, SECOND, p["beta"], p["lam"])
-    if method == "ensemble_bank":
+    if method in SECOND:
+        return corrected(f, texts, SECOND[method], p["beta"], p["lam"])
+    if method in ENSEMBLE:
         main = corrected(f, texts, MAIN, p["beta"], p["lam"])
-        second = corrected(f, texts, SECOND, p["beta2"], p["lam2"])
+        second = corrected(f, texts, SECOND[ENSEMBLE[method]], p["beta2"], p["lam2"])
         return standardise(main) + p["weight"] * standardise(second)
     scores = f.emb @ texts[MAIN].T
     if method in BANKED:
@@ -274,12 +277,14 @@ def grid_search(f: Frozen, queries: list, text: np.ndarray, budget: int = 60, se
     default = max((m for m in CANDIDATES if m in best), key=lambda m: best[m]["train_score"])
     best["default"] = default
     best["whenframe_dedup"] = {**best[default], "method": default}
-    if SECOND in f.extra:  # second round: the cheaper encoder alone, then both together
+    for ensemble, single in ENSEMBLE.items():  # second round: another encoder alone, then with the main one
+        if SECOND[single] not in f.extra:
+            continue
         bank = search_space("bank", budget, rng)
-        pick("mobileclip_bank", [{**best["frame_window"]["params"], **p} for p in bank], shared=False)
-        main, second = best["frame_window_bank"]["params"], best["mobileclip_bank"]["params"]
-        pick("ensemble_bank", [{**main, "beta2": second["beta"], "lam2": second["lam"], "weight": w}
-                               for w in SPACE["weight"]], shared=False)  # fmt: skip
+        pick(single, [{**best["frame_window"]["params"], **p} for p in bank], shared=False)
+        main, second = best["frame_window_bank"]["params"], best[single]["params"]
+        pick(ensemble, [{**main, "beta2": second["beta"], "lam2": second["lam"], "weight": w}
+                        for w in SPACE["weight"]], shared=False)  # fmt: skip
     return best
 
 

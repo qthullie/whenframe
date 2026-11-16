@@ -128,50 +128,54 @@ def didemo_tables(r: dict) -> dict[str, str]:
     }
 
 
-MODES = [("standard", "frame_window_bank"), ("economy", "mobileclip_bank"), ("precision", "ensemble_bank")]
+MODES = [("standard", "frame_window_bank", None), ("economy", "siglip32_bank", "siglip2-b32"),
+         ("precision", "ensemble32_bank", None),
+         ("MobileCLIP-S2 alone, research only", "mobileclip_bank", "mobileclip-s2"),
+         ("SigLIP 2 + MobileCLIP-S2, research only", "ensemble_bank", None)]  # fmt: skip
+ENSEMBLE_OF = {"ensemble32_bank": "siglip2-b32", "ensemble_bank": "mobileclip-s2"}
 
 
 def round2_tables(r: dict, first: dict | None) -> dict[str, str]:
     score = {m: r[m]["corpus"][PRIMARY] for m in r["methods"]}
     c = r["cost"]
 
-    def cpu_minutes(model: str | None) -> float:
+    def minutes(model: str | None, kind: str) -> float:
         t = c if model is None else c[model]
-        return (t["decode_cpu"] + t["encode_cpu"]) / t["hours"] / 60
+        return (t[f"decode_{kind}"] + t[f"encode_{kind}"]) / t["hours"] / 60
 
-    def wall_minutes(model: str | None) -> float:
-        t = c if model is None else c[model]
-        return (t["decode_wall"] + t["encode_wall"]) / t["hours"] / 60
+    def mode_cost(method: str, model: str | None) -> tuple[float, float, float]:
+        if method in ENSEMBLE_OF:
+            other = ENSEMBLE_OF[method]
+            return (minutes(None, "cpu") + minutes(other, "cpu"), minutes(None, "wall") + minutes(other, "wall"),
+                    c["text_ms"] + c[other]["text_ms"])  # fmt: skip
+        if model is None:
+            return minutes(None, "cpu"), minutes(None, "wall"), c["text_ms"]
+        return minutes(model, "cpu"), minutes(model, "wall"), c[model]["text_ms"]
 
-    loss = score["frame_window_bank"] - score["mobileclip_bank"]
-    gain = score["ensemble_bank"] - score["frame_window_bank"]
-    minutes = cpu_minutes("mobileclip-s2")
+    loss = score["frame_window_bank"] - score["siglip32_bank"]
+    gain = score["ensemble32_bank"] - score["frame_window_bank"]
+    economy = minutes("siglip2-b32", "cpu")
     rows = [
         ["6. the economy mode loses at most 2 points", f"{-100 * loss:+.1f} points", loss <= 0.02],
-        ["7. economy indexing takes at most 10 min of CPU time per hour of video", f"{minutes:.1f} min",
-         minutes <= 10],
+        ["7. economy indexing takes at most 10 min of CPU time per hour of video", f"{economy:.1f} min",
+         economy <= 10],
         ["8. the precision mode gains at least 1 point", f"{100 * gain:+.1f} points", gain >= 0.01],
     ]  # fmt: skip
     criteria = table(["criterion (fixed before the second run)", "measured on test", "met"],
                      [[n, m, "yes" if ok else "no"] for n, m, ok in rows])  # fmt: skip
-    second = "mobileclip-s2"
-    cost = {
-        "standard": (cpu_minutes(None), wall_minutes(None), c["text_ms"]),
-        "economy": (cpu_minutes(second), wall_minutes(second), c[second]["text_ms"]),
-    }
-    cost["precision"] = tuple(a + b for a, b in zip(cost["standard"], cost["economy"], strict=True))
     modes = table(
         ["mode", "R@1", "R@5", "R@10", "right video in top 5", "indexing, CPU (min/h)", "indexing, 4 vCPU (min/h)",
          "per search (ms)"],
         [[f"{mode} (`{m}`)", pct(r[m]["corpus"]["R@1 IoU>=0.5"]), pct(r[m]["corpus"][PRIMARY]),
-          pct(r[m]["corpus"]["R@10 IoU>=0.5"]), pct(r[m]["video"]["R@5"]), f"{cost[mode][0]:.1f}",
-          f"{cost[mode][1]:.1f}", f"{cost[mode][2] + r[m]['query_ms']:.0f}"] for mode, m in MODES],
+          pct(r[m]["corpus"]["R@10 IoU>=0.5"]), pct(r[m]["video"]["R@5"]), f"{mode_cost(m, model)[0]:.1f}",
+          f"{mode_cost(m, model)[1]:.1f}", f"{mode_cost(m, model)[2] + r[m]['query_ms']:.0f}"]
+         for mode, m, model in MODES],
     )  # fmt: skip
     french = table(
         ["mode", "English R@5", "French R@5", "change", "right video in top 5, English / French"],
         [[mode, pct(r[m]["corpus"][PRIMARY]), pct(r["french"][m]["corpus"][PRIMARY]),
           f"{100 * (r['french'][m]['corpus'][PRIMARY] - r[m]['corpus'][PRIMARY]):+.1f}",
-          f"{pct(r[m]['video']['R@5'])} / {pct(r['french'][m]['video']['R@5'])}"] for mode, m in MODES],
+          f"{pct(r[m]['video']['R@5'])} / {pct(r['french'][m]['video']['R@5'])}"] for mode, m, _ in MODES],
     )  # fmt: skip
     out = {"round2-criteria": criteria, "round2-modes": modes, "round2-french": french}
     if first:

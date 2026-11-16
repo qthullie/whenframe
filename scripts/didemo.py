@@ -36,7 +36,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from benchmark import CORPUS_KS, MAIN, METHODS, SECOND, Frozen, cost_curve, evaluate_all, grid_search, run  # noqa: E402
+from benchmark import CORPUS_KS, ENSEMBLE, MAIN, METHODS, SECOND, Frozen, cost_curve, evaluate_all, grid_search, run  # noqa: E402,E501
 from translate import Translator  # noqa: E402
 
 from whenframe.encoder import Encoder  # noqa: E402
@@ -228,13 +228,14 @@ def text_latency(queries, model_dir: str | None, n: int = 50, model: str = MAIN)
 
 def prepare(args):
     """The split, its query embeddings (one set per model in the second round) and the query banks."""
-    extra = (SECOND,) if args.round == 2 else ()
+    extra = tuple(SECOND.values()) if args.round == 2 else ()
     frozen, queries, cost = load(args.split, args.annotations, extra)
     frozen.bank = bank(args)
     text = text_embeddings(queries, args.split, args.model_dir)
     if extra:
-        text = {MAIN: text, SECOND: text_embeddings(queries, args.split, args.model_dir, SECOND)}
-        frozen.extra_banks[SECOND] = bank(args, SECOND)
+        text = {MAIN: text, **{m: text_embeddings(queries, args.split, args.model_dir, m) for m in extra}}
+        for m in extra:
+            frozen.extra_banks[m] = bank(args, m)
     return frozen, queries, cost, text
 
 
@@ -262,12 +263,12 @@ def evaluate(args) -> None:
     res["curve"] = cost_curve(frozen, queries, text, tuned["default"], tuned[tuned["default"]]["params"])
     cost["text_ms"] = text_latency(queries, args.model_dir)
     if args.round == 2:
-        cost[SECOND]["text_ms"] = text_latency(queries, args.model_dir, model=SECOND)
+        for m in SECOND.values():
+            cost[m]["text_ms"] = text_latency(queries, args.model_dir, model=m)
         # the same searches with the descriptions machine-translated into French
-        fr = {MAIN: text_embeddings(queries, args.split, args.model_dir, lang="fr"),
-              SECOND: text_embeddings(queries, args.split, args.model_dir, SECOND, lang="fr")}  # fmt: skip
+        fr = {m: text_embeddings(queries, args.split, args.model_dir, m, lang="fr") for m in (MAIN, *SECOND.values())}
         res["french"] = {m: run(frozen, queries, fr, m, tuned[m]["params"])
-                         for m in ("frame_window_bank", "mobileclip_bank", "ensemble_bank")}  # fmt: skip
+                         for m in ("frame_window_bank", *SECOND, *ENSEMBLE)}  # fmt: skip
     res.update(cost=cost, queries=len(queries), corpus_ks=CORPUS_KS, methods=methods, default=tuned["default"])
     name = f"didemo_{args.split}.json" if args.round == 1 else f"didemo_{args.split}_round{args.round}.json"
     (ROOT / "results" / name).write_text(json.dumps(res, indent=1))

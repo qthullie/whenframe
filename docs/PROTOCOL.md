@@ -239,6 +239,20 @@ No criterion.
 **Check.** The second test run evaluates the first round's methods again; their
 numbers must be identical to the first run's.
 
+**Changed before the second test run: the cheaper encoder.** Apple licenses the
+MobileCLIP-S2 weights for non-commercial research only (Apple Machine Learning
+Research Model licence), so a tool for anyone's videos cannot ship them as a
+mode. SigLIP 2 B/32 (google/siglip2-base-patch32-256, Apache 2.0; the
+onnx-community export; 256 px, 64 patches) takes its place, measured in the same
+way and tuned on the same grids:
+
+- `siglip32_bank` and `ensemble32_bank` are added, the counterparts of
+  `mobileclip_bank` and `ensemble_bank` with SigLIP 2 B/32. Its probability is
+  its own checkpoint's sigmoid (scale exp(4.717003), bias -16.766876).
+- The economy mode is `siglip32_bank` and the precision mode `ensemble32_bank`.
+- Criteria 6 to 8 apply to them instead of the MobileCLIP-S2 methods, which are
+  still evaluated and reported, without criterion.
+
 ## Charades-STA, without tuning
 
 Added with the second round, before any Charades video was embedded. Charades-STA

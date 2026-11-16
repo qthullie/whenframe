@@ -1,14 +1,17 @@
-"""Image and text towers run with ONNX Runtime: SigLIP 2, and MobileCLIP-S2 for the cheaper modes.
+"""Image and text towers run with ONNX Runtime: SigLIP 2 at two sizes, and MobileCLIP-S2 for research use.
 
 SigLIP scores an image-text pair with a sigmoid, sigmoid(scale * cos + bias),
 trained on each pair independently, so its score is an absolute "does this
 match" that can be compared across videos. The ONNX export leaves the scale and
 bias out; they are those of the original google/siglip2 checkpoint.
 
-MobileCLIP-S2 was trained with a softmax and has no such calibration. Its scale
-and bias map its cosine onto SigLIP's logit, fitted on DiDeMo training pairs
-(`scripts/didemo.py calibrate`), so every mode shows confidences on one scale.
-It takes about 2.3 times less CPU per frame (docs/RESULTS.md).
+SigLIP 2 B/32 (256 px, 64 patches instead of 196) is the cheaper model of the
+economy and precision modes; its scale and bias are its own checkpoint's.
+
+MobileCLIP-S2 is measured in the benchmark but is not used by any mode: Apple
+licenses its weights for non-commercial research only. It was trained with a
+softmax; its scale and bias map its cosine onto SigLIP's logit, fitted on DiDeMo
+training pairs (`scripts/didemo.py calibrate`).
 """
 
 from __future__ import annotations
@@ -46,6 +49,8 @@ class ModelSpec:
 
 MODELS = {
     "siglip2-base": ModelSpec("onnx-community/siglip2-base-patch16-224-ONNX", 224, 112.6689, -16.7717),
+    "siglip2-b32": ModelSpec("onnx-community/siglip2-base-patch32-256-ONNX", 256, 111.8326, -16.7669),
+    # research use only (Apple Machine Learning Research Model licence)
     "mobileclip-s2": ModelSpec(
         "Xenova/mobileclip_s2", 256, 66.86, -19.567, pixels="unit", image_output="image_embeds",
         text_output="text_embeds", text_length=77, pad_token=None, lowercase=False,
@@ -53,9 +58,9 @@ MODELS = {
 }  # fmt: skip
 DEFAULT_MODEL = "siglip2-base"
 # what `whenframe index --mode` stores; several models are searched together and their scores combined
-MODES = {"standard": "siglip2-base", "economy": "mobileclip-s2", "precision": "siglip2-base+mobileclip-s2"}
+MODES = {"standard": "siglip2-base", "economy": "siglip2-b32", "precision": "siglip2-base+siglip2-b32"}
 # weight of each model's scores in a combined search, as tuned on DiDeMo training videos
-FUSION = {"siglip2-base": 1.0, "mobileclip-s2": 1.0}
+FUSION = {"siglip2-base": 1.0, "siglip2-b32": 1.0, "mobileclip-s2": 1.0}
 
 
 def cache_dir() -> Path:
