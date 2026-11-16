@@ -2,7 +2,9 @@
 
 Each video is cut into 5-second segments and each description was located by
 four annotators as a run of segments ("times": [[first, last], ...]). The
-reference moment used here is the run most annotators chose.
+reference moment used here is the run most annotators chose. Annotators only
+saw the first 30 seconds of each video (six segments, from second 0), so only
+those are searched; the mp4 copies are often longer.
 
     python scripts/didemo.py extract --split test --videos DIR --annotations didemo_test.json
     python scripts/didemo.py tune    --split train
@@ -35,6 +37,7 @@ from whenframe.video import drop_repeats, probe, sample_frames, thumbnails  # no
 CACHE = ROOT / "results" / "cache"
 DATA = ROOT / "data" / "didemo"
 SEGMENT = 5.0
+SECONDS = 30.0  # what the annotators saw
 BANK_SIZE = 4096
 
 
@@ -44,8 +47,8 @@ def reference(times: list[list[int]], duration: float) -> tuple[float, float]:
 
 
 def scene_cuts(path: Path, threshold: float = 0.3) -> list[float]:
-    """Shot boundaries as ffmpeg's scene detector sees them, at full frame rate."""
-    cmd = ["ffmpeg", "-v", "info", "-nostdin", "-i", str(path), "-an", "-vf",
+    """Shot boundaries in the first SECONDS, as ffmpeg's scene detector sees them at full frame rate."""
+    cmd = ["ffmpeg", "-v", "info", "-nostdin", "-t", f"{SECONDS:g}", "-i", str(path), "-an", "-vf",
            f"select='gt(scene,{threshold})',showinfo", "-f", "null", "-"]  # fmt: skip
     err = subprocess.run(cmd, capture_output=True, text=True).stderr
     return [float(tok.split(":")[1]) for line in err.splitlines() if "pts_time:" in line
@@ -87,7 +90,7 @@ def extract(args) -> None:
         try:
             info = probe(p)
             c0, p0, w0 = children_cpu(), time.process_time(), time.time()
-            t, frames = sample_frames(p, 1.0, enc.size)
+            t, frames = sample_frames(p, 1.0, enc.size, seconds=SECONDS)
             c1, p1, w1 = children_cpu(), time.process_time(), time.time()
             e = enc.encode_images(frames)
             p2, w2 = time.process_time(), time.time()
@@ -103,7 +106,7 @@ def extract(args) -> None:
         keep[drop_repeats(frames)] = True
         for k, v in (("emb", e.astype(np.float16)), ("times", t.astype(np.float32)), ("keep", keep),
                      ("thumbs", thumbnails(frames).astype(np.float16)), ("starts", row), ("counts", len(frames)),
-                     ("durations", info.duration or len(frames)), ("cuts", cuts)):  # fmt: skip
+                     ("durations", min(info.duration or len(frames), SECONDS)), ("cuts", cuts)):  # fmt: skip
             cols[k].append(v)
         for k, v in (("decode_cpu", c1 - c0 + p1 - p0), ("decode_wall", w1 - w0), ("encode_cpu", p2 - p1),
                      ("encode_wall", w2 - w1), ("scene_cpu", c3 - c1), ("scene_wall", w3 - w2)):  # fmt: skip
@@ -131,10 +134,13 @@ def make_encoder(model_dir: str | None) -> Encoder:
 def load(split: str, annotations: str | None = None):
     z = np.load(CACHE / f"didemo_{split}.npz")
     names = z["names"].tolist()
-    frozen = Frozen(
+    decoded = Frozen(
         names=names, emb=z["emb"].astype(np.float32), times=z["times"], starts=z["starts"], counts=z["counts"],
         durations=z["durations"], keep=z["keep"], cuts=json.loads(str(z["cuts"])), thumbs=z["thumbs"],
     )  # fmt: skip
+    # caches made before videos were cut at extraction hold whole videos: keep what the annotators saw
+    frozen = decoded.select(decoded.times < SECONDS)
+    frozen.durations = np.minimum(frozen.durations, SECONDS)
     ann = json.loads(Path(annotations or DATA / f"didemo_{split}.json").read_text())
     index = {stem(n): i for i, n in enumerate(names)}
     queries = []
@@ -142,10 +148,10 @@ def load(split: str, annotations: str | None = None):
         if stem(a["video"]) in index:
             v = index[stem(a["video"])]
             queries.append({"text": a["description"], "video": v, "moment": reference(a["times"], frozen.durations[v])})
-    cost = {
+    cost = {  # what was decoded and encoded, which the timings cover
         "videos": len(names),
-        "hours": float(frozen.durations.sum() / 3600),
-        "frames": int(len(frozen.times)),
+        "hours": float(decoded.durations.sum() / 3600),
+        "frames": int(len(decoded.times)),
         "kept_fraction": float(frozen.keep.mean()),
         **{k: float(z[k].sum()) for k in ("decode_cpu", "decode_wall", "encode_cpu", "encode_wall", "scene_cpu",
                                           "scene_wall")},

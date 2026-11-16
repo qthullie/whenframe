@@ -46,16 +46,17 @@ def probe(path: str | Path) -> VideoInfo:
     return VideoInfo(duration, int(s.get("width", 0)), int(s.get("height", 0)))
 
 
-def iter_frames(path: str | Path, fps: float = 1.0, size: int = 224, chunk: int = 256):
+def iter_frames(path: str | Path, fps: float = 1.0, size: int = 224, chunk: int = 256, seconds: float | None = None):
     """Frames at a fixed rate, squashed to size x size as the encoder expects, `chunk` at a time.
 
     Yields (times, frames): times in seconds, frames as uint8 (n, size, size, 3).
     The fps filter takes the frame nearest to each tick of the new clock, so the
     i-th output frame stands for the instant i / fps. Memory stays bounded by
-    the chunk, whatever the length of the video.
+    the chunk, whatever the length of the video. `seconds` stops reading there.
     """
+    limit = ["-t", f"{seconds:g}"] if seconds else []
     cmd = [
-        "ffmpeg", "-v", "error", "-nostdin", "-i", str(path), "-an", "-sn",
+        "ffmpeg", "-v", "error", "-nostdin", *limit, "-i", str(path), "-an", "-sn",
         "-vf", f"fps={fps},scale={size}:{size}:flags=bilinear",
         "-f", "rawvideo", "-pix_fmt", "rgb24", "-",
     ]  # fmt: skip
@@ -76,9 +77,9 @@ def iter_frames(path: str | Path, fps: float = 1.0, size: int = 224, chunk: int 
             raise VideoError(f"{path}: {err.read().decode(errors='replace').strip() or 'ffmpeg failed'}")
 
 
-def sample_frames(path: str | Path, fps: float = 1.0, size: int = 224) -> tuple[np.ndarray, np.ndarray]:
-    """All frames of `iter_frames` at once."""
-    parts = list(iter_frames(path, fps, size))
+def sample_frames(path: str | Path, fps: float = 1.0, size: int = 224, seconds: float | None = None):
+    """All frames of `iter_frames` at once: (times, frames)."""
+    parts = list(iter_frames(path, fps, size, seconds=seconds))
     if not parts:
         return np.zeros(0), np.zeros((0, size, size, 3), dtype=np.uint8)
     return np.concatenate([t for t, _ in parts]), np.concatenate([f for _, f in parts])

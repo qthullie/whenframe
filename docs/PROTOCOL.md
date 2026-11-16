@@ -111,6 +111,16 @@ training or test videos was computed.
    test videos to check that it worked. It showed that the repeat filter kept
    about 86 % of frames at the default threshold, which is why the cost curve
    was added. No parameter or criterion was changed because of it.
+7. **The first 30 seconds.** DiDeMo's annotators saw only the first 30 seconds
+   of each video: "The first temporal chunk corresponds to seconds 0-5 in the
+   video [...] Some videos are longer than 30 seconds. These videos were
+   truncated to 30 seconds during annotation" (dataset README), and every
+   annotation uses segments 0 to 5. The mp4 copies used here are the whole
+   videos (24 to 90 s in a random sample of 40 test videos). Only the first
+   30 seconds are searched: a moment found later could never be counted as
+   right. Test videos are decoded up to 30 s. The tuning videos had already
+   been extracted whole when this was noticed, and are cut to 30 s when
+   loaded. Costs are per hour of video decoded.
 
 ## Changes after the first test run
 
