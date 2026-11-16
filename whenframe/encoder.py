@@ -49,18 +49,19 @@ class ModelSpec:
 
 MODELS = {
     "siglip2-base": ModelSpec("onnx-community/siglip2-base-patch16-224-ONNX", 224, 112.6689, -16.7717),
-    "siglip2-b32": ModelSpec("onnx-community/siglip2-base-patch32-256-ONNX", 256, 111.8326, -16.7669),
+    "siglip2-b32": ModelSpec("onnx-community/siglip2-base-patch32-256-ONNX", 256, 111.8326, -16.7669,
+                             bank_lambda=0.5),
     # research use only (Apple Machine Learning Research Model licence)
     "mobileclip-s2": ModelSpec(
         "Xenova/mobileclip_s2", 256, 66.86, -19.567, pixels="unit", image_output="image_embeds",
-        text_output="text_embeds", text_length=77, pad_token=None, lowercase=False,
+        text_output="text_embeds", text_length=77, pad_token=None, lowercase=False, bank_beta=10.0,
     ),
 }  # fmt: skip
 DEFAULT_MODEL = "siglip2-base"
 # what `whenframe index --mode` stores; several models are searched together and their scores combined
 MODES = {"standard": "siglip2-base", "economy": "siglip2-b32", "precision": "siglip2-base+siglip2-b32"}
 # weight of each model's scores in a combined search, as tuned on DiDeMo training videos
-FUSION = {"siglip2-base": 1.0, "siglip2-b32": 1.0, "mobileclip-s2": 1.0}
+FUSION = {"siglip2-base": 1.0, "siglip2-b32": 0.25, "mobileclip-s2": 1.0}
 
 
 def cache_dir() -> Path:

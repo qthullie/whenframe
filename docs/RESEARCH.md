@@ -59,6 +59,14 @@ a tenth of its training pairs come from non-English pages.
 better zero-shot video results than InternVideo2 on most tasks with a simple
 frame-level encoder.
 
+**Cheaper encoders.** [MobileCLIP2](https://arxiv.org/abs/2508.20691) (Apple,
+2025) and MobileCLIP report accuracy close to ViT-B/16 CLIP models at a fraction
+of the latency, but Apple licenses the weights for non-commercial research only.
+SigLIP 2 also comes as B/32 at 256 px (64 patches instead of 196), under Apache
+2.0. Weight-only 4-bit and static int8 quantization of ViTs are the other usual
+routes to a cheaper encoder; on this CPU the first gave no speed-up and the
+second broke the embeddings ([PROTOCOL.md](PROTOCOL.md), second round).
+
 **Hubs.** In a shared text-image space, a few gallery items are close to
 almost every query and crowd the top of the rankings. Query-bank normalisation
 ([Bogolin et al., CVPR 2022](https://arxiv.org/abs/2112.12777)) rescales each
@@ -95,6 +103,9 @@ measured accuracy).
   are more precise at IoU >= 0.7 and less often right at IoU >= 0.5, on a
   dataset whose moments are 5-second segments.
 - Skips frames that repeat the previous one before encoding them.
+- Offers a cheaper mode (SigLIP 2 B/32) and a more accurate one (B/16 and B/32
+  combined), with their costs measured, and a search page that keeps the model
+  loaded.
 - Measures all of it on DiDeMo, personal Flickr videos, with the protocol fixed
   in advance ([PROTOCOL.md](PROTOCOL.md)), against a shot-based baseline in the
   spirit of current home tools, with the CPU cost of indexing and searching.

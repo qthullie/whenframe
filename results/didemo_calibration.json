@@ -1,0 +1,9 @@
+{
+ "mobileclip-s2": {
+  "scale": 66.86001441434024,
+  "bias": -19.567050369158387,
+  "pairs": 25366,
+  "fitted_to": "siglip2-base",
+  "correlation": 0.8903697799418807
+ }
+}

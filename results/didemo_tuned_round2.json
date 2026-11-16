@@ -1,0 +1,113 @@
+{
+ "frame_window": {
+  "params": {
+   "window": 10.0,
+   "per_video": 3
+  },
+  "train_score": 0.29024016351558507,
+  "tried": 21
+ },
+ "scene": {
+  "params": {
+   "per_video": 1
+  },
+  "train_score": 0.036791006642820645,
+  "tried": 3
+ },
+ "whenframe": {
+  "params": {
+   "step": 0.5,
+   "sigma": 0.0,
+   "alpha": 0.6,
+   "contrast": 0.0,
+   "min_length": 10.0,
+   "per_video": 3
+  },
+  "train_score": 0.2897291773122126,
+  "tried": 60
+ },
+ "whenframe_bank": {
+  "params": {
+   "step": 0.5,
+   "sigma": 0.0,
+   "alpha": 0.6,
+   "contrast": 0.0,
+   "min_length": 10.0,
+   "per_video": 3,
+   "beta": 50.0,
+   "lam": 0.5
+  },
+  "train_score": 0.3035258048032703,
+  "tried": 12
+ },
+ "frame_window_bank": {
+  "params": {
+   "window": 10.0,
+   "per_video": 3,
+   "beta": 50.0,
+   "lam": 1.0
+  },
+  "train_score": 0.31527848748083803,
+  "tried": 12
+ },
+ "default": "frame_window_bank",
+ "whenframe_dedup": {
+  "params": {
+   "window": 10.0,
+   "per_video": 3,
+   "beta": 50.0,
+   "lam": 1.0
+  },
+  "train_score": 0.31527848748083803,
+  "tried": 12,
+  "method": "frame_window_bank"
+ },
+ "siglip32_bank": {
+  "params": {
+   "window": 10.0,
+   "per_video": 3,
+   "beta": 50.0,
+   "lam": 0.5
+  },
+  "train_score": 0.2866632600919775,
+  "tried": 12
+ },
+ "ensemble32_bank": {
+  "params": {
+   "window": 10.0,
+   "per_video": 3,
+   "beta": 50.0,
+   "lam": 1.0,
+   "beta2": 50.0,
+   "lam2": 0.5,
+   "weight": 0.25
+  },
+  "train_score": 0.32447623914154317,
+  "tried": 4
+ },
+ "mobileclip_bank": {
+  "params": {
+   "window": 10.0,
+   "per_video": 3,
+   "beta": 10.0,
+   "lam": 1.0
+  },
+  "train_score": 0.3065917220235054,
+  "tried": 12
+ },
+ "ensemble_bank": {
+  "params": {
+   "window": 10.0,
+   "per_video": 3,
+   "beta": 50.0,
+   "lam": 1.0,
+   "beta2": 10.0,
+   "lam2": 1.0,
+   "weight": 1.0
+  },
+  "train_score": 0.32907511497189573,
+  "tried": 4
+ },
+ "queries": 1957,
+ "videos": 500
+}
