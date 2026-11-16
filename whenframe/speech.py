@@ -64,7 +64,8 @@ WORD = re.compile(r"\w+", re.UNICODE)
 
 @dataclass(frozen=True)
 class SpeechConfig:
-    weight: float = 0.01  # set from the tuning run
+    # chosen on the YouCook2 tuning videos among 24 combinations (results/youcook2_tuned.json)
+    weight: float = 0.005
     pad: float = 0.0  # seconds
     normalise: str = "raw"  # "raw": BM25 as it is; "best": divided by the query's best segment
 

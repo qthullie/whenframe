@@ -71,3 +71,15 @@ def test_a_library_searches_what_is_said(tmp_path):
 
     lib.remove(tmp_path / "a.mp4")
     assert lib.stats()["speech_segments"] == 1
+
+
+def test_the_defaults_are_the_tuned_ones():
+    import json
+    from pathlib import Path
+
+    tuned = Path(__file__).resolve().parents[1] / "results" / "youcook2_tuned.json"
+    if not tuned.exists():
+        pytest.skip("no tuning run")
+    best = json.loads(tuned.read_text())["best"]
+    cfg = speech.SpeechConfig()
+    assert (cfg.weight, cfg.pad, cfg.normalise) == (best["weight"], best["pad"], best["normalise"])

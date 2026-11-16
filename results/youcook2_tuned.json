@@ -1,0 +1,157 @@
+{
+ "tuning_videos": 84,
+ "tuning_steps": 619,
+ "without_speech": 0.1421647819063005,
+ "grid": [
+  {
+   "weight": 0.001,
+   "pad": 0.0,
+   "normalise": "raw",
+   "score": 0.1890145395799677
+  },
+  {
+   "weight": 0.001,
+   "pad": 0.0,
+   "normalise": "best",
+   "score": 0.14539579967689822
+  },
+  {
+   "weight": 0.001,
+   "pad": 5.0,
+   "normalise": "raw",
+   "score": 0.18578352180936994
+  },
+  {
+   "weight": 0.001,
+   "pad": 5.0,
+   "normalise": "best",
+   "score": 0.14378029079159935
+  },
+  {
+   "weight": 0.002,
+   "pad": 0.0,
+   "normalise": "raw",
+   "score": 0.21324717285945072
+  },
+  {
+   "weight": 0.002,
+   "pad": 0.0,
+   "normalise": "best",
+   "score": 0.1470113085621971
+  },
+  {
+   "weight": 0.002,
+   "pad": 5.0,
+   "normalise": "raw",
+   "score": 0.21163166397415187
+  },
+  {
+   "weight": 0.002,
+   "pad": 5.0,
+   "normalise": "best",
+   "score": 0.14862681744749595
+  },
+  {
+   "weight": 0.005,
+   "pad": 0.0,
+   "normalise": "raw",
+   "score": 0.2407108239095315
+  },
+  {
+   "weight": 0.005,
+   "pad": 0.0,
+   "normalise": "best",
+   "score": 0.15024232633279483
+  },
+  {
+   "weight": 0.005,
+   "pad": 5.0,
+   "normalise": "raw",
+   "score": 0.22617124394184168
+  },
+  {
+   "weight": 0.005,
+   "pad": 5.0,
+   "normalise": "best",
+   "score": 0.15508885298869143
+  },
+  {
+   "weight": 0.01,
+   "pad": 0.0,
+   "normalise": "raw",
+   "score": 0.21647819063004847
+  },
+  {
+   "weight": 0.01,
+   "pad": 0.0,
+   "normalise": "best",
+   "score": 0.16639741518578352
+  },
+  {
+   "weight": 0.01,
+   "pad": 5.0,
+   "normalise": "raw",
+   "score": 0.2197092084006462
+  },
+  {
+   "weight": 0.01,
+   "pad": 5.0,
+   "normalise": "best",
+   "score": 0.172859450726979
+  },
+  {
+   "weight": 0.02,
+   "pad": 0.0,
+   "normalise": "raw",
+   "score": 0.20516962843295639
+  },
+  {
+   "weight": 0.02,
+   "pad": 0.0,
+   "normalise": "best",
+   "score": 0.18739903069466882
+  },
+  {
+   "weight": 0.02,
+   "pad": 5.0,
+   "normalise": "raw",
+   "score": 0.20032310177705978
+  },
+  {
+   "weight": 0.02,
+   "pad": 5.0,
+   "normalise": "best",
+   "score": 0.19063004846526657
+  },
+  {
+   "weight": 0.05,
+   "pad": 0.0,
+   "normalise": "raw",
+   "score": 0.1890145395799677
+  },
+  {
+   "weight": 0.05,
+   "pad": 0.0,
+   "normalise": "best",
+   "score": 0.23424878836833601
+  },
+  {
+   "weight": 0.05,
+   "pad": 5.0,
+   "normalise": "raw",
+   "score": 0.19063004846526657
+  },
+  {
+   "weight": 0.05,
+   "pad": 5.0,
+   "normalise": "best",
+   "score": 0.22617124394184168
+  }
+ ],
+ "best": {
+  "weight": 0.005,
+  "pad": 0.0,
+  "normalise": "raw",
+  "score": 0.2407108239095315
+ }
+}
