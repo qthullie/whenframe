@@ -30,13 +30,16 @@ def open_library(args) -> Library:
     overrides = {k: v for k, v in (("fps", args.fps), ("dedup", args.dedup)) if v is not None}
     if args.mode:
         overrides["model"] = MODES[args.mode]
-    return Library(args.library, Settings(**overrides) if overrides else None, backend=args.backend)
+    lib = Library(args.library, Settings(**overrides) if overrides else None, backend=args.backend)
+    if args.speech:
+        lib.enable_speech(args.speech)
+    return lib
 
 
 def cmd_index(args) -> int:
     lib = open_library(args)
     paths = find_videos(args.paths)
-    todo = [p for p in paths if lib.needs_indexing(p.resolve())]
+    todo = [p for p in paths if lib.needs_indexing(p.resolve()) or lib.needs_transcript(p.resolve())]
     print(f"{len(paths)} videos found, {len(todo)} to index")
     if todo:
         enc = lib.encoder
@@ -65,6 +68,8 @@ def cmd_search(args) -> int:
         return 1
     for h in hits:
         print(f"{h.confidence:5.0%}  {clock(h.start):>7} - {clock(h.end):<7}  {h.path}")
+        if h.said:
+            print(f"{'':16}said: “{h.said}”")
     return 0
 
 
@@ -138,6 +143,9 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--backend", choices=BACKENDS, default=None,
                        help="runtime of the image encoder: OpenVINO if installed (auto, the default), else ONNX "
                             "Runtime; also $WHENFRAME_BACKEND")  # fmt: skip
+        p.add_argument("--speech", choices=["base", "small"], default=None,
+                       help="also transcribe what is said, with this Whisper model (pip install whenframe[speech]); "
+                            "kept for the library from then on")  # fmt: skip
 
     def watching_options(p: argparse.ArgumentParser) -> None:
         p.add_argument("--every", type=float, default=300.0, help="seconds between two passes (default 300)")

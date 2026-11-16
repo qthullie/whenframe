@@ -25,6 +25,7 @@ from pathlib import Path
 import numpy as np
 
 from . import bank as qbank
+from . import speech
 from .encoder import DEFAULT_MODEL, Encoder
 from .video import RepeatFilter, VideoError, iter_frames, probe, thumbnails
 
@@ -35,6 +36,7 @@ class Settings:
     fps: float = 1.0
     dedup: float = 4.0  # 0 encodes every sampled frame
     max_gap: int = 4
+    speech: str = ""  # Whisper model transcribing the videos ("base", "small"), or "" for none
 
     @property
     def models(self) -> tuple[str, ...]:
@@ -66,7 +68,8 @@ create table if not exists videos (
 
 class Library:
     def __init__(self, folder: str | Path, settings: Settings | None = None, encoder: Encoder | None = None,
-                 encoders: dict[str, Encoder] | None = None, backend: str | None = None):  # fmt: skip
+                 encoders: dict[str, Encoder] | None = None, backend: str | None = None,
+                 transcriber=None):  # fmt: skip
         self.folder = Path(folder)
         self.folder.mkdir(parents=True, exist_ok=True)
         cfg = self.folder / "config.json"
@@ -80,13 +83,28 @@ class Library:
             cfg.write_text(json.dumps(asdict(self.settings), indent=1))
         # `whenframe serve` reads the library from several threads; writes come from one indexer
         self.db = sqlite3.connect(self.folder / "library.sqlite", check_same_thread=False)
-        self.db.executescript(SCHEMA)
+        self.db.executescript(SCHEMA + speech.SCHEMA)
+        self._transcriber = transcriber  # speech.Transcriber, made when first needed
         self._lock = threading.RLock()
         self.backend = backend  # runtime of the image tower (encoder.BACKENDS); None: the default
         self._encoders = dict(encoders or {})
         if encoder is not None:
             self._encoders[self.settings.models[0]] = encoder
         self._cache = None
+
+    def enable_speech(self, size: str) -> None:
+        """Transcribe this library's videos with Whisper `size` from now on (and those not transcribed yet)."""
+        if size not in speech.WHISPER:
+            raise ValueError(f"unknown Whisper model {size!r}; one of {', '.join(speech.WHISPER)}")
+        if self.settings.speech != size:
+            self.settings = Settings(**{**asdict(self.settings), "speech": size})
+            (self.folder / "config.json").write_text(json.dumps(asdict(self.settings), indent=1))
+
+    @property
+    def transcriber(self):
+        if self._transcriber is None:
+            self._transcriber = speech.Transcriber(self.settings.speech)
+        return self._transcriber
 
     def encoder_for(self, model: str) -> Encoder:
         if model not in self._encoders:
@@ -108,11 +126,39 @@ class Library:
         row = self.db.execute("select size, mtime from videos where path = ?", (str(path),)).fetchone()
         return row is None or row[0] != st.st_size or abs(row[1] - st.st_mtime) > 1e-6
 
+    def needs_transcript(self, path: Path) -> bool:
+        if not self.settings.speech:
+            return False
+        row = self.db.execute("select t.model from videos v left join transcribed t on t.video_id = v.id"
+                              " where v.path = ?", (str(path),)).fetchone()  # fmt: skip
+        return row is None or row[0] != self.settings.speech
+
     def add(self, path: str | Path) -> Video | None:
-        """Index one video, unless it is already indexed and unchanged."""
+        """Index one video, unless it is already indexed and unchanged; transcribe it too if the library does."""
         path = Path(path).resolve()
-        if not self.needs_indexing(path):
-            return None
+        video = self._add_frames(path) if self.needs_indexing(path) else None
+        if self.needs_transcript(path):
+            video = video or next(v for v in self.videos() if v.path == str(path))
+            said = self.transcriber(str(path), video.duration)
+            with self._lock:
+                self.db.execute("delete from speech where video_id = ?", (video.id,))
+                self.db.executemany("insert into speech (video_id, start, end, text) values (?, ?, ?, ?)",
+                                    [(video.id, a, b, text) for a, b, text in said])  # fmt: skip
+                self.db.execute("insert or replace into transcribed (video_id, model, at) values (?, ?, ?)",
+                                (video.id, self.settings.speech, time.time()))  # fmt: skip
+                self.db.commit()
+        return video
+
+    def speech_hits(self, query: str) -> list[tuple[int, float, float, float, str]]:
+        """Segments of speech matching the query (speech.segment_scores)."""
+        with self._lock:
+            return speech.segment_scores(self.db, query)
+
+    def has_speech(self) -> bool:
+        with self._lock:
+            return self.db.execute("select 1 from speech limit 1").fetchone() is not None
+
+    def _add_frames(self, path: Path) -> Video:
         info = probe(path)
         s = self.settings
         encoders = [self.encoder_for(m) for m in s.models]
@@ -173,7 +219,11 @@ class Library:
 
     def remove(self, path: str | Path) -> None:
         with self._lock:
-            self.db.execute("delete from videos where path = ?", (str(Path(path).resolve()),))
+            row = self.db.execute("select id from videos where path = ?", (str(Path(path).resolve()),)).fetchone()
+            if row:
+                for table in ("speech", "transcribed"):
+                    self.db.execute(f"delete from {table} where video_id = ?", row)  # noqa: S608 (fixed names)
+                self.db.execute("delete from videos where id = ?", row)
             self.db.commit()
             self._cache = None
 
@@ -267,5 +317,6 @@ class Library:
             "hours": sum(v.duration for v in videos) / 3600,
             "embeddings": sum(v.count for v in videos),
             "index_bytes": sum(f.stat().st_size for f in files if f.exists()),
+            "speech_segments": self.db.execute("select count(*) from speech").fetchone()[0],
             "settings": asdict(self.settings),
         }

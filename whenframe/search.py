@@ -5,10 +5,12 @@
    normalisation, see bank.py).
 3. When several models were indexed, their scores are standardised over the
    library and added, with weights tuned on DiDeMo training videos.
-4. Each video's best frame shortlists the videos worth a closer look.
-5. In each shortlisted video, moments are placed around its best frames: fixed
+4. When the videos were transcribed, the words of the query that are said
+   around a frame add to its score (speech.py).
+5. Each video's best frame shortlists the videos worth a closer look.
+6. In each shortlisted video, moments are placed around its best frames: fixed
    windows by default, or spans grown around the peaks of its curve.
-6. All moments are ranked together.
+7. All moments are ranked together.
 
 The defaults are the default search of docs/RESULTS.md, chosen on DiDeMo
 training videos.
@@ -16,7 +18,7 @@ training videos.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 
 import numpy as np
 
@@ -24,6 +26,8 @@ from . import bank as qbank
 from .encoder import FUSION, MODELS
 from .library import Library, Video
 from .moments import Span, on_grid, smooth, spans, windows
+from .speech import SpeechConfig
+from .speech import frame_scores as frame_speech
 
 
 @dataclass
@@ -41,6 +45,7 @@ class SearchConfig:
     alpha: float = 0.6  # where a span stops, between the video's floor (0) and the peak (1)
     contrast: float = 0.0  # weight of (peak - floor) in the ranking score
     min_length: float = 10.0
+    speech: SpeechConfig = field(default_factory=SpeechConfig)  # used when the library is transcribed
 
 
 @dataclass(frozen=True)
@@ -52,6 +57,7 @@ class Hit:
     confidence: float  # the first model's probability that the best frame of the moment matches the query
     video_id: int
     at: float = 0.0  # the instant of the moment's best frame
+    said: str = ""  # what is said there that matches the query, when the library is transcribed
 
 
 def standardise(x: np.ndarray) -> np.ndarray:
@@ -97,6 +103,7 @@ class Searcher:
             off = self.offsets(model)
             strength = self.config.bank * self._tuned(model)[1]
             corrected[model] = raw[model] if off is None else raw[model] - strength * off
+        self._first_corrected = corrected[self.models[0]]
         if len(self.models) == 1:
             return corrected[self.models[0]]
         weights = self.config.weights or FUSION
@@ -116,12 +123,25 @@ class Searcher:
             return span.peak
         return span.peak + self.config.contrast * (span.peak - span.floor)
 
+    def speech_scores(self, query: str, ranking: np.ndarray, videos, times) -> tuple[np.ndarray, list]:
+        """What speech adds to each frame's ranking score, and the matching segments."""
+        if not self.library.has_speech():
+            return np.zeros_like(ranking), []
+        hits = self.library.speech_hits(query)
+        cfg = self.config.speech
+        said = frame_speech(times, {v.id: (v.start, v.count) for v in videos}, hits, cfg)
+        # the weight was tuned on one model's corrected scores; several models' are standardised first
+        scale = 1.0 if len(self.models) == 1 else 1.0 / max(float(self._first_corrected.std()), 1e-9)
+        return cfg.weight * scale * said, hits
+
     def search(self, query: str, k: int = 10, scores: dict[str, np.ndarray] | None = None) -> list[Hit]:
         videos, _, times = self.library.snapshot()
         if not videos:
             return []
         raw = self.frame_scores(query) if scores is None else scores
         ranking = self.ranking_scores(raw)
+        extra, segments = self.speech_scores(query, ranking, videos, times)
+        ranking = ranking + extra
         first = raw[self.models[0]]
         prob = self.library.encoder.probability
         best = np.array([ranking[v.start : v.start + v.count].max() for v in videos])
@@ -135,6 +155,13 @@ class Searcher:
                 inside = inside if len(inside) else np.arange(len(t))
                 top = r[inside].max()
                 at = float(t[inside[np.argmax(g[inside])]])
-                hits.append(Hit(v.path, s.start, s.end, self.rank_score(s), float(prob(np.float64(top))), v.id, at))
+                hit = Hit(v.path, s.start, s.end, self.rank_score(s), float(prob(np.float64(top))), v.id, at)
+                hits.append(hit)
         hits.sort(key=lambda h: -h.score)
-        return hits[:k]
+        return [self._with_quote(h, segments) for h in hits[:k]]
+
+    def _with_quote(self, hit: Hit, segments) -> Hit:
+        """The best matching segment said during the moment, if any."""
+        pad = self.config.speech.pad
+        near = [s for s in segments if s[0] == hit.video_id and s[1] <= hit.end + pad and s[2] >= hit.start - pad]
+        return replace(hit, said=max(near, key=lambda s: s[3])[4]) if near else hit

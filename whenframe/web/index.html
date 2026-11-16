@@ -58,6 +58,7 @@
   button.plain:hover { border-color: var(--accent); }
   .empty { grid-column: 1 / -1; color: var(--muted); padding: 32px 0; }
   kbd { border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; font-size: 12px; }
+  .said { font-size: 13px; font-style: italic; margin-top: 4px; }
 </style>
 </head>
 <body>
@@ -125,6 +126,7 @@ function render(data) {
     const meta = el("div", "meta");
     meta.append(el("div", "name", h.name), el("div", "folder", h.folder),
                 el("div", "conf", `${Math.round(100 * h.confidence)} % sure the best frame matches`));
+    if (h.said) meta.append(el("div", "said", `“${h.said}”`));
     card.append(shot, meta);
     card.addEventListener("click", () => play(h));
     box.append(card);

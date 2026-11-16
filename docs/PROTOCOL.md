@@ -350,10 +350,16 @@ first-round parameters and query bank):
 - **Search:** the transcript segments go into an SQLite FTS5 index (Porter
   stemmer, unicode61 tokenizer). A query's words, stop words removed, are
   matched with OR, and each segment gets its BM25 score. A frame gets the best
-  score of the segments of its video that start before it plus `pad` seconds and
-  end after it minus `pad`; its search score becomes the image score plus
-  `weight` times that speech score (`normalise`: either the BM25 score itself,
-  or divided by the query's best segment score).
+  score of the segments of its video said around it; its search score becomes
+  the image score plus `weight` times that speech score (`normalise`: either the
+  BM25 score itself, or divided by the query's best segment score).
+  *Changed before any YouCook2 video was embedded:* "around it" was first
+  written as the segments starting before the frame plus `pad` seconds and
+  ending after it minus `pad`. A unit test showed that a short segment falling
+  between two kept frames then counts for neither, since frames repeating the
+  previous one are skipped. A kept frame now stands for the time until the next
+  kept frame, and a segment counts when it overlaps that time, both widened by
+  `pad` seconds.
 - **Tuning:** `weight` in {0.001, 0.002, 0.005, 0.01, 0.02, 0.05}, `pad` in
   {0, 5} seconds and `normalise` in {raw, best}, 24 combinations, chosen on the
   619 tuning steps with the primary metric; the image part is the default

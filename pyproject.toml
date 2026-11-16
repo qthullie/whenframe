@@ -14,6 +14,8 @@ dependencies = ["numpy>=1.24", "onnxruntime>=1.17", "tokenizers>=0.15"]
 [project.optional-dependencies]
 # OpenVINO runs the image encoder, five times faster where the processor computes in bfloat16 (docs/RESULTS.md)
 fast = ["openvino>=2025.0"]
+# Whisper on the CPU, to search what is said (whenframe index --speech base)
+speech = ["faster-whisper>=1.1"]
 dev = ["pytest>=7", "ruff>=0.5", "matplotlib>=3.7", "pyarrow>=14", "onnx>=1.15"]
 
 [project.scripts]

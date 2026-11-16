@@ -78,13 +78,18 @@ def cache_dir() -> Path:
 
 def fetch(spec: ModelSpec) -> Path:
     """Download the model files once into the cache and return their folder."""
-    folder = cache_dir() / "models" / spec.repo.replace("/", "--")
-    for name in ("tokenizer.json", spec.vision_file, spec.text_file):
+    return fetch_files(spec.repo, ("tokenizer.json", spec.vision_file, spec.text_file))
+
+
+def fetch_files(repo: str, names: tuple[str, ...]) -> Path:
+    """Download files of a Hugging Face repository once into the cache and return their folder."""
+    folder = cache_dir() / "models" / repo.replace("/", "--")
+    for name in names:
         dest = folder / name
         if dest.exists():
             continue
         dest.parent.mkdir(parents=True, exist_ok=True)
-        url = f"https://huggingface.co/{spec.repo}/resolve/main/{name}"
+        url = f"https://huggingface.co/{repo}/resolve/main/{name}"
         tmp = dest.with_suffix(dest.suffix + ".part")
         with urllib.request.urlopen(url, timeout=60) as r, open(tmp, "wb") as f:  # noqa: S310 (fixed host)
             while chunk := r.read(1 << 20):
