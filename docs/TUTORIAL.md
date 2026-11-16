@@ -59,6 +59,10 @@ for hit in Searcher(lib).search("sunset over the sea", k=5):
     print(hit.path, hit.start, hit.end, hit.confidence)
 ```
 
+Each `whenframe search` loads the text model first, which takes a few seconds;
+from Python, keep one `Searcher` and the following searches take tens of
+milliseconds.
+
 `SearchConfig` holds the few settings of the search: fixed windows or spans
 grown around peaks, the window length, how many moments per video, and the
 weight of the query-bank correction (0 turns it off). The defaults are the ones
