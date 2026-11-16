@@ -26,13 +26,16 @@ later: only new or modified videos are indexed.
 
 A library is built in one of three modes, chosen the first time it is indexed:
 
-| `--mode` | model | indexing | accuracy on DiDeMo |
-|---|---|---|---|
-| `standard` (default) | SigLIP 2 B/16 | reference | reference |
-| `economy` | SigLIP 2 B/32 (another 1.5 GB download) | about 3 times less CPU | lower |
-| `precision` | both, scores combined | about 1.3 times more CPU | higher |
+| `--mode` | model |
+|---|---|
+| `standard` (default) | SigLIP 2 B/16 |
+| `economy` | SigLIP 2 B/32 (another 1.5 GB download) |
+| `precision` | both, their scores combined |
 
-The measured numbers are in [RESULTS.md](RESULTS.md), "Second round".
+The economy mode costs about a third of the CPU time and finds fewer moments;
+the precision mode costs more and, on DiDeMo, found as many as the standard
+mode. The measured numbers are in the README and in [RESULTS.md](RESULTS.md),
+"Second round".
 
 The index lives in `~/.local/share/whenframe/library` (or `$WHENFRAME_LIBRARY`,
 or `--library DIR`). It takes about 5 MB per hour of video, and a search holds

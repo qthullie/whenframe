@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>whenframe</title>
+<meta name="description" content="Find the moment you are looking for in your own videos, on your own computer. Try it on three open movies.">
+<link rel="icon" href="logo.svg" type="image/svg+xml">
+<style>
+  :root {
+    --page: #f6f6f3; --surface: #fcfcfb; --card: #ffffff; --ink: #0b0b0b; --ink2: #52514e; --muted: #898781;
+    --line: #e1e0d9; --accent: #2a78d6; --accent-soft: #e8f1fb; --shade: rgba(11, 11, 11, .55);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --page: #121211; --surface: #1a1a19; --card: #1f1f1d; --ink: #f0efec; --ink2: #c3c2b7; --muted: #898781;
+      --line: #2c2c2a; --accent: #3987e5; --accent-soft: #1c2a3b; --shade: rgba(0, 0, 0, .7);
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--ink);
+         font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  a { color: var(--accent); }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 20px; }
+  header { padding: 40px 0 8px; }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand img { width: 44px; height: 44px; }
+  .brand h1 { font-size: 28px; margin: 0; letter-spacing: -.02em; }
+  .brand nav { margin-left: auto; display: flex; gap: 16px; font-size: 14px; }
+  .lead { font-size: 20px; color: var(--ink2); max-width: 760px; margin: 18px 0 6px; }
+  .demo { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 20px; margin: 24px 0; }
+  .demo h2 { font-size: 15px; font-weight: 600; margin: 0 0 12px; color: var(--ink2); }
+  form { display: flex; gap: 10px; }
+  input[type=search] { flex: 1; font: inherit; font-size: 18px; padding: 13px 15px; border-radius: 12px;
+                       border: 1px solid var(--line); background: var(--card); color: var(--ink); outline: none; min-width: 0; }
+  input[type=search]:focus { border-color: var(--accent); }
+  button { font: inherit; border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--ink);
+           padding: 10px 16px; cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  button:hover { border-color: var(--accent); }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 4px; }
+  .chip { font-size: 14px; padding: 5px 11px; border-radius: 999px; background: var(--accent-soft); border: 1px solid transparent; }
+  .chip:hover { border-color: var(--accent); }
+  #status { color: var(--muted); font-size: 14px; min-height: 22px; margin: 10px 0 0; }
+  #model { display: none; margin-top: 12px; padding: 12px 14px; border-radius: 12px; border: 1px dashed var(--line);
+           color: var(--ink2); font-size: 14px; }
+  #model.show { display: block; }
+  progress { width: 100%; height: 6px; margin-top: 8px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; margin-top: 14px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; cursor: pointer;
+          text-align: left; padding: 0; color: inherit; font: inherit; }
+  .card:hover, .card:focus-visible { border-color: var(--accent); outline: none; }
+  .card.unlikely { opacity: .5; }
+  .card.unlikely:hover { opacity: 1; }
+  .shot { position: relative; aspect-ratio: 16 / 9; background-repeat: no-repeat; background-size: 1000% 1000%; }
+  .when { position: absolute; left: 8px; bottom: 8px; background: var(--shade); color: #fff; font-size: 12px;
+          padding: 2px 8px; border-radius: 6px; font-variant-numeric: tabular-nums; }
+  .rank { position: absolute; left: 8px; top: 8px; background: var(--accent); color: #fff; font-size: 12px;
+          padding: 1px 7px; border-radius: 6px; }
+  .meta { padding: 9px 12px 11px; }
+  .title { font-weight: 600; }
+  .conf { color: var(--ink2); font-size: 13px; }
+  dialog { border: none; border-radius: 16px; padding: 18px; background: var(--card); color: var(--ink); width: min(980px, 94vw); }
+  dialog::backdrop { background: var(--shade); }
+  .board { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin: 12px 0; }
+  .board .shot { border-radius: 8px; }
+  .board .shot span { position: absolute; right: 6px; bottom: 6px; background: var(--shade); color: #fff; font-size: 11px;
+                      padding: 0 6px; border-radius: 5px; }
+  .board .shot.best { outline: 3px solid var(--accent); outline-offset: -3px; }
+  section.more { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px; margin: 28px 0; }
+  .box { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px; }
+  .box h3 { margin: 0 0 8px; font-size: 16px; }
+  .box p, .box li { color: var(--ink2); font-size: 15px; }
+  .big { font-size: 34px; font-weight: 700; color: var(--ink); letter-spacing: -.02em; }
+  pre { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px; overflow-x: auto;
+        font-size: 13px; margin: 8px 0 0; }
+  footer { color: var(--muted); font-size: 13px; padding: 24px 0 48px; border-top: 1px solid var(--line); }
+  @media (max-width: 560px) { form { flex-direction: column; } .board { grid-template-columns: repeat(3, 1fr); } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <img src="logo.svg" alt="">
+      <h1>whenframe</h1>
+      <nav><a href="https://github.com/qthullie/whenframe">Code</a>
+           <a href="https://github.com/qthullie/whenframe/blob/main/docs/RESULTS.md">Results</a></nav>
+    </div>
+    <p class="lead">Find the moment you are looking for in your own videos: describe it, and get the video and the
+      seconds where it happens. It runs on your computer, without a GPU, and sends nothing anywhere.</p>
+  </header>
+
+  <div class="demo">
+    <h2 id="what">Try it on three open movies</h2>
+    <form id="form" role="search">
+      <input id="q" type="search" autocomplete="off" aria-label="Describe a moment"
+             placeholder="Describe a moment: two people arguing on a bridge">
+      <button class="primary" type="submit">Search</button>
+    </form>
+    <div class="chips" id="chips"></div>
+    <div id="model">
+      <span id="model-text">A search you type yourself needs the text model in your browser: 283 MB, downloaded once
+        from the Hugging Face Hub and kept by your browser. It is an 8-bit copy of the model the tool uses, so results
+        can differ a little from the tool's.</span>
+      <div style="margin-top:10px"><button id="load" type="button">Download the model and search</button></div>
+      <progress id="progress" max="100" value="0" hidden></progress>
+    </div>
+    <div id="status"></div>
+    <div class="grid" id="results"></div>
+  </div>
+
+  <section class="more">
+    <div class="box">
+      <h3>On personal videos</h3>
+      <p><span class="big" id="n-default">…</span><br>of descriptions find their moment among the first five results,
+        searching <span id="n-videos">…</span> personal videos at once (DiDeMo test). One keyframe per shot, as some
+        home video tools index video: <b id="n-shots">…</b>.</p>
+    </div>
+    <div class="box">
+      <h3>Install</h3>
+      <pre>pip install git+https://github.com/qthullie/whenframe
+whenframe index ~/Videos
+whenframe search "the dog jumps into the pool"
+whenframe serve</pre>
+      <p>Python 3.10+ and ffmpeg. The first run downloads the model (1.5 GB).</p>
+    </div>
+    <div class="box">
+      <h3>How it works</h3>
+      <ul>
+        <li>One frame per second, repeated frames skipped, embedded by SigLIP 2 on the CPU.</li>
+        <li>Frames that match almost any text are marked down (query-bank normalisation).</li>
+        <li>Moments of ten seconds around the best frames, ranked across all videos.</li>
+      </ul>
+      <p>The protocol was fixed before each test run, and the criteria it missed are listed with the ones it met.</p>
+    </div>
+  </section>
+
+  <footer>
+    Films: Big Buck Bunny, Sintel and Tears of Steel, © Blender Foundation, CC BY 3.0. Model: SigLIP 2 (Google,
+    Apache 2.0). Everything on this page runs in your browser; the only request it makes beyond this site is the text
+    model's download, when you ask for it. whenframe is MIT-licensed.
+  </footer>
+</div>
+
+<dialog id="moment">
+  <div style="display:flex;gap:12px;align-items:baseline;flex-wrap:wrap">
+    <strong id="m-title"></strong><span id="m-when" style="color:var(--ink2)"></span>
+    <button id="m-close" type="button" style="margin-left:auto">Close</button>
+  </div>
+  <div class="board" id="m-board"></div>
+  <div style="color:var(--ink2);font-size:14px">Each second of the moment, as the search saw it; the outlined frame is
+    the best match. <a id="m-link" target="_blank" rel="noopener">The film</a></div>
+</dialog>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

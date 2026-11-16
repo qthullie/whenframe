@@ -218,19 +218,57 @@ into French. Everything was developed on the tuning videos; the test split was
 evaluated once more, after the protocol's second round had been committed.
 
 <!-- table round2-check -->
+The first round's 6 methods, evaluated again: 6 give exactly the same numbers as in the first run.
 <!-- /table -->
 
+One of the three criteria of the second round is met.
+
+- **6.** The economy mode (SigLIP 2 B/32) finds the right moment in the first
+  five 2.7 points less often than the standard mode, more than the 2 points
+  allowed.
+- **7.** It indexes for 8.4 minutes of CPU time per hour of video, against 24.9
+  for the standard mode: the first cost criterion met, at about a third of the
+  CPU time (2.8 minutes of waiting per hour of video on 4 vCPUs).
+- **8.** Adding B/32's scores to B/16's (the precision mode) changes nothing on
+  the primary metric (+0.1). The two models come from the same family and miss
+  the same moments; MobileCLIP-S2, trained differently, adds 0.9 points to B/16
+  in the same way, but its weights are for research only.
+
 <!-- table round2-criteria -->
+| criterion (fixed before the second run) | measured on test | met |
+|---|---|---|
+| 6. the economy mode loses at most 2 points | -2.7 points | no |
+| 7. economy indexing takes at most 10 min of CPU time per hour of video | 8.4 min | yes |
+| 8. the precision mode gains at least 1 point | +0.1 points | no |
 <!-- /table -->
 
 ### Three modes
 
 <!-- table round2-modes -->
+| mode | R@1 | R@5 | R@10 | right video in top 5 | indexing, CPU (min/h) | indexing, 4 vCPU (min/h) | per search (ms) |
+|---|---|---|---|---|---|---|---|
+| standard (`frame_window_bank`) | 13.1 | 27.2 | 34.0 | 46.4 | 24.9 | 7.4 | 63 |
+| economy (`siglip32_bank`) | 11.7 | 24.5 | 30.0 | 42.1 | 8.4 | 2.8 | 61 |
+| precision (`ensemble32_bank`) | 13.7 | 27.2 | 33.9 | 46.4 | 33.2 | 10.2 | 123 |
+| MobileCLIP-S2 alone, research only (`mobileclip_bank`) | 12.0 | 25.2 | 32.5 | 44.7 | 11.4 | 3.8 | 36 |
+| SigLIP 2 + MobileCLIP-S2, research only (`ensemble_bank`) | 13.7 | 28.1 | 34.9 | 47.5 | 36.3 | 11.3 | 98 |
 <!-- /table -->
 
 ### French descriptions
 
+The descriptions were translated by a machine (Opus-MT, greedy), errors
+included, then searched exactly like the English ones. SigLIP 2, trained on
+multilingual data, keeps about 70 % of its English recall in French. MobileCLIP-S2,
+trained on English only, keeps 40 %.
+
 <!-- table round2-french -->
+| mode | English R@5 | French R@5 | change | right video in top 5, English / French |
+|---|---|---|---|---|
+| standard | 27.2 | 19.3 | -7.8 | 46.4 / 34.8 |
+| economy | 24.5 | 17.8 | -6.7 | 42.1 / 33.3 |
+| precision | 27.2 | 20.1 | -7.1 | 46.4 / 35.4 |
+| MobileCLIP-S2 alone, research only | 25.2 | 10.0 | -15.2 | 44.7 / 21.1 |
+| SigLIP 2 + MobileCLIP-S2, research only | 28.1 | 16.7 | -11.4 | 47.5 / 31.4 |
 <!-- /table -->
 
 ### What else was tried, on the tuning videos only

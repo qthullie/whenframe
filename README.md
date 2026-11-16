@@ -1,14 +1,20 @@
 # whenframe
 
+<img src="site/logo.svg" alt="" width="56" align="left">
+
 Find a moment in your own videos by describing it. whenframe indexes a folder
 of videos on your computer, with no GPU and nothing sent anywhere, and answers
 "the dog jumps into the pool" with the video and the seconds where it happens.
 
+**[Try it in your browser](https://qthullie.github.io/whenframe/)** on three open movies, or install it below.
+
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/figures/results-dark.png">
-    <img src="docs/figures/results.png" alt="Share of DiDeMo test descriptions whose moment is among the first five results, for each search method" width="800">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/figures/demo-1-dark.webp">
+    <img src="docs/figures/demo-1.webp" alt="The whenframe search page: 'two people arguing on a bridge' finds the opening scene of Tears of Steel first, among three films" width="800">
   </picture>
+  <br>
+  <sub><code>whenframe serve</code> on three Blender open movies: Big Buck Bunny, Sintel and Tears of Steel (© Blender Foundation, CC BY 3.0).</sub>
 </p>
 
 <!-- table readme-headline -->
@@ -19,8 +25,9 @@ Searching 979 personal videos at once (DiDeMo test) for 3,902 descriptions writt
 
 ```bash
 pip install git+https://github.com/qthullie/whenframe   # Python 3.10+, and ffmpeg on the PATH
-whenframe index ~/Videos
+whenframe index ~/Videos                                # once, then again to add new videos
 whenframe search "the dog jumps into the pool"
+whenframe serve                                         # the page above, at http://127.0.0.1:8765
 ```
 
 ```
@@ -28,12 +35,21 @@ whenframe search "the dog jumps into the pool"
  71%     0:03 - 0:13      /home/me/Videos/2023/garden.mp4
 ```
 
-The first run downloads the SigLIP 2 model (1.5 GB). Indexing again only reads
-new or modified videos. More in [docs/TUTORIAL.md](docs/TUTORIAL.md).
+The first run downloads the SigLIP 2 model (1.5 GB). A library is indexed in
+one of three modes, chosen the first time (`--mode`):
+
+<!-- table readme-modes -->
+| `--mode` | right moment in the first five (DiDeMo) | indexing, CPU min per hour of video | search (ms) |
+|---|---|---|---|
+| `standard` | 27.2 % | 24.9 | 63 |
+| `economy` | 24.5 % | 8.4 | 61 |
+| `precision` | 27.2 % | 33.2 | 123 |
+<!-- /table -->
 
 Nothing else goes over the network. ONNX Runtime 1.29 sends usage telemetry to
 Microsoft by default; whenframe sets `ORT_DISABLE_TELEMETRY=1` before loading
 it (checked by logging every outbound connection of an indexing and search run).
+More in [docs/TUTORIAL.md](docs/TUTORIAL.md).
 
 ## How it works
 
@@ -47,12 +63,21 @@ it (checked by logging every outbound connection of an indexing and search run).
    ([Bogolin et al., CVPR 2022](https://arxiv.org/abs/2112.12777)), applied to
    video frames.
 4. In each of the best videos, up to three 10-second moments are placed around
-   the best frames, and all moments are ranked together.
+   the best frames, and all moments are ranked together. In precision mode the
+   scores of two models are standardised and added first.
 
 ## Results
 
-DiDeMo test split, with the protocol fixed in advance ([docs/PROTOCOL.md](docs/PROTOCOL.md)).
-Every number below is written by `scripts/tables.py` from `results/didemo_test.json`.
+DiDeMo test split, with the protocol fixed in advance and every change to it
+listed ([docs/PROTOCOL.md](docs/PROTOCOL.md)). The numbers on this page are
+written by `scripts/tables.py` from `results/*.json`.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/figures/results-dark.png">
+    <img src="docs/figures/results.png" alt="Share of DiDeMo test descriptions whose moment is among the first five results, for each search method of the first round" width="800">
+  </picture>
+</p>
 
 <!-- table didemo-criteria -->
 | criterion (fixed in advance) | measured on test | met |
@@ -64,36 +89,50 @@ Every number below is written by `scripts/tables.py` from `results/didemo_test.j
 | 5. the query bank adds at least 1 point to fixed windows | +2.2 points | yes |
 <!-- /table -->
 
+Second round (two more modes, French descriptions):
+
+<!-- table round2-criteria -->
+| criterion (fixed before the second run) | measured on test | met |
+|---|---|---|
+| 6. the economy mode loses at most 2 points | -2.7 points | no |
+| 7. economy indexing takes at most 10 min of CPU time per hour of video | 8.4 min | yes |
+| 8. the precision mode gains at least 1 point | +0.1 points | no |
+<!-- /table -->
+
 All tables, the costs and the figures: [docs/RESULTS.md](docs/RESULTS.md).
 
 ## Limits
 
 - It sees frames, not motion or sound: "the camera pans left" or "someone
   laughs" are out of its reach.
-- It was measured on the first 30 seconds of short personal videos; long
-  videos and other kinds of footage were not measured.
-- Descriptions in English. About a tenth of SigLIP 2's training text was in
-  other languages; how well they work here was not measured.
-- Indexing is slow on a small machine: 25 minutes of CPU time per hour of
-  video on the 4-vCPU machine of the benchmark (7.4 minutes of waiting).
-- Three of the five criteria set before the test run were not met; the results
-  page says which and why.
+- It was measured on the first 30 seconds of short personal videos (DiDeMo);
+  long videos were not measured.
+- Indexing is slow on a small machine (see the modes above, measured on 4 vCPUs).
+- Descriptions in French were measured through machine translation only.
+- Several criteria set in advance were not met; the results page says which and
+  why.
 
 ## Documents
 
 - [docs/RESEARCH.md](docs/RESEARCH.md): what already exists, and what is new here
-- [docs/PROTOCOL.md](docs/PROTOCOL.md): the evaluation, written before the test run, and every change made to it
+- [docs/PROTOCOL.md](docs/PROTOCOL.md): the evaluation, written before each test run, and every change made to it
 - [docs/RESULTS.md](docs/RESULTS.md): all the numbers
-- [docs/TUTORIAL.md](docs/TUTORIAL.md): installing, indexing, searching, reproducing the benchmark
+- [docs/TUTORIAL.md](docs/TUTORIAL.md): installing, indexing, searching, the page, reproducing the benchmark
 
 ## Credits
 
 - DiDeMo: Hendricks et al., *Localizing Moments in Video with Natural
-  Language*, ICCV 2017.
+  Language*, ICCV 2017. Charades-STA: Gao et al., *TALL*, ICCV 2017, on
+  Charades: Sigurdsson et al., ECCV 2016.
 - SigLIP 2: Tschannen et al., 2025. The weights, downloaded at the first run,
   are Google's, under the Apache 2.0 licence.
 - The query bank holds embeddings of DiDeMo training descriptions (BSD 2-Clause);
   see [whenframe/data/NOTICE](whenframe/data/NOTICE).
+- The benchmark also measures MobileCLIP-S2 (Apple, research-only licence) and
+  translates descriptions with Opus-MT (Helsinki-NLP, Apache 2.0); the tool uses
+  neither.
+- The demo uses Big Buck Bunny, Sintel and Tears of Steel, © Blender Foundation,
+  CC BY 3.0.
 
 ## Licence
 

@@ -177,7 +177,13 @@ def round2_tables(r: dict, first: dict | None) -> dict[str, str]:
           f"{100 * (r['french'][m]['corpus'][PRIMARY] - r[m]['corpus'][PRIMARY]):+.1f}",
           f"{pct(r[m]['video']['R@5'])} / {pct(r['french'][m]['video']['R@5'])}"] for mode, m, _ in MODES],
     )  # fmt: skip
-    out = {"round2-criteria": criteria, "round2-modes": modes, "round2-french": french}
+    compact = table(
+        ["`--mode`", "right moment in the first five (DiDeMo)", "indexing, CPU min per hour of video",
+         "search (ms)"],
+        [[f"`{mode}`", f"{pct(r[m]['corpus'][PRIMARY])} %", f"{mode_cost(m, model)[0]:.1f}",
+          f"{mode_cost(m, model)[2] + r[m]['query_ms']:.0f}"] for mode, m, model in MODES[:3]],
+    )  # fmt: skip
+    out = {"round2-criteria": criteria, "round2-modes": modes, "round2-french": french, "readme-modes": compact}
     if first:
 
         def numbers(res: dict, m: str) -> tuple:
@@ -187,6 +193,19 @@ def round2_tables(r: dict, first: dict | None) -> dict[str, str]:
         out["round2-check"] = (f"The first round's {len(first['methods'])} methods, evaluated again: "
                                f"{len(same)} give exactly the same numbers as in the first run.")  # fmt: skip
     return out
+
+
+def charades_table() -> str | None:
+    f = RESULTS / "charades_test.json"
+    if not f.exists():
+        return None
+    r = json.loads(f.read_text())
+    return table(
+        ["method (parameters from DiDeMo, unchanged)", "R1 IoU>=0.5", "R1 IoU>=0.7", "mean IoU",
+         f"all {r['videos']:,} videos at once: R@5 IoU>=0.5"],
+        [[LABEL[m], pct(r[m]["single"]["R1 IoU>=0.5"]), pct(r[m]["single"]["R1 IoU>=0.7"]), pct(r[m]["single"]["mIoU"]),
+          pct(r[m]["corpus"][PRIMARY])] for m in r["methods"]],
+    )  # fmt: skip
 
 
 def explore_table() -> str | None:
@@ -222,6 +241,9 @@ def main() -> int:
     explore = explore_table()
     if explore:
         tables["didemo-explore"] = explore
+    charades = charades_table()
+    if charades:
+        tables["charades"] = charades
     f2 = RESULTS / "didemo_test_round2.json"
     if f2.exists():
         tables.update(round2_tables(json.loads(f2.read_text()), json.loads(f.read_text()) if f.exists() else None))
