@@ -4,6 +4,8 @@
     python scripts/youcook2.py transcribe --videos DIR --annotations val.parquet   # Whisper base
     python scripts/youcook2.py tune       --annotations val.parquet   # the speech weight, on a third of the videos
     python scripts/youcook2.py evaluate   --annotations val.parquet   # on the other two thirds
+    python scripts/youcook2.py tune-spans --annotations val.parquet   # fourth round: speech with adaptive spans
+    python scripts/youcook2.py evaluate-spans --annotations val.parquet
 
 The annotations are lmms-eval/YouCook2's data/val-00000-of-00001.parquet; the
 videos, nguyenminh04/youcook2-videos on the Hugging Face Hub (videos/ID.mp4).
@@ -196,24 +198,55 @@ def with_speech(f: Frozen, queries: list, visual: np.ndarray, db, cfg: speech.Sp
     return out
 
 
-def tune(args) -> None:
+def tune(args, method: str = "frame_window_bank", out_name: str = "youcook2_tuned.json") -> None:
+    """The speech weight, pad and scores, chosen on the tuning steps for the moments of `method`."""
     f, queries, text, db, params, _ = load(args)
     tuning = split(f.names)
     which = [i for i, q in enumerate(queries) if q["name"] in tuning]
-    visual = frame_scores(f, text, "frame_window_bank", params["frame_window_bank"])
-    base = measure(f, queries, visual, "frame_window_bank", params["frame_window_bank"], which)
+    visual = frame_scores(f, text, method, params[method])
+    base = measure(f, queries, visual, method, params[method], which)
     rows = []
     for cfg in GRID:
-        r = measure(f, queries, with_speech(f, queries, visual, db, cfg, which), "frame_window_bank",
-                    params["frame_window_bank"], which)  # fmt: skip
+        r = measure(f, queries, with_speech(f, queries, visual, db, cfg, which), method, params[method], which)
         rows.append({"weight": cfg.weight, "pad": cfg.pad, "normalise": cfg.normalise,
                      "score": r["corpus"]["R@5 IoU>=0.5"]})  # fmt: skip
         print(f"{cfg}  R@5 {100 * rows[-1]['score']:.1f}", flush=True)
     best = max(rows, key=lambda r: r["score"])  # the first of equals, in the grid's order
-    out = {"tuning_videos": len(tuning), "tuning_steps": len(which), "without_speech": base["corpus"]["R@5 IoU>=0.5"],
-           "grid": rows, "best": best}  # fmt: skip
-    (ROOT / "results" / "youcook2_tuned.json").write_text(json.dumps(out, indent=1))
+    out = {"method": method, "tuning_videos": len(tuning), "tuning_steps": len(which),
+           "without_speech": base["corpus"]["R@5 IoU>=0.5"], "grid": rows, "best": best}  # fmt: skip
+    (ROOT / "results" / out_name).write_text(json.dumps(out, indent=1))
     print(f"best: {best}, against {100 * out['without_speech']:.1f} without speech")
+
+
+def tune_spans(args) -> None:
+    """Fourth round: the same grid, with speech added to the adaptive spans."""
+    tune(args, "whenframe_bank", "youcook2_tuned_spans.json")
+
+
+def evaluate_spans(args) -> None:
+    """Fourth round: speech added to the adaptive spans, against the third round's best two, on the test steps."""
+    f, queries, text, db, params, _ = load(args)
+    tuning = split(f.names)
+    which = [i for i, q in enumerate(queries) if q["name"] not in tuning]
+    res = {"test_steps": len(which)}
+    found = {}
+    for name, method, tuned in (("speech_bank", "frame_window_bank", "youcook2_tuned.json"),
+                                ("speech_spans", "whenframe_bank", "youcook2_tuned_spans.json")):  # fmt: skip
+        best = json.loads((ROOT / "results" / tuned).read_text())["best"]
+        cfg = speech.SpeechConfig(best["weight"], best["pad"], best["normalise"])
+        visual = frame_scores(f, text, method, params[method])
+        res[name] = measure(f, queries, with_speech(f, queries, visual, db, cfg, which), method, params[method], which)
+        res[name]["speech"] = {"weight": cfg.weight, "pad": cfg.pad, "normalise": cfg.normalise}
+        found[name] = np.array(res[name].pop("found"))
+    res["whenframe_bank"] = measure(f, queries, frame_scores(f, text, "whenframe_bank", params["whenframe_bank"]),
+                                    "whenframe_bank", params["whenframe_bank"], which)  # fmt: skip
+    found["whenframe_bank"] = np.array(res["whenframe_bank"].pop("found"))
+    for other in ("speech_bank", "whenframe_bank"):
+        a, b = found["speech_spans"], found[other]
+        res[f"vs_{other}"] = {"wins": int((a & ~b).sum()), "losses": int((~a & b).sum()),
+                              "p": sign_test(int((a & ~b).sum()), int((~a & b).sum()))}  # fmt: skip
+    (ROOT / "results" / "youcook2_test_round4.json").write_text(json.dumps(res, indent=1))
+    print(json.dumps(res, indent=1))
 
 
 def evaluate(args) -> None:
@@ -248,14 +281,16 @@ def evaluate(args) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("stage", choices=["extract", "transcribe", "tune", "evaluate"])
+    ap.add_argument("stage", choices=["extract", "transcribe", "tune", "evaluate", "tune-spans", "evaluate-spans"])
     ap.add_argument("--videos", help="folder of ID.mp4 files")
     ap.add_argument("--annotations", required=True, help="lmms-eval/YouCook2 data/val-00000-of-00001.parquet")
     ap.add_argument("--train-annotations", help="DiDeMo training annotations, for the query bank")
     ap.add_argument("--model-dir", help="folder of SigLIP 2's files (default: the usual download cache)")
     ap.add_argument("--whisper-dir", help="folder of faster-whisper-base (default: downloaded once)")
     a = ap.parse_args()
-    {"extract": extract, "transcribe": transcribe, "tune": tune, "evaluate": evaluate}[a.stage](a)
+    stages = {"extract": extract, "transcribe": transcribe, "tune": tune, "evaluate": evaluate,
+              "tune-spans": tune_spans, "evaluate-spans": evaluate_spans}  # fmt: skip
+    stages[a.stage](a)
 
 
 if __name__ == "__main__":

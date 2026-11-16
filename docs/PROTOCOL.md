@@ -375,3 +375,20 @@ first-round parameters and query bank):
       2 points over the default search.
   12. Transcription takes at most 15 minutes of CPU time per hour of video on
       the YouCook2 videos.
+
+## Fourth round
+
+Written part by part, each part before its test run.
+
+### Speech with adaptive spans
+
+On YouCook2's long steps the adaptive spans did better than the fixed windows
+(third round), and speech had only been added to the fixed windows. The same 24
+combinations were tried with speech added to the adaptive spans, on the 619
+tuning steps (`scripts/youcook2.py tune-spans`): the same one came out best,
+weight 0.005, no pad, raw scores, with an R@5 of 29.4 % against 19.5 % for the
+spans alone and 24.1 % for speech with fixed windows.
+
+13. On the 1,331 YouCook2 test steps, speech added to the adaptive spans beats
+    speech added to the fixed windows (18.8 % in the third round) by at least 2
+    points on the primary metric.
