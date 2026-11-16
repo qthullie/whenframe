@@ -9,10 +9,27 @@ whenframe needs Python 3.10 or later and ffmpeg.
 pip install git+https://github.com/qthullie/whenframe
 ```
 
+Two extras are worth adding:
+
+```bash
+pip install "whenframe[fast] @ git+https://github.com/qthullie/whenframe"    # OpenVINO for the image encoder
+pip install "whenframe[speech] @ git+https://github.com/qthullie/whenframe"  # Whisper, to search what is said
+```
+
+With `fast`, OpenVINO encodes the frames instead of ONNX Runtime, in bfloat16
+on processors that compute in it (recent Intel Xeon with AMX, AMD Zen 4 and
+later). On the DiDeMo tuning videos, on the Xeon of the benchmark, encoding
+took 7 times less CPU time for half a point of recall
+([PROTOCOL.md](PROTOCOL.md), third round). Other processors were not measured.
+`--backend onnxruntime` keeps ONNX Runtime.
+
 The first run downloads the SigLIP 2 model (about 1.5 GB) into
-`~/.cache/whenframe` (or `$WHENFRAME_CACHE`). Nothing else goes over the
-network: whenframe turns off ONNX Runtime's usage telemetry
-(`ORT_DISABLE_TELEMETRY=1`) before loading it.
+`~/.cache/whenframe` (or `$WHENFRAME_CACHE`); `--speech` downloads Whisper
+(145 MB for base, 480 MB for small) the same way. Nothing else goes over the
+network. whenframe turns off ONNX Runtime's usage telemetry
+(`ORT_DISABLE_TELEMETRY=1`) and keeps OpenVINO's from loading (`import
+openvino` otherwise reports to Google Analytics); every connection of an
+indexing and a search run was traced to check it.
 
 ## Index a folder
 
@@ -45,6 +62,36 @@ it in memory as float32, about 11 MB per hour of video.
 whenframe stats      # what is indexed
 whenframe compact    # reclaim space after videos were re-indexed or removed
 ```
+
+### What is said
+
+```bash
+whenframe index ~/Videos --speech base      # or small: slower, better transcripts
+```
+
+With `--speech`, every video is also transcribed by Whisper on the CPU, and a
+search looks for its words in what is said as well as in the frames: "when she
+says happy birthday" finds the moment even if nothing in the picture shows it.
+The words that matched are shown with the moment. The library keeps the setting:
+later runs transcribe new videos, and running it on a library indexed without it
+transcribes the videos it already has. Whisper base took 7 and 14 minutes of CPU
+time per hour of video on two YouCook2 cooking videos ([PROTOCOL.md](PROTOCOL.md),
+third round): it depends on how much is said.
+
+## Keep the library up to date
+
+```bash
+whenframe watch ~/Videos                 # a pass every 5 minutes (--every SECONDS)
+whenframe watch ~/Videos --once          # one pass, for cron or a systemd timer
+whenframe serve --watch ~/Videos         # the search page, with the same passes in the background
+```
+
+Each pass indexes new and modified videos and forgets the ones that were
+deleted. A file modified in the last minute (`--settle`) waits for the next
+pass, so a video still being copied is not indexed half-written. If every
+video indexed under a folder has disappeared at once, the folder is taken for
+an unmounted disk or share and nothing is forgotten. A video that fails to
+decode is tried again only once its file changes.
 
 ## Search
 
@@ -82,6 +129,40 @@ player.
     <img src="figures/demo-2.webp" alt="whenframe serve on three Blender films: 'a girl hugging a baby dragon' finds three moments of Sintel first" width="800">
   </picture>
 </p>
+
+## Next to Jellyfin
+
+If the videos are also in a Jellyfin server, `serve` can link each moment to the
+video's page there:
+
+```bash
+export JELLYFIN_API_KEY=...       # Jellyfin: Dashboard, API Keys
+whenframe serve --host 0.0.0.0 --watch /srv/videos \
+    --jellyfin http://192.168.1.10:8096 --jellyfin-path /srv/videos=/media
+```
+
+`--jellyfin` is the address you open Jellyfin with in your browser; whenframe
+must reach it too. When Jellyfin runs in a container, it usually sees the
+videos under another path: `--jellyfin-path HERE=THERE` says that a file
+whenframe sees in HERE is in THERE for Jellyfin. The player of the search page
+then shows "Open in Jellyfin". Jellyfin's web client has no address for a time
+inside a video, so the link opens the video's page; whenframe's own player
+plays the moment. Tested against Jellyfin 10.11.3, run in Docker with its
+library on the same folder.
+
+## In a container
+
+```bash
+docker build -t whenframe https://github.com/qthullie/whenframe.git
+docker run -d --name whenframe -p 8765:8765 \
+    -v /srv/videos:/videos:ro -v whenframe:/data whenframe
+```
+
+The container serves the search page on port 8765 and keeps the index of
+`/videos` up to date (`serve --host 0.0.0.0 --watch /videos`); the index and the
+downloaded model live in the `/data` volume. It includes the `fast` extra. CI
+builds the image and starts the tool in it; indexing inside the container was
+not tested.
 
 ## From Python
 
@@ -137,6 +218,15 @@ make didemo-explore   # the other score corrections tried on tuning videos
 make didemo-round2    # MobileCLIP-S2, French descriptions, calibration, tuning, test
 make tables
 ```
+
+The third round embeds the DiDeMo videos again with OpenVINO (`make
+didemo-round3`, after `make didemo-extract`) and adds YouCook2: the annotations
+are `data/val-00000-of-00001.parquet` of `lmms-eval/YouCook2`, as
+`data/youcook2/val.parquet`, and the videos are the `videos/ID.mp4` files of
+`nguyenminh04/youcook2-videos` that it names, in `data/youcook2/videos/` (252
+were there). `make youcook2` embeds and transcribes them, tunes the weight of
+speech on a third of the videos and evaluates on the others; it needs both
+extras (`pip install -e ".[dev,fast,speech]"`).
 
 Charades-STA comes from the `lmms-eval/charades_sta` copy on the Hugging Face
 Hub: `data/test-00000-of-00001.parquet` as `data/charades/test.parquet`, and,

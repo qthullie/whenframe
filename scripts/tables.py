@@ -195,6 +195,76 @@ def round2_tables(r: dict, first: dict | None) -> dict[str, str]:
     return out
 
 
+def round3_tables() -> dict[str, str]:
+    """OpenVINO on DiDeMo, YouCook2 and speech: whatever of the third round has been run."""
+    out, rows = {}, []
+    test, tune = RESULTS / "didemo_test_backends.json", RESULTS / "didemo_train_backends.json"
+    if test.exists():
+        r = json.loads(test.read_text())
+        ov, ort = r["openvino"], r["onnxruntime"]
+        cost = sum(ov["cpu_min_per_hour"].values())
+        change = ov["corpus"][PRIMARY] - ort["corpus"][PRIMARY]
+        rows += [["9. indexing with OpenVINO takes at most 10 min of CPU time per hour of video", f"{cost:.1f} min",
+                  cost <= 10],
+                 ["10. OpenVINO loses at most 1 point on the primary metric", f"{100 * change:+.1f} points",
+                  change >= -0.01]]  # fmt: skip
+        both = [json.loads(f.read_text()) for f in (tune, test) if f.exists()]
+        out["round3-runtimes"] = table(
+            ["image encoder", "videos", "R@5", "encoding, CPU min per hour of video", "CPU ms per frame",
+             "won / lost"],
+            [[f"{name} ({x['split']})", f"{x['videos']:,}", pct(x[k]["corpus"][PRIMARY]),
+              f"{x[k]['cpu_min_per_hour']['encode_cpu']:.1f}", f"{x[k]['encode_ms_per_frame']:.0f}",
+              "" if k == "onnxruntime" else f"{x['wins']} / {x['losses']} (p = {x['p']:.2f})"]
+             for x in both for k, name in (("onnxruntime", "ONNX Runtime, float32"),
+                                           ("openvino", "OpenVINO, bfloat16"))],
+        )  # fmt: skip
+        out["readme-openvino"] = (
+            f"With OpenVINO (`pip install 'whenframe[fast]'`) on a processor that computes in bfloat16, as this "
+            f"one does, the standard mode indexes for {cost:.1f} CPU minutes per hour of video instead of "
+            f"{sum(ort['cpu_min_per_hour'].values()):.1f}, and finds {pct(ov['corpus'][PRIMARY])} % of the moments "
+            f"instead of {pct(ort['corpus'][PRIMARY])} % (DiDeMo test)."
+        )
+    yc, tuned = RESULTS / "youcook2_test.json", RESULTS / "youcook2_tuned.json"
+    if yc.exists():
+        r = json.loads(yc.read_text())
+        gain = r["speech_bank"]["corpus"]["R@5 IoU>=0.5"] - r["frame_window_bank"]["corpus"]["R@5 IoU>=0.5"]
+        asr = r["cost"]["transcribe_cpu_min_per_hour"]
+        rows += [["11. speech adds at least 2 points on YouCook2", f"{100 * gain:+.1f} points", gain >= 0.02],
+                 ["12. transcription takes at most 15 min of CPU time per hour of video", f"{asr:.1f} min",
+                  asr <= 15]]  # fmt: skip
+        labels = {
+            "frame_window_bank": "fixed windows + query bank (the default search)",
+            "whenframe_bank": "adaptive spans + query bank",
+            "speech_bank": "the default search + speech",
+        }
+        out["youcook2"] = table(
+            ["method (DiDeMo parameters)", "R1 IoU>=0.3", "R1 IoU>=0.5", "R1 IoU>=0.7", "mean IoU",
+             f"all {r['videos']} videos: R@5 IoU>=0.3", "R@5 IoU>=0.5", "R@5, best frame inside the step"],
+            [[label, pct(r[m]["single"]["R1 IoU>=0.3"]), pct(r[m]["single"]["R1 IoU>=0.5"]),
+              pct(r[m]["single"]["R1 IoU>=0.7"]), pct(r[m]["single"]["mIoU"]), pct(r[m]["corpus"]["R@5 IoU>=0.3"]),
+              pct(r[m]["corpus"]["R@5 IoU>=0.5"]), pct(r[m]["corpus_inside"]["R@5"])] for m, label in labels.items()],
+        )  # fmt: skip
+        c = r["cost"]
+        out["youcook2-cost"] = table(
+            ["per hour of video", "CPU time (min)"],
+            [["decoding (ffmpeg, 1 frame per second)", f"{c['decode_cpu_min_per_hour']:.1f}"],
+             [f"encoding the frames kept ({100 * c['frames_kept'] / c['frames_seen']:.0f} %), OpenVINO "
+              f"{c['precision']}", f"{c['encode_cpu_min_per_hour']:.1f}"],
+             ["transcribing (Whisper base, int8)", f"{c['transcribe_cpu_min_per_hour']:.1f}"]],
+        )  # fmt: skip
+        w = r["speech_vs_default"]
+        out["youcook2-speech"] = (
+            f"Speech moves {w['wins']} test steps into the first five moments and {w['losses']} out of them "
+            f"(sign test p = {w['p']:.2g}), with weight {r['speech']['weight']:g}, pad {r['speech']['pad']:g} s and "
+            f"{r['speech']['normalise']} scores, chosen on the {json.loads(tuned.read_text())['tuning_steps']} "
+            f"tuning steps."
+        )  # fmt: skip
+    if rows:
+        out["round3-criteria"] = table(["criterion (fixed before the third run)", "measured on test", "met"],
+                                       [[n, m, "yes" if ok else "no"] for n, m, ok in rows])  # fmt: skip
+    return out
+
+
 def charades_table() -> str | None:
     f = RESULTS / "charades_test.json"
     if not f.exists():
@@ -261,6 +331,7 @@ def main() -> int:
     rerank = rerank_table()
     if rerank:
         tables["didemo-rerank"] = rerank
+    tables.update(round3_tables())
     f2 = RESULTS / "didemo_test_round2.json"
     if f2.exists():
         tables.update(round2_tables(json.loads(f2.read_text()), json.loads(f.read_text()) if f.exists() else None))

@@ -4,9 +4,10 @@ TRANSLATOR ?= data/opus-mt-en-fr
 FILMS ?= data/films
 SMOLVLM ?= data/smolvlm-256m
 CHARADES ?= data/charades
+YOUCOOK2 ?= data/youcook2
 
 .PHONY: install check lint test didemo-extract didemo-tune didemo-eval didemo-explore didemo-round2 tables figures \
-	didemo-rerank charades demo site
+	didemo-rerank charades didemo-round3 youcook2 demo site
 
 install:
 	$(PY) -m pip install -e ".[dev]"
@@ -69,6 +70,25 @@ charades:
 	$(PY) scripts/charades.py evaluate --annotations $(CHARADES)/test.parquet \
 		--train-annotations $(DIDEMO)/didemo_train.json
 	$(PY) scripts/charades.py prior --annotations $(CHARADES)/test.parquet
+
+# the third round: the DiDeMo videos embedded again with OpenVINO, compared with ONNX Runtime (after didemo-extract)
+didemo-round3:
+	$(PY) scripts/didemo.py extract --split train --backend openvino --videos $(DIDEMO)/train \
+		--annotations $(DIDEMO)/didemo_train.json --list results/didemo_train_videos.txt
+	$(PY) scripts/backends.py --split train --annotations $(DIDEMO)/didemo_train.json \
+		--train-annotations $(DIDEMO)/didemo_train.json
+	$(PY) scripts/didemo.py extract --split test --backend openvino --videos $(DIDEMO)/test \
+		--annotations $(DIDEMO)/didemo_test.json --list results/didemo_test_videos.txt
+	$(PY) scripts/backends.py --split test --annotations $(DIDEMO)/didemo_test.json \
+		--train-annotations $(DIDEMO)/didemo_train.json
+
+# long videos and speech: YouCook2 validation videos in $(YOUCOOK2)/videos, annotations in $(YOUCOOK2)/val.parquet
+youcook2:
+	$(PY) scripts/youcook2.py extract --videos $(YOUCOOK2)/videos --annotations $(YOUCOOK2)/val.parquet
+	$(PY) scripts/youcook2.py transcribe --videos $(YOUCOOK2)/videos --annotations $(YOUCOOK2)/val.parquet
+	$(PY) scripts/youcook2.py tune --annotations $(YOUCOOK2)/val.parquet --train-annotations $(DIDEMO)/didemo_train.json
+	$(PY) scripts/youcook2.py evaluate --annotations $(YOUCOOK2)/val.parquet \
+		--train-annotations $(DIDEMO)/didemo_train.json
 
 # the Blender films (Big Buck Bunny, Sintel, Tears of Steel) in $(FILMS): the screenshots, then the site's data
 demo:

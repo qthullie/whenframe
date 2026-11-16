@@ -30,6 +30,7 @@ pip install git+https://github.com/qthullie/whenframe   # Python 3.10+, and ffmp
 whenframe index ~/Videos                                # once, then again to add new videos
 whenframe search "the dog jumps into the pool"
 whenframe serve                                         # a search page, at http://127.0.0.1:8765
+whenframe watch ~/Videos                                # or keep the index up to date on its own
 ```
 
 ```
@@ -58,10 +59,19 @@ one of three modes, chosen the first time (`--mode`):
 | `precision` | 27.2 % | 33.2 | 123 |
 <!-- /table -->
 
+<!-- table readme-openvino -->
+<!-- /table -->
+
+`whenframe index --speech base` also transcribes what is said (Whisper, on the
+CPU, `pip install 'whenframe[speech]'`), and a search then finds the words
+said as well as what is seen. `serve --jellyfin` links each moment to the
+video in a Jellyfin server.
+
 Nothing else goes over the network. ONNX Runtime 1.29 sends usage telemetry to
-Microsoft by default; whenframe sets `ORT_DISABLE_TELEMETRY=1` before loading
-it (checked by logging every outbound connection of an indexing and search run).
-More in [docs/TUTORIAL.md](docs/TUTORIAL.md).
+Microsoft by default, and `import openvino` reports to Google Analytics;
+whenframe turns off the first and keeps the second from loading (checked by
+logging every outbound connection of an indexing and search run). More in
+[docs/TUTORIAL.md](docs/TUTORIAL.md): watching folders, Jellyfin, Docker.
 
 ## How it works
 
