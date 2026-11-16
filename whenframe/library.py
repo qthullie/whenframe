@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 import time
 from collections.abc import Callable, Iterable
 from dataclasses import asdict, dataclass
@@ -77,8 +78,10 @@ class Library:
         else:
             self.settings = settings or Settings()
             cfg.write_text(json.dumps(asdict(self.settings), indent=1))
-        self.db = sqlite3.connect(self.folder / "library.sqlite")
+        # `whenframe serve` reads the library from several threads; writes come from one indexer
+        self.db = sqlite3.connect(self.folder / "library.sqlite", check_same_thread=False)
         self.db.executescript(SCHEMA)
+        self._lock = threading.RLock()
         self._encoders = dict(encoders or {})
         if encoder is not None:
             self._encoders[self.settings.models[0]] = encoder
@@ -188,7 +191,8 @@ class Library:
 
     # ------------------------------------------------------------------ reading
     def videos(self) -> list[Video]:
-        rows = self.db.execute("select id, path, duration, start, count from videos order by start").fetchall()
+        with self._lock:
+            rows = self.db.execute("select id, path, duration, start, count from videos order by start").fetchall()
         return [Video(*r) for r in rows]
 
     def _arrays(self, model: str) -> tuple[np.ndarray, np.ndarray]:
@@ -203,14 +207,14 @@ class Library:
 
     def snapshot(self):
         """(videos, {model: embeddings}, times), loaded once and reused until the library changes."""
-        if self._cache is None:
-            embs = {}
-            times = np.zeros(0, np.float32)
-            for model in self.settings.models:
-                emb, times = self._arrays(model)
-                embs[model] = np.asarray(emb, dtype=np.float32)
-            self._cache = (self.videos(), embs, times)
-        return self._cache
+        with self._lock:
+            if self._cache is None:
+                embs, times = {}, np.zeros(0, np.float32)
+                for model in self.settings.models:
+                    emb, times = self._arrays(model)
+                    embs[model] = np.asarray(emb, dtype=np.float32)
+                self._cache = (self.videos(), embs, times)
+            return self._cache
 
     def offsets(self, model: str, bank: np.ndarray, beta: float) -> np.ndarray:
         """The query-bank offset of every row for one model, computed once for rows that lack one."""

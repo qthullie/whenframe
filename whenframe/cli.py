@@ -1,4 +1,4 @@
-"""whenframe index | search | stats | compact"""
+"""whenframe index | search | serve | stats | compact"""
 
 from __future__ import annotations
 
@@ -68,6 +68,13 @@ def cmd_stats(args) -> int:
     return 0
 
 
+def cmd_serve(args) -> int:
+    from .server import serve
+
+    serve(Library(args.library), args.host, args.port)
+    return 0
+
+
 def cmd_compact(args) -> int:
     Library(args.library).compact()
     return cmd_stats(args)
@@ -89,6 +96,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("query", nargs="+")
     p.add_argument("-k", type=int, default=10, help="number of moments to show")
     p.set_defaults(fn=cmd_search)
+    p = sub.add_parser("serve", help="a search page in the browser, with the model kept loaded")
+    p.add_argument("--host", default="127.0.0.1", help="address to listen on (default: this computer only)")
+    p.add_argument("--port", type=int, default=8765)
+    p.set_defaults(fn=cmd_serve)
     sub.add_parser("stats", help="what the library contains").set_defaults(fn=cmd_stats)
     sub.add_parser("compact", help="reclaim space left by re-indexed or removed videos").set_defaults(fn=cmd_compact)
     args = ap.parse_args(argv)

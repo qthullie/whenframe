@@ -22,6 +22,7 @@ include = ["whenframe*"]
 
 [tool.setuptools.package-data]
 "whenframe.data" = ["*.npy", "NOTICE"]
+whenframe = ["web/*.html"]
 
 [tool.ruff]
 line-length = 120

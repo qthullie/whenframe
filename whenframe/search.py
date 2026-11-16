@@ -51,6 +51,7 @@ class Hit:
     score: float  # ranking score
     confidence: float  # the first model's probability that the best frame of the moment matches the query
     video_id: int
+    at: float = 0.0  # the instant of the moment's best frame
 
 
 def standardise(x: np.ndarray) -> np.ndarray:
@@ -128,9 +129,12 @@ class Searcher:
         for i in np.argsort(-best)[: self.config.shortlist]:
             v = videos[i]
             t, r = times[v.start : v.start + v.count], first[v.start : v.start + v.count]
+            g = ranking[v.start : v.start + v.count]
             for s in self.video_moments(v, ranking, times):
-                inside = (t >= s.start) & (t < s.end)
-                top = r[inside].max() if inside.any() else r.max()
-                hits.append(Hit(v.path, s.start, s.end, self.rank_score(s), float(prob(np.float64(top))), v.id))
+                inside = np.flatnonzero((t >= s.start) & (t < s.end))
+                inside = inside if len(inside) else np.arange(len(t))
+                top = r[inside].max()
+                at = float(t[inside[np.argmax(g[inside])]])
+                hits.append(Hit(v.path, s.start, s.end, self.rank_score(s), float(prob(np.float64(top))), v.id, at))
         hits.sort(key=lambda h: -h.score)
         return hits[:k]

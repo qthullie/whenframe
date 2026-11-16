@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>whenframe</title>
+<style>
+  :root {
+    --surface: #fcfcfb; --page: #f6f6f3; --ink: #0b0b0b; --ink2: #52514e; --muted: #898781;
+    --line: #e1e0d9; --accent: #2a78d6; --accent-ink: #ffffff; --card: #ffffff; --shade: rgba(11, 11, 11, .55);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --surface: #1a1a19; --page: #121211; --ink: #f0efec; --ink2: #c3c2b7; --muted: #898781;
+      --line: #2c2c2a; --accent: #3987e5; --accent-ink: #ffffff; --card: #1f1f1d; --shade: rgba(0, 0, 0, .7);
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--ink);
+         font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { padding: 28px 24px 8px; max-width: 1180px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 0; letter-spacing: -.01em; }
+  h1 span { color: var(--muted); font-weight: 400; font-size: 14px; margin-left: 10px; }
+  form { max-width: 1180px; margin: 0 auto; padding: 12px 24px 4px; }
+  input[type=search] {
+    width: 100%; font: inherit; font-size: 18px; padding: 14px 16px; border-radius: 12px;
+    border: 1px solid var(--line); background: var(--surface); color: var(--ink); outline: none;
+  }
+  input[type=search]:focus { border-color: var(--accent); }
+  #status { max-width: 1180px; margin: 0 auto; padding: 8px 24px; color: var(--muted); font-size: 13px; min-height: 34px; }
+  main { max-width: 1180px; margin: 0 auto; padding: 0 24px 48px;
+         display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
+          cursor: pointer; text-align: left; padding: 0; color: inherit; font: inherit; }
+  .card:hover, .card:focus-visible { border-color: var(--accent); outline: none; }
+  .shot { position: relative; aspect-ratio: 16 / 9; background: var(--line); }
+  .shot img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .when { position: absolute; left: 8px; bottom: 8px; background: var(--shade); color: #fff;
+          font-size: 12px; padding: 2px 8px; border-radius: 6px; font-variant-numeric: tabular-nums; }
+  .rank { position: absolute; left: 8px; top: 8px; background: var(--accent); color: var(--accent-ink);
+          font-size: 12px; padding: 1px 7px; border-radius: 6px; }
+  .meta { padding: 10px 12px 12px; }
+  .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .folder { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .conf { color: var(--ink2); font-size: 12px; margin-top: 4px; }
+  dialog { border: none; border-radius: 14px; padding: 0; background: var(--card); color: var(--ink);
+           width: min(960px, 94vw); }
+  dialog::backdrop { background: var(--shade); }
+  video { width: 100%; display: block; background: #000; max-height: 70vh; }
+  .bar { display: flex; gap: 12px; align-items: center; padding: 12px 16px; flex-wrap: wrap; }
+  .bar .grow { flex: 1; min-width: 200px; }
+  button.plain { font: inherit; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--line);
+                 background: var(--surface); color: var(--ink); cursor: pointer; }
+  button.plain:hover { border-color: var(--accent); }
+  .empty { grid-column: 1 / -1; color: var(--muted); padding: 32px 0; }
+  kbd { border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; font-size: 12px; }
+</style>
+</head>
+<body>
+<header><h1>whenframe <span id="library"></span></h1></header>
+<form id="form" role="search">
+  <input id="q" type="search" autocomplete="off" autofocus aria-label="Describe a moment"
+         placeholder="Describe a moment: the dog jumps into the pool">
+</form>
+<div id="status">Press <kbd>/</kbd> to search, <kbd>Esc</kbd> to close a video. Nothing leaves this computer.</div>
+<main id="results"></main>
+<dialog id="player">
+  <video id="video" controls preload="metadata"></video>
+  <div class="bar">
+    <div class="grow"><div class="name" id="p-name"></div><div class="folder" id="p-where"></div></div>
+    <button class="plain" id="again" type="button">Play the moment again</button>
+    <button class="plain" id="close" type="button">Close</button>
+  </div>
+</dialog>
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const clock = (t) => {
+  t = Math.round(t);
+  const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = String(t % 60).padStart(2, "0");
+  return h ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
+};
+const el = (tag, cls, text) => {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+};
+let current = null;
+
+async function search(q) {
+  history.replaceState(null, "", q ? `?q=${encodeURIComponent(q)}` : location.pathname);
+  if (!q) { $("results").replaceChildren(); return; }
+  $("status").textContent = "Searching…";
+  try {
+    const r = await fetch(`/api/search?k=12&q=${encodeURIComponent(q)}`);
+    const data = await r.json();
+    if (data.query !== $("q").value.trim()) return;  // a newer search is on its way
+    render(data);
+  } catch (e) {
+    $("status").textContent = "The search failed: is whenframe serve still running?";
+  }
+}
+
+function render(data) {
+  const box = $("results");
+  box.replaceChildren();
+  $("status").textContent = data.hits.length
+    ? `${data.hits.length} moments in ${data.ms} ms`
+    : "No video indexed yet: run whenframe index <folder>, then reload.";
+  data.hits.forEach((h, i) => {
+    const card = el("button", "card");
+    card.type = "button";
+    const shot = el("div", "shot");
+    const img = el("img");
+    img.loading = "lazy";
+    img.alt = `${h.name} at ${clock(h.at)}`;
+    img.src = `/thumb?video=${h.video}&t=${h.at.toFixed(1)}`;
+    shot.append(img, el("span", "rank", String(i + 1)), el("span", "when", `${clock(h.start)} – ${clock(h.end)}`));
+    const meta = el("div", "meta");
+    meta.append(el("div", "name", h.name), el("div", "folder", h.folder),
+                el("div", "conf", `${Math.round(100 * h.confidence)} % sure the best frame matches`));
+    card.append(shot, meta);
+    card.addEventListener("click", () => play(h));
+    box.append(card);
+  });
+}
+
+function play(h) {
+  current = h;
+  const v = $("video");
+  $("p-name").textContent = `${h.name}, ${clock(h.start)} – ${clock(h.end)}`;
+  $("p-where").textContent = h.folder;
+  v.src = `/video?id=${h.video}`;
+  v.onloadedmetadata = () => { v.currentTime = h.start; v.play().catch(() => {}); };
+  v.onerror = () => { $("p-where").textContent = `${h.folder} (this browser cannot play this file: open it in your video player)`; };
+  $("player").showModal();
+}
+
+$("video").addEventListener("timeupdate", () => {
+  const v = $("video");
+  if (current && v.currentTime >= current.end && !v.paused) v.pause();
+});
+$("again").addEventListener("click", () => {
+  const v = $("video");
+  if (current) { v.currentTime = current.start; v.play().catch(() => {}); }
+});
+$("close").addEventListener("click", () => $("player").close());
+$("player").addEventListener("close", () => { const v = $("video"); v.pause(); v.removeAttribute("src"); v.load(); });
+$("form").addEventListener("submit", (e) => { e.preventDefault(); search($("q").value.trim()); });
+document.addEventListener("keydown", (e) => {
+  if (e.key === "/" && document.activeElement !== $("q")) { e.preventDefault(); $("q").focus(); $("q").select(); }
+});
+
+fetch("/api/stats").then((r) => r.json()).then((s) => {
+  $("library").textContent = `${s.videos} videos, ${s.hours.toFixed(1)} h indexed`;
+}).catch(() => {});
+const start = new URLSearchParams(location.search).get("q");
+if (start) { $("q").value = start; search(start); }
+</script>
+</body>
+</html>
