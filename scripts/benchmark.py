@@ -3,12 +3,14 @@
 All methods see the same frame embeddings and the same query embeddings; they
 only differ in how they turn per-frame scores into ranked moments.
 
-    frame_window   the best frame of each video, with a fixed window around it
-    scene          shots from ffmpeg's scene detector, each scored by its middle
-                   frame (in the spirit of tools that index one keyframe per shot)
-    whenframe      moments grown around peaks of the smoothed curve, ranked by
-                   peak score plus contrast with the rest of the video
+    frame_window     the best frame of each video, with a fixed window around it
+    scene            shots from ffmpeg's scene detector, each scored by its middle
+                     frame (in the spirit of tools that index one keyframe per shot)
+    whenframe        moments grown around peaks of the smoothed curve, ranked by
+                     peak score plus contrast with the rest of the video
     whenframe_dedup  the same on the frames left after skipping repeats
+    whenframe_bank   whenframe on scores corrected for frames that match many
+                     descriptions (query-bank normalisation, Bogolin et al. 2022)
 """
 
 from __future__ import annotations
@@ -16,15 +18,16 @@ from __future__ import annotations
 import itertools
 import random
 import time
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 
 import numpy as np
 
 from whenframe.moments import on_grid, smooth, spans
+from whenframe.video import RepeatFilter
 
 CORPUS_KS = [1, 5, 10, 100]
 SHORTLIST = 64
-METHODS = ["frame_window", "scene", "whenframe", "whenframe_dedup"]
+METHODS = ["frame_window", "scene", "whenframe", "whenframe_dedup", "whenframe_bank"]
 PRIMARY = ("corpus", "R@5 IoU>=0.5")
 
 
@@ -36,15 +39,51 @@ class Frozen:
     starts: np.ndarray
     counts: np.ndarray
     durations: np.ndarray
-    keep: np.ndarray
+    keep: np.ndarray  # frames kept by the default repeat filter
     cuts: list
+    thumbs: np.ndarray | None = None
+    bank: np.ndarray | None = None  # text embeddings of descriptions of other videos
+    _offsets: dict = field(default_factory=dict, repr=False)
+
+    def select(self, mask: np.ndarray) -> Frozen:
+        """The same videos, with only the frames in `mask` (every video must keep at least one)."""
+        idx = np.flatnonzero(mask)
+        counts = np.add.reduceat(mask.astype(np.int64), self.starts)
+        assert counts.min() > 0, "a video lost all its frames"
+        starts = np.concatenate([[0], np.cumsum(counts)[:-1]])
+        thumbs = None if self.thumbs is None else self.thumbs[idx]
+        return replace(self, emb=self.emb[idx], times=self.times[idx], starts=starts, counts=counts,
+                       keep=self.keep[idx], thumbs=thumbs, _offsets={})  # fmt: skip
 
     def only_kept(self) -> Frozen:
-        idx = np.flatnonzero(self.keep)
-        counts = np.array([self.keep[s : s + c].sum() for s, c in zip(self.starts, self.counts, strict=True)])
-        starts = np.concatenate([[0], np.cumsum(counts)[:-1]])
-        return replace(self, emb=self.emb[idx], times=self.times[idx], starts=starts, counts=counts,
-                       keep=np.ones(len(idx), bool))  # fmt: skip
+        return self.select(self.keep)
+
+    def without_repeats(self, threshold: float, max_gap: int = 4) -> np.ndarray:
+        mask = np.zeros(len(self.times), dtype=bool)
+        for s, c in zip(self.starts, self.counts, strict=True):
+            mask[s + RepeatFilter(threshold, max_gap)(self.thumbs[s : s + c].astype(np.float32))] = True
+        return mask
+
+    def every(self, k: int) -> np.ndarray:
+        mask = np.zeros(len(self.times), dtype=bool)
+        for s, c in zip(self.starts, self.counts, strict=True):
+            mask[s : s + c : k] = True
+        return mask
+
+    def offsets(self, beta: float) -> np.ndarray:
+        """How well each frame matches descriptions in general: a soft maximum of its scores against the bank.
+
+        In cosine units, (1 / beta) * log(mean_b exp(beta * cos(b, frame))). Subtracting it
+        from a query's score is the inverted softmax of query-bank normalisation.
+        """
+        if beta not in self._offsets:
+            out = np.empty(len(self.emb), dtype=np.float32)
+            for i in range(0, len(self.emb), 4096):
+                z = beta * (self.emb[i : i + 4096] @ self.bank.T)
+                top = z.max(axis=1)
+                out[i : i + 4096] = (top + np.log(np.exp(z - top[:, None]).mean(axis=1))) / beta
+            self._offsets[beta] = out
+        return self._offsets[beta]
 
 
 def iou(a: tuple[float, float], b: tuple[float, float]) -> float:
@@ -83,24 +122,35 @@ def whenframe(f: Frozen, scores: np.ndarray, v: int, p: dict) -> list[tuple[floa
     return [(x.start, x.end, x.peak + p["contrast"] * (x.peak - x.floor)) for x in found]
 
 
-PREDICT = {"frame_window": frame_window, "scene": scene, "whenframe": whenframe, "whenframe_dedup": whenframe}
+PREDICT = {"frame_window": frame_window, "scene": scene, "whenframe": whenframe, "whenframe_dedup": whenframe,
+           "whenframe_bank": whenframe}  # fmt: skip
 
 SPACE = {
     "frame_window": {"window": [2.0, 3.0, 5.0, 7.0, 10.0, 15.0]},
     "scene": {"per_video": [1, 2, 3]},
     "whenframe": {"step": [0.5], "sigma": [0.0, 1.0, 2.0, 4.0], "alpha": [0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
                   "contrast": [0.0, 0.5, 1.0, 2.0], "min_length": [2.0, 5.0], "per_video": [1, 2, 3]},
+    # tried on top of the tuned whenframe parameters
+    "whenframe_bank": {"beta": [10.0, 20.0, 50.0, 100.0], "lam": [0.25, 0.5, 1.0]},
 }  # fmt: skip
 
 
+def frame_scores(f: Frozen, text: np.ndarray, method: str, p: dict) -> np.ndarray:
+    """frames x queries."""
+    scores = f.emb @ text.T
+    if method == "whenframe_bank":
+        scores -= p["lam"] * f.offsets(p["beta"])[:, None]
+    return scores
+
+
 # ---------------------------------------------------------------- evaluation
-def run(f: Frozen, queries: list, text: np.ndarray, method: str, p: dict) -> dict:
+def run(f: Frozen, queries: list, text: np.ndarray, method: str, p: dict, scores: np.ndarray | None = None) -> dict:
     predict = PREDICT[method]
-    scores = f.emb @ text.T  # frames x queries
+    if scores is None:
+        scores = frame_scores(f, text, method, p)
     best = np.maximum.reduceat(scores, f.starts, axis=0)  # videos x queries
     single_iou, hits = [], {(k, th): 0 for k in CORPUS_KS for th in (0.5, 0.7)}
     video_hits = dict.fromkeys(CORPUS_KS, 0)
-    t0 = time.time()
     for qi, q in enumerate(queries):
         col = scores[:, qi]
         top = predict(f, col, q["video"], p)
@@ -132,33 +182,83 @@ def run(f: Frozen, queries: list, text: np.ndarray, method: str, p: dict) -> dic
                    "mIoU": float(single.mean())},
         "corpus": {f"R@{k} IoU>={th}": hits[(k, th)] / n for k in CORPUS_KS for th in (0.5, 0.7)},
         "video": {f"R@{k}": video_hits[k] / n for k in CORPUS_KS},
-        "query_ms": 1000 * (time.time() - t0) / n,
     }  # fmt: skip
+
+
+def latency(f: Frozen, text: np.ndarray, method: str, p: dict, n: int = 200) -> float:
+    """Milliseconds per query, one query at a time as in the tool: score every frame, shortlist, rank moments.
+
+    The text encoder is timed separately; the bank offsets are computed when indexing.
+    """
+    predict = PREDICT[method]
+    offsets = p["lam"] * f.offsets(p["beta"]) if method == "whenframe_bank" else None
+    n = min(n, len(text))
+    t0 = time.perf_counter()
+    for qi in range(n):
+        col = f.emb @ text[qi]
+        if offsets is not None:
+            col = col - offsets
+        best = np.maximum.reduceat(col, f.starts)
+        ranked = []
+        for v in np.argsort(-best)[:SHORTLIST]:
+            ranked += predict(f, col, int(v), p)
+        ranked.sort(key=lambda x: -x[2])
+    return 1000 * (time.perf_counter() - t0) / n
+
+
+def search_space(method: str, budget: int, rng: random.Random) -> list[dict]:
+    space = SPACE[method]
+    combos = [dict(zip(space, vals, strict=True)) for vals in itertools.product(*space.values())]
+    return rng.sample(combos, budget) if len(combos) > budget else combos
 
 
 def grid_search(f: Frozen, queries: list, text: np.ndarray, budget: int = 60, seed: int = 0) -> dict:
     """Best parameters of each method for the primary metric. Exhaustive when small, random otherwise."""
     rng = random.Random(seed)
+    scores = f.emb @ text.T
     best = {}
-    for method in ("frame_window", "scene", "whenframe"):
-        space = SPACE[method]
-        combos = [dict(zip(space, vals, strict=True)) for vals in itertools.product(*space.values())]
-        if len(combos) > budget:
-            combos = rng.sample(combos, budget)
+
+    def pick(method, combos, shared):
         scored = []
         for p in combos:
-            r = run(f, queries, text, method, p)
+            r = run(f, queries, text, method, p, scores if shared else None)
             scored.append((r[PRIMARY[0]][PRIMARY[1]], p))
             print(f"{method} {p} -> {scored[-1][0]:.4f}", flush=True)
         scored.sort(key=lambda x: -x[0])
         best[method] = {"params": scored[0][1], "train_score": scored[0][0], "tried": len(combos)}
+
+    for method in ("frame_window", "scene", "whenframe"):
+        pick(method, search_space(method, budget, rng), shared=True)
+    base = best["whenframe"]["params"]
+    if f.bank is not None:
+        pick("whenframe_bank", [{**base, **p} for p in search_space("whenframe_bank", budget, rng)], shared=False)
     best["whenframe_dedup"] = best["whenframe"]
     return best
 
 
-def evaluate_all(f: Frozen, queries: list, text: np.ndarray, tuned: dict) -> dict:
+def cost_curve(f: Frozen, queries: list, text: np.ndarray, p: dict) -> dict:
+    """The primary metric against the share of frames encoded: skipping repeats, or a lower frame rate."""
+    scores = f.emb @ text.T
+    out = {"repeats": [], "rate": []}
+    for th in (0.0, 1.0, 2.0, 3.0, 4.0, 6.0, 8.0, 12.0, 16.0, 24.0):
+        mask = f.without_repeats(th) if th else np.ones(len(f.times), dtype=bool)
+        r = run(f.select(mask), queries, text, "whenframe", p, scores[mask])
+        out["repeats"].append({"threshold": th, "kept": float(mask.mean()), "score": r[PRIMARY[0]][PRIMARY[1]]})
+        print(f"repeats {th}: kept {mask.mean():.3f} -> {out['repeats'][-1]['score']:.4f}", flush=True)
+    for k in (1, 2, 3, 4, 5):
+        mask = f.every(k)
+        r = run(f.select(mask), queries, text, "whenframe", p, scores[mask])
+        out["rate"].append({"every": k, "kept": float(mask.mean()), "score": r[PRIMARY[0]][PRIMARY[1]]})
+        print(f"every {k}: kept {mask.mean():.3f} -> {out['rate'][-1]['score']:.4f}", flush=True)
+    return out
+
+
+def evaluate_all(f: Frozen, queries: list, text: np.ndarray, tuned: dict, methods: list[str]) -> dict:
     out = {}
-    for method in METHODS:
+    for method in methods:
         frozen = f.only_kept() if method == "whenframe_dedup" else f
-        out[method] = run(frozen, queries, text, method, tuned[method]["params"])
+        p = tuned[method]["params"]
+        out[method] = run(frozen, queries, text, method, p)
+        out[method]["query_ms"] = latency(frozen, text, method, p)
+        print(f"{method}: {out[method]['corpus']}", flush=True)
     return out

@@ -72,6 +72,46 @@ A 4-vCPU cloud container without a GPU, ONNX Runtime on the CPU, 4 threads.
    1 point on the primary metric against `whenframe`.
 3. Indexing costs at most 10 minutes of CPU time per hour of video.
 
+## Changes made before the first test run
+
+Added after the protocol above was first committed, and before any result on
+training or test videos was computed.
+
+1. **CPU time.** The first version of the script timed indexing with a wall
+   clock. Criterion 3 speaks of CPU time, so the script now records the CPU
+   time of the process (encoding) and of its ffmpeg children (decoding), and
+   keeps the wall-clock time as well. Both are reported; criterion 3 is judged
+   on CPU time, for the plain `whenframe` index (every frame encoded).
+2. **A fifth method, `whenframe_bank`.** In cross-modal retrieval some gallery
+   items match almost any text and crowd the top of every ranking ("hubs").
+   Query-bank normalisation ([Bogolin et al., 2022](https://arxiv.org/abs/2112.12777))
+   corrects for this with a bank of unrelated queries. Here, each frame gets
+   an offset when it is indexed: the soft maximum of its scores against a bank
+   of 4,096 descriptions of training videos that are not in the tuning set,
+   (1/beta) log mean_b exp(beta cos(b, frame)). A query's score for that frame
+   becomes cos(query, frame) - lambda x offset, and the rest is `whenframe`.
+   Its two parameters are tuned on the tuning videos on top of the tuned
+   `whenframe` parameters (beta in {10, 20, 50, 100}, lambda in {0.25, 0.5, 1};
+   12 combinations). The same bank serves tuning and test.
+   **Criterion 4:** `whenframe_bank` beats `whenframe` by at least 1 point on the
+   primary metric on the test split.
+3. **Cost curve.** The primary metric against the share of frames encoded,
+   when repeated frames are skipped (thresholds 0 to 24, `max_gap` 4) and when
+   the frame rate is lowered instead (every k-th frame, k = 1 to 5), with the
+   tuned `whenframe` parameters, on tuning and test videos. Reported as a
+   figure; nothing is chosen from it, and the threshold of `whenframe_dedup`
+   stays at 4.
+4. **Latency** is measured one query at a time, as in the tool (scoring every
+   frame, shortlisting, placing and ranking moments), on 200 queries. Embedding
+   the query text is timed separately, on 50 queries.
+5. **Tuning set.** The first 500 videos, in name order, of the 839 extracted
+   from the first part of the DiDeMo training archive. The list is saved
+   (`results/didemo_train_videos.txt`) so the same set can be used again.
+6. **Smoke run.** Before these changes, the pipeline was run end to end on 11
+   test videos to check that it worked. It showed that the repeat filter kept
+   about 86 % of frames at the default threshold, which is why the cost curve
+   was added. No parameter or criterion was changed because of it.
+
 ## Changes after the first test run
 
 None yet.
