@@ -8,6 +8,7 @@ import sys
 import time
 from pathlib import Path
 
+from .encoder import MODES
 from .library import Library, Settings
 from .search import SearchConfig, Searcher
 from .video import find_videos
@@ -26,6 +27,8 @@ def clock(t: float) -> str:
 
 def cmd_index(args) -> int:
     overrides = {k: v for k, v in (("fps", args.fps), ("dedup", args.dedup)) if v is not None}
+    if args.mode:
+        overrides["model"] = MODES[args.mode]
     lib = Library(args.library, Settings(**overrides) if overrides else None)
     paths = find_videos(args.paths)
     todo = [p for p in paths if lib.needs_indexing(p.resolve())]
@@ -78,6 +81,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("paths", nargs="+")
     p.add_argument("--fps", type=float, default=None, help="frames looked at per second (default 1)")
     p.add_argument("--dedup", type=float, default=None, help="skip frames that barely changed (default 4, 0 = off)")
+    p.add_argument("--mode", choices=list(MODES), default=None,
+                   help="standard (default); economy: about 2.3 times less CPU, a little less accurate; "
+                        "precision: both models, more accurate, about 40 %% slower. Fixed for a library.")  # fmt: skip
     p.set_defaults(fn=cmd_index)
     p = sub.add_parser("search", help="find moments matching a description")
     p.add_argument("query", nargs="+")

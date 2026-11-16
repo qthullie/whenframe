@@ -21,6 +21,9 @@ class ToyEncoder:
     size = 32
     dim = 3
 
+    def __init__(self, size=32):
+        self.size = size
+
     def encode_images(self, frames):
         x = frames.reshape(len(frames), -1, 3).mean(axis=1) - 100.0
         return x / np.linalg.norm(x, axis=1, keepdims=True)
@@ -93,17 +96,32 @@ def test_the_query_bank_marks_down_frames_that_match_everything(videos, tmp_path
     for name in ("a", "b", "c"):
         lib.add(videos / f"{name}.mp4")
     bank = ToyEncoder().encode_texts(["grey"] * 4)  # descriptions of a grey scene: grey frames are hubs
-    plain = Searcher(lib, SearchConfig(bank=0.0), bank=bank)
-    corrected = Searcher(lib, SearchConfig(bank=1.0, beta=10.0), bank=bank)
-    assert plain.offsets() is None
-    off = corrected.offsets()
+    plain = Searcher(lib, SearchConfig(bank=0.0), banks={"toy": bank})
+    corrected = Searcher(lib, SearchConfig(bank=1.0, beta=10.0), banks={"toy": bank})
+    assert plain.offsets("toy") is None
+    off = corrected.offsets("toy")
     _, _, times = lib.snapshot()
     assert len(off) == len(times)
     a = lib.videos()[0]
     t = times[a.start : a.start + a.count]
     grey, red = off[a.start + np.flatnonzero(t == 0)[0]], off[a.start + np.flatnonzero(t == 6)[0]]
     assert grey > red  # a.mp4 is grey, then red from 6 s
-    assert np.array_equal(lib.offsets(bank, 10.0), off)  # kept on disk, not recomputed
+    assert np.array_equal(lib.offsets("toy", bank, 10.0), off)  # kept on disk, not recomputed
+
+
+def test_two_models_index_the_same_frames_and_are_searched_together(videos, tmp_path):
+    lib = Library(tmp_path / "lib", Settings(model="toy+toy2"),
+                  encoders={"toy": ToyEncoder(32), "toy2": ToyEncoder(48)})  # fmt: skip
+    for name in ("a", "b", "c"):
+        lib.add(videos / f"{name}.mp4")
+    _, embs, times = lib.snapshot()
+    assert set(embs) == {"toy", "toy2"} and len(embs["toy"]) == len(embs["toy2"]) == len(times)
+    hit = Searcher(lib, SearchConfig(window=4.0)).search("blue", k=1)[0]
+    assert hit.path.endswith("c.mp4") and hit.start >= 3.0
+    lib.remove(videos / "a.mp4")
+    lib.compact()
+    _, embs, times = lib.snapshot()
+    assert len(embs["toy"]) == len(embs["toy2"]) == len(times) == sum(v.count for v in lib.videos())
 
 
 def test_unchanged_videos_are_not_indexed_twice_and_compaction_keeps_results(videos, tmp_path):
