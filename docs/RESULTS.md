@@ -1,0 +1,210 @@
+# Results
+
+DiDeMo test split, under the protocol in [PROTOCOL.md](PROTOCOL.md). 979 of the
+1,004 test videos could be downloaded, with 3,902 of the 4,021 descriptions;
+the first 30 seconds of each video are searched, as the annotators saw them.
+Every parameter was chosen on 500 training videos (1,957 descriptions), and
+the test split was evaluated once, after changes 1 to 10 of the protocol had
+been committed.
+
+The tables between `<!-- table -->` markers are written by `scripts/tables.py`
+from `results/didemo_test.json`; CI fails if they differ from that file.
+
+## Criteria
+
+<!-- table didemo-criteria -->
+| criterion (fixed in advance) | measured on test | met |
+|---|---|---|
+| 1. adaptive spans beat both baselines by at least 2 points | -1.8 points | no |
+| 2. skipping repeats encodes at most 70 % of frames and loses at most 1 point | 91 % of frames, +0.2 points | no |
+| 3. indexing takes at most 10 min of CPU time per hour of video | 24.9 min | no |
+| 4. the query bank adds at least 1 point to adaptive spans | +1.6 points | yes |
+| 5. the query bank adds at least 1 point to fixed windows | +2.2 points | yes |
+<!-- /table -->
+
+Three of the five criteria fixed in advance are not met.
+
+- **1.** Adaptive spans, the moment-placing method whenframe was first built
+  around, trail fixed windows at IoU >= 0.5. The next section shows why this
+  says more about DiDeMo's moments than about spans.
+- **2.** At its default threshold the repeat filter keeps 91 % of DiDeMo's
+  frames, far from the 70 % hoped for. It costs nothing in accuracy.
+- **3.** Indexing takes 24.9 minutes of CPU time per hour of video, two and a
+  half times the target. On this 4-vCPU machine that is 7.4 minutes of waiting
+  per hour of video.
+- **4 and 5.** The query bank adds 1.6 points to adaptive spans and 2.2 points
+  to fixed windows. The default search is fixed windows with the query bank.
+
+With 3,902 descriptions, a recall near 27 % has a standard error of about
+0.7 points, so differences of about one point between methods are within noise.
+
+## Finding the moment in the whole library
+
+Every description is searched against all the test videos at once. R@k: one of
+the first k moments returned is in the right video and overlaps the annotated
+moment with IoU >= 0.5 (or 0.7 where noted).
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="figures/results-dark.png">
+    <img src="figures/results.png" alt="Corpus R@5 at IoU 0.5 for each method on DiDeMo test" width="800">
+  </picture>
+</p>
+
+<!-- table didemo-corpus -->
+| method | R@1 | R@5 | R@10 | R@100 | R@1 (0.7) | R@5 (0.7) | right video in top 5 |
+|---|---|---|---|---|---|---|---|
+| shots (scene detection) | 1.3 | 2.3 | 2.8 | 4.6 | 0.4 | 0.5 | 30.3 |
+| fixed windows | 11.7 | 25.0 | 31.7 | 52.9 | 2.9 | 5.0 | 42.3 |
+| adaptive spans | 11.3 | 23.2 | 30.1 | 50.5 | 4.5 | 8.4 | 42.3 |
+| adaptive spans + query bank | 12.2 | 24.8 | 31.3 | 51.8 | 4.8 | 9.4 | 45.8 |
+| **fixed windows + query bank** (default) | 13.1 | 27.2 | 34.0 | 54.8 | 2.9 | 5.7 | 46.4 |
+| default search, repeats skipped | 13.2 | 27.3 | 34.2 | 54.9 | 2.9 | 5.8 | 46.4 |
+<!-- /table -->
+
+**Frames, not shots.** 87 % of DiDeMo's videos have no cut in their first 30
+seconds (measured on the tuning videos), so a shot is usually the whole clip,
+and a whole clip almost never overlaps a 5-second moment with IoU >= 0.5.
+Scoring every frame finds the right moment twelve times as often as scoring one
+keyframe per shot. It also finds the right video more often: in the first five
+for 46.4 % of descriptions, against 30.3 %.
+
+**The query bank.** It adds about two points whatever places the moments, and
+it does so by ranking the right video higher (in the first five: 42.3 % without
+the bank, 46.4 % with it). The frames it marks down are the ones that match
+almost any description, as in cross-modal retrieval.
+
+**Fixed windows or adaptive spans.** 77 % of the reference moments are one
+5-second segment. A 10-second window that contains such a segment has an IoU
+of exactly 0.5: enough for the primary metric, never enough for 0.7. The
+primary metric therefore rewards 10-second windows on this dataset, and the
+tuning found them. At IoU >= 0.7 the order flips: adaptive spans find the
+right moment in the first five 8.4 % of the time (9.4 % with the bank), fixed
+windows 5.0 % (5.7 %). Spans are the more precise of the two when they are
+right; the tool offers them as `SearchConfig(moments="spans")`.
+
+## Placing the moment when the video is given
+
+<!-- table didemo-single -->
+| method | R1 IoU>=0.5 | R1 IoU>=0.7 | mean IoU |
+|---|---|---|---|
+| shots (scene detection) | 5.3 | 0.9 | 21.4 |
+| fixed windows | 46.8 | 9.5 | 33.5 |
+| adaptive spans | 44.4 | 15.8 | 35.0 |
+| adaptive spans + query bank | 44.6 | 16.3 | 35.5 |
+| **fixed windows + query bank** (default) | 46.7 | 9.7 | 33.8 |
+| default search, repeats skipped | 46.9 | 9.8 | 33.9 |
+<!-- /table -->
+
+The same pattern inside one video: fixed windows are right more often at
+IoU >= 0.5, adaptive spans at IoU >= 0.7. Shots are almost never right.
+
+## Cost
+
+<!-- table didemo-cost -->
+| per hour of video | CPU time (min) | wall clock, 4 vCPU (min) |
+|---|---|---|
+| decoding (ffmpeg, 1 frame per second) | 2.3 | 1.1 |
+| encoding every frame | 22.6 | 6.3 |
+| encoding, repeats skipped (91 % of frames, estimated) | 20.6 | 5.7 |
+| scene detection (needed by the scene baseline only) | 2.2 | 1.1 |
+<!-- /table -->
+
+<!-- table didemo-search -->
+|  | value |
+|---|---|
+| videos / queries / hours of video | 979 / 3902 / 7.90 |
+| index size, every frame (MB per hour of video) | 5.5 |
+| embedding the query (ms) | 45 |
+| search, shots (scene detection) (ms per query) | 2.2 |
+| search, fixed windows (ms per query) | 4.3 |
+| search, adaptive spans (ms per query) | 5.5 |
+| search, adaptive spans + query bank (ms per query) | 5.4 |
+| search, fixed windows + query bank (ms per query) | 5.0 |
+| search, default search, repeats skipped (ms per query) | 4.9 |
+<!-- /table -->
+
+Encoding the frames is 22.6 of the 24.9 CPU minutes per hour of video. On this
+machine one frame takes about 0.38 s of CPU time with ONNX Runtime; other
+processors were not measured. A search embeds the query (45 ms) and scores the
+whole library (about 5 ms for these 7.9 hours of video); the second part grows
+with the size of the library.
+
+## Encoding fewer frames
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="figures/cost-dark.png">
+    <img src="figures/cost.png" alt="Corpus R@5 against the share of frames encoded, when repeats are skipped and when the frame rate is lowered" width="800">
+  </picture>
+</p>
+
+<!-- table didemo-curve -->
+| frames encoded | share | R@5 IoU>=0.5 |
+|---|---|---|
+| skip repeats, threshold 0 | 100 % | 27.2 |
+| skip repeats, threshold 1 | 98 % | 27.2 |
+| skip repeats, threshold 2 | 96 % | 27.2 |
+| skip repeats, threshold 3 | 93 % | 27.2 |
+| skip repeats, threshold 4 | 91 % | 27.3 |
+| skip repeats, threshold 6 | 86 % | 27.2 |
+| skip repeats, threshold 8 | 81 % | 27.2 |
+| skip repeats, threshold 12 | 71 % | 26.3 |
+| skip repeats, threshold 16 | 63 % | 26.5 |
+| skip repeats, threshold 24 | 49 % | 24.6 |
+| every frame | 100 % | 27.2 |
+| one frame in 2 | 50 % | 24.9 |
+| one frame in 3 | 34 % | 23.4 |
+| one frame in 4 | 27 % | 23.6 |
+| one frame in 5 | 20 % | 21.1 |
+<!-- /table -->
+
+Skipping repeated frames saves up to a fifth of the encoding at no cost
+(threshold 8: 81 % of the frames, same recall). Below about 70 % of the frames
+it loses about as much as lowering the frame rate: at half the frames, 24.6 %
+against 24.9 %. Keeping one frame in 3, 4 or 5 interacts with DiDeMo's
+5-second segments (one frame in 5 falls on the start of every segment), which
+makes that end of the curve uneven; it is shown as measured.
+
+## Two examples
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="figures/example-dark.png">
+    <img src="figures/example.png" alt="Frame scores over time for two DiDeMo test descriptions, with the annotated moment and the moment whenframe returned" width="800">
+  </picture>
+</p>
+
+Chosen by rule, not by hand: among the test descriptions of at least eight
+words, in file order, the first whose moment the default search ranks first
+among all videos with IoU >= 0.7, and the first whose video is not among its
+first ten results.
+In the second case the moment is placed well inside its own video, but its best
+frame only reaches 30 %, and ten moments of other videos score higher.
+
+## Tuning runs
+
+Primary metric on the 500 tuning videos, for the three tuning runs described in
+the protocol (changes 8 to 10). The test split played no part in them.
+
+<!-- table didemo-tuning -->
+| method | first run | second run | third run |
+|---|---|---|---|
+| shots (scene detection) | 3.7 | 3.7 | 3.7 |
+| fixed windows | 24.5 | 29.0 | 29.0 |
+| adaptive spans | 22.3 | 29.0 | 29.0 |
+| adaptive spans + query bank | 23.2 | 30.4 | 30.4 |
+| fixed windows + query bank |  |  | 31.5 |
+<!-- /table -->
+
+## What these numbers do not say
+
+- DiDeMo videos are short, personal and mostly one shot, and only their first
+  30 seconds were searched. Longer videos hold more frames that can outscore
+  the right one, and their moments are not 5-second segments; neither was
+  measured.
+- The query bank comes from DiDeMo training descriptions, written like the test
+  descriptions. On searches written differently the gain may be smaller.
+- The 10-second windows fit DiDeMo's 5-second segments. They are a sound
+  default for short clips, not a finding about moments in general.
+- One machine, one run, one dataset. The descriptions are in English.

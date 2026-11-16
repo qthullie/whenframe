@@ -1,8 +1,8 @@
-"""Write docs/RESULTS.md tables from results/*.json, so no number is copied by hand.
+"""Write the numbers of README.md and docs/RESULTS.md from results/*.json, so none is copied by hand.
 
-Tables live between <!-- table NAME --> and <!-- /table --> markers in
-docs/RESULTS.md; everything outside the markers is left alone.
-`--check` exits with an error when the file is out of date (used in CI).
+Tables live between <!-- table NAME --> and <!-- /table --> markers; everything
+outside the markers is left alone. `--check` exits with an error when a file
+is out of date (used in CI).
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 RESULTS = ROOT / "results"
-DOC = ROOT / "docs" / "RESULTS.md"
+DOCS = [ROOT / "README.md", ROOT / "docs" / "RESULTS.md"]
 LABEL = {
     "scene": "shots (scene detection)",
     "frame_window": "fixed windows",
@@ -109,7 +109,16 @@ def didemo_tables(r: dict) -> dict[str, str]:
             for p in curve["repeats"]]  # fmt: skip
     rows += [[f"one frame in {p['every']}" if p["every"] > 1 else "every frame", f"{100 * p['kept']:.0f} %",
               pct(p["score"])] for p in curve["rate"]]  # fmt: skip
+    d, best_baseline = r["default"], max(("scene", "frame_window"), key=lambda m: r[m]["corpus"][PRIMARY])
+    headline = (
+        f"Searching {c['videos']:,} personal videos at once (DiDeMo test) for {r['queries']:,} descriptions "
+        f"written by people, whenframe puts the right moment among its first five results "
+        f"**{pct(r[d]['corpus'][PRIMARY])} %** of the time. Indexing one keyframe per shot, as some home video tools "
+        f"do, finds it {pct(r['scene']['corpus'][PRIMARY])} % of the time, and the best of the two baselines "
+        f"({LABEL[best_baseline]}) {pct(r[best_baseline]['corpus'][PRIMARY])} %."
+    )
     return {
+        "readme-headline": headline,
         "didemo-criteria": table(["criterion (fixed in advance)", "measured on test", "met"], criteria(r)),
         "didemo-corpus": corpus,
         "didemo-single": single,
@@ -119,25 +128,44 @@ def didemo_tables(r: dict) -> dict[str, str]:
     }
 
 
+def tuning_table() -> str | None:
+    runs = [("first", "didemo_tuned_first_run.json"), ("second", "didemo_tuned_second_run.json"),
+            ("third", "didemo_tuned.json")]  # fmt: skip
+    found = [(name, json.loads((RESULTS / f).read_text())) for name, f in runs if (RESULTS / f).exists()]
+    if not found:
+        return None
+    methods = [m for m in LABEL if m != "whenframe_dedup" and any(m in t for _, t in found)]
+    rows = [[LABEL[m], *(pct(t[m]["train_score"]) if m in t else "" for _, t in found)] for m in methods]
+    return table(["method", *(f"{name} run" for name, _ in found)], rows)
+
+
 def main() -> int:
     tables = {}
     f = RESULTS / "didemo_test.json"
     if f.exists():
         tables.update(didemo_tables(json.loads(f.read_text())))
-    text = DOC.read_text()
+    tuning = tuning_table()
+    if tuning:
+        tables["didemo-tuning"] = tuning
 
     def fill(m):
         name = m.group(1)
         return f"<!-- table {name} -->\n{tables[name]}\n<!-- /table -->" if name in tables else m.group(0)
 
-    new = re.sub(r"<!-- table ([\w-]+) -->.*?<!-- /table -->", fill, text, flags=re.S)
-    if "--check" in sys.argv:
-        if new != text:
-            print("docs/RESULTS.md is out of date: run python scripts/tables.py")
-            return 1
-        return 0
-    DOC.write_text(new)
-    print(f"updated {DOC.relative_to(ROOT)} ({len(tables)} tables)")
+    stale = []
+    for doc in DOCS:
+        text = doc.read_text()
+        new = re.sub(r"<!-- table ([\w-]+) -->.*?<!-- /table -->", fill, text, flags=re.S)
+        if new == text:
+            continue
+        if "--check" in sys.argv:
+            stale.append(doc.relative_to(ROOT))
+        else:
+            doc.write_text(new)
+            print(f"updated {doc.relative_to(ROOT)}")
+    if stale:
+        print(f"out of date: {', '.join(map(str, stale))}; run python scripts/tables.py")
+        return 1
     return 0
 
 

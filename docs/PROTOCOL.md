@@ -182,4 +182,4 @@ training or test videos was computed.
 
 ## Changes after the first test run
 
-None yet.
+None.
