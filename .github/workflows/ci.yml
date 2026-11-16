@@ -22,3 +22,6 @@ jobs:
       # The tests use generated videos and a toy encoder: no model download, no network.
       - name: Tests
         run: python -m pytest -q
+      # every number in README.md and docs/RESULTS.md comes from results/*.json
+      - name: Result tables
+        run: python scripts/tables.py --check

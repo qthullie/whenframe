@@ -1,12 +1,13 @@
 PY ?= python3
 DIDEMO ?= data/didemo
 
-.PHONY: install check lint test didemo-extract didemo-tune didemo-eval tables
+.PHONY: install check lint test didemo-extract didemo-tune didemo-eval tables figures
 
 install:
 	$(PY) -m pip install -e ".[dev]"
 
 check: lint test
+	$(PY) scripts/tables.py --check
 
 lint:
 	$(PY) -m ruff check .
@@ -31,3 +32,6 @@ didemo-eval:
 
 tables:
 	$(PY) scripts/tables.py
+
+figures:
+	$(PY) scripts/figures.py --annotations $(DIDEMO)/didemo_test.json

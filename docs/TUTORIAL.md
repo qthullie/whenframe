@@ -23,7 +23,8 @@ barely differ from the previous one are skipped. Run the same command again
 later: only new or modified videos are indexed.
 
 The index lives in `~/.local/share/whenframe/library` (or `$WHENFRAME_LIBRARY`,
-or `--library DIR`). It takes about 5 MB per hour of video.
+or `--library DIR`). It takes about 5 MB per hour of video, and a search holds
+it in memory as float32, about 11 MB per hour of video.
 
 ```bash
 whenframe stats      # what is indexed
@@ -37,14 +38,15 @@ whenframe search "a dog jumps into the pool"
 ```
 
 ```
- 83%     1:12 - 1:19      /home/me/Videos/2024/summer/IMG_4120.MOV
- 71%     0:03 - 0:09      /home/me/Videos/2023/garden.mp4
+ 83%     1:12 - 1:22      /home/me/Videos/2024/summer/IMG_4120.MOV
+ 71%     0:03 - 0:13      /home/me/Videos/2023/garden.mp4
  ...
 ```
 
 Each line is a moment: how sure the model is that its best frame matches the
-description, where the moment starts and ends, and the file. The model was
-trained on text in many languages, so French or Spanish descriptions work too.
+description, where the moment starts and ends, and the file. About a tenth of
+the model's training text was not English, so descriptions in French or Spanish
+can work; they were not measured here, and English is the safer bet.
 
 ## From Python
 
@@ -57,8 +59,10 @@ for hit in Searcher(lib).search("sunset over the sea", k=5):
     print(hit.path, hit.start, hit.end, hit.confidence)
 ```
 
-`SearchConfig` exposes the few settings of the search (smoothing, where a
-moment stops, how many moments per video).
+`SearchConfig` holds the few settings of the search: fixed windows or spans
+grown around peaks, the window length, how many moments per video, and the
+weight of the query-bank correction (0 turns it off). The defaults are the ones
+chosen on DiDeMo training videos.
 
 ## Reproduce the benchmark
 

@@ -52,12 +52,21 @@ training-free, CLIP frame similarities, spans grown from peaks of the similarity
 signal, a small language model to decompose the query, under a second per query
 on hour-long videos. It still searches one video at a time.
 
-**Encoders.** [SigLIP 2](https://huggingface.co/google/siglip2-base-patch16-224)
-scores each image-text pair with its own sigmoid, so scores are comparable
-across videos, and it was trained on multilingual data.
+**Encoders.** [SigLIP 2](https://arxiv.org/abs/2502.14786) scores each
+image-text pair with its own sigmoid, so scores are comparable across videos;
+a tenth of its training pairs come from non-English pages.
 [Perception Encoder](https://arxiv.org/abs/2504.13181) (Meta, 2025) reports
 better zero-shot video results than InternVideo2 on most tasks with a simple
 frame-level encoder.
+
+**Hubs.** In a shared text-image space, a few gallery items are close to
+almost every query and crowd the top of the rankings. Query-bank normalisation
+([Bogolin et al., CVPR 2022](https://arxiv.org/abs/2112.12777)) rescales each
+gallery item's scores by how it scores against a fixed bank of unrelated
+queries, without retraining and without seeing the other test queries. The dual
+softmax of [Cheng et al. (2021)](https://arxiv.org/abs/2109.04290) normalises
+over the test queries themselves, which a tool answering one query at a time
+cannot do.
 
 **Video search systems.** [This 2025 system](https://arxiv.org/abs/2504.08384)
 combines a coarse and a fine model, keeps only representative keyframes to save
@@ -74,14 +83,21 @@ measured accuracy).
 
 ## What whenframe does about it
 
-- Searches the whole library at once and ranks moments across videos, using
+- Searches the whole library at once and ranks moments across videos with
   SigLIP 2's calibrated scores.
-- Places moments without a fixed window, from the shape of each video's
-  similarity curve.
+- Marks down frames that match almost any description, with query-bank
+  normalisation applied to video frames. The correction is computed once per
+  frame, when the library is first searched, so it adds nothing to a search.
+  On DiDeMo it adds about two points of recall, by ranking the right video
+  higher ([RESULTS.md](RESULTS.md)).
+- Places moments as fixed windows around the best frames of each video. Spans
+  grown from the score curve, as in Point to Span, were measured as well: they
+  are more precise at IoU >= 0.7 and less often right at IoU >= 0.5, on a
+  dataset whose moments are 5-second segments.
 - Skips frames that repeat the previous one before encoding them.
-- Measures all of it on DiDeMo, personal Flickr videos, against simpler
-  methods on the same embeddings, with the protocol fixed in advance
-  ([PROTOCOL.md](PROTOCOL.md)).
+- Measures all of it on DiDeMo, personal Flickr videos, with the protocol fixed
+  in advance ([PROTOCOL.md](PROTOCOL.md)), against a shot-based baseline in the
+  spirit of current home tools, with the CPU cost of indexing and searching.
 
 ## What is not claimed
 

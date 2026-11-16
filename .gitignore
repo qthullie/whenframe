@@ -6,3 +6,5 @@ __pycache__/
 results/cache/
 *.mp4
 *.onnx
+/build/
+/dist/
