@@ -11,6 +11,9 @@ video's background (its median) and the peak:
 
 so a sharp peak gives a short moment and a plateau a long one, without a fixed
 window. Further moments come from the next peaks once the first is masked out.
+
+`windows` is the simpler alternative: moments of a fixed length around the
+best frames. On DiDeMo it places moments at least as well (docs/RESULTS.md).
 """
 
 from __future__ import annotations
@@ -73,4 +76,31 @@ def spans(grid: np.ndarray, curve: np.ndarray, step: float, alpha: float = 0.6, 
             start, end = max(0.0, start - pad), min(float(grid[-1]) + step, end + pad)
         out.append(Span(start, end, peak, float(curve[lo : hi + 1].mean()), floor))
         free[lo : hi + 1] = False
+    return out
+
+
+def windows(times: np.ndarray, values: np.ndarray, duration: float, length: float = 10.0, count: int = 3,
+            frame_length: float = 1.0) -> list[Span]:  # fmt: skip
+    """Up to `count` moments of a fixed `length` around the best frames.
+
+    Each moment is centred on its frame (which stands for `frame_length`
+    seconds), kept inside the video, and its frame is at least `length` away
+    from the frames of the moments before it.
+    """
+    if len(values) == 0:
+        return []
+    floor = float(np.median(values))
+    left = values.astype(np.float64)
+    out = []
+    for _ in range(count):
+        i = int(np.argmax(left))
+        if left[i] == -np.inf:
+            break
+        t = float(times[i])
+        start = min(max(0.0, t + frame_length / 2 - length / 2), max(0.0, duration - length))
+        end = min(duration, start + length)
+        inside = (times >= start) & (times < end)
+        mean = float(values[inside].mean()) if inside.any() else float(values[i])
+        out.append(Span(start, end, float(values[i]), mean, floor))
+        left[np.abs(times - t) < length] = -np.inf
     return out

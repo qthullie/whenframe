@@ -24,7 +24,8 @@ from dataclasses import dataclass, field, replace
 
 import numpy as np
 
-from whenframe.moments import on_grid, smooth, spans
+from whenframe.bank import offsets as bank_offsets
+from whenframe.moments import on_grid, smooth, spans, windows
 from whenframe.video import RepeatFilter
 
 CORPUS_KS = [1, 5, 10, 100]
@@ -81,12 +82,7 @@ class Frozen:
         from a query's score is the inverted softmax of query-bank normalisation.
         """
         if beta not in self._offsets:
-            out = np.empty(len(self.emb), dtype=np.float32)
-            for i in range(0, len(self.emb), 4096):
-                z = beta * (self.emb[i : i + 4096] @ self.bank.T)
-                top = z.max(axis=1)
-                out[i : i + 4096] = (top + np.log(np.exp(z - top[:, None]).mean(axis=1))) / beta
-            self._offsets[beta] = out
+            self._offsets[beta] = bank_offsets(self.emb, self.bank, beta)
         return self._offsets[beta]
 
 
@@ -100,18 +96,9 @@ def iou(a: tuple[float, float], b: tuple[float, float]) -> float:
 def frame_window(f: Frozen, scores: np.ndarray, v: int, p: dict) -> list[tuple[float, float, float]]:
     """Fixed windows around the best frame, then around the best frame at least a window away, and so on."""
     s, c = f.starts[v], f.counts[v]
-    times, left = f.times[s : s + c], scores[s : s + c].astype(np.float64)
-    w, d = p["window"], float(f.durations[v])
-    out = []
-    for _ in range(p.get("per_video", 1)):
-        i = int(np.argmax(left))
-        if left[i] == -np.inf:
-            break
-        t = float(times[i])
-        start = min(max(0.0, t + 0.5 - w / 2), max(0.0, d - w))
-        out.append((start, min(d, start + w), float(scores[s + i])))
-        left[np.abs(times - t) < w] = -np.inf
-    return out
+    found = windows(f.times[s : s + c].astype(np.float64), scores[s : s + c].astype(np.float64),
+                    float(f.durations[v]), p["window"], p.get("per_video", 1))  # fmt: skip
+    return [(x.start, x.end, x.peak) for x in found]
 
 
 def scene(f: Frozen, scores: np.ndarray, v: int, p: dict) -> list[tuple[float, float, float]]:

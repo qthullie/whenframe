@@ -1,6 +1,6 @@
 import numpy as np
 
-from whenframe.moments import on_grid, smooth, spans
+from whenframe.moments import on_grid, smooth, spans, windows
 
 
 def test_on_grid_holds_each_value_until_the_next_sample():
@@ -43,3 +43,12 @@ def test_short_moments_are_widened_to_the_minimum_length():
     curve[8] = 1.0
     (s,) = spans(grid, curve, step=0.5, alpha=0.9, count=1, min_length=2.0)
     assert s.end - s.start == 2.0 and s.start <= 4.0 < s.end
+
+
+def test_windows_are_centred_on_the_best_frames_and_do_not_repeat_them():
+    times = np.arange(30.0)
+    values = np.zeros(30)
+    values[[4, 6, 20]] = [1.0, 0.9, 0.8]
+    first, second = windows(times, values, duration=30.0, length=10.0, count=2)
+    assert (first.start, first.end, first.peak) == (0.0, 10.0, 1.0)  # 4.5 +- 5, kept inside the video
+    assert (second.start, second.end, second.peak) == (15.5, 25.5, 0.8)  # 6 is too close to 4

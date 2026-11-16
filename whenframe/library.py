@@ -5,6 +5,7 @@ Layout of a library folder:
     library.sqlite   one row per video (path, size, mtime, duration, where its frames are)
     frames.f16       all frame embeddings, float16, appended in indexing order
     times.f32        the instant (seconds) each embedding stands for
+    offsets.f32      each frame's query-bank offset (see bank.py), filled in at the first search
     config.json      the model and sampling settings the library was built with
 
 Embeddings are only ever appended. A re-indexed or deleted video leaves dead
@@ -22,6 +23,7 @@ from pathlib import Path
 
 import numpy as np
 
+from . import bank as qbank
 from .encoder import DEFAULT_MODEL, Encoder
 from .video import RepeatFilter, VideoError, iter_frames, probe, thumbnails
 
@@ -156,6 +158,8 @@ class Library:
             row += v.count
         (self.folder / "frames.f16").write_bytes(np.concatenate(new_emb).tobytes() if new_emb else b"")
         (self.folder / "times.f32").write_bytes(np.concatenate(new_times).tobytes() if new_times else b"")
+        for name in ("offsets.f32", "offsets.json"):  # rows moved: recomputed at the next search
+            (self.folder / name).unlink(missing_ok=True)
         self.db.executemany("update videos set start = ? where id = ?", moves)
         self.db.commit()
         self._cache = None
@@ -180,6 +184,22 @@ class Library:
             emb, times = self._arrays()
             self._cache = (self.videos(), np.asarray(emb, dtype=np.float32), times)
         return self._cache
+
+    def offsets(self, bank: np.ndarray, beta: float) -> np.ndarray:
+        """The query-bank offset of every row, computed once for rows that do not have one yet."""
+        emb, _ = self._arrays()
+        path, meta = self.folder / "offsets.f32", self.folder / "offsets.json"
+        key = {"bank": qbank.digest(bank), "beta": beta}
+        done = np.zeros(0, dtype=np.float32)
+        if path.exists() and meta.exists() and json.loads(meta.read_text()) == key:
+            done = np.fromfile(path, dtype=np.float32)
+        if len(done) > len(emb):
+            done = done[:0]
+        if len(done) < len(emb):
+            done = np.concatenate([done, qbank.offsets(emb[len(done) :], bank, beta)])
+            done.tofile(path)
+            meta.write_text(json.dumps(key))
+        return done
 
     def stats(self) -> dict:
         videos = self.videos()

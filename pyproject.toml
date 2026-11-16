@@ -20,6 +20,9 @@ whenframe = "whenframe.cli:main"
 [tool.setuptools.packages.find]
 include = ["whenframe*"]
 
+[tool.setuptools.package-data]
+"whenframe.data" = ["*.npy", "NOTICE"]
+
 [tool.ruff]
 line-length = 120
 target-version = "py310"

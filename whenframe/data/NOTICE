@@ -1,0 +1,14 @@
+bank-siglip2-base.npy
+
+SigLIP 2 base (google/siglip2-base-patch16-224) text embeddings, rounded to
+float16, of 4,096 descriptions from the training split of DiDeMo:
+
+    Lisa Anne Hendricks, Oliver Wang, Eli Shechtman, Josef Sivic, Trevor Darrell
+    and Bryan Russell. Localizing Moments in Video with Natural Language.
+    ICCV 2017. https://github.com/LisaAnne/LocalizingMoments
+    (released under the BSD 2-Clause license)
+
+The descriptions were drawn at random (seed 0) among those of training videos
+outside the benchmark's tuning set; `bank()` in scripts/didemo.py rebuilds
+them from the annotations. The file holds embeddings only: no description
+text and no video.
