@@ -170,6 +170,16 @@ training or test videos was computed.
    The grids and random draws of the second run are unchanged, so the third
    run repeats its results and adds `frame_window_bank`.
 
+10. **The third tuning run** (`results/didemo_tuned.json`) repeated the second
+    one exactly and chose `frame_window_bank` as the default search: up to
+    three 10-second windows per video and the query bank with beta 50 and
+    lambda 1, 31.5 % on the tuning videos (`whenframe_bank` 30.4 %,
+    `frame_window` 29.0 %, `whenframe` 29.0 %, `scene` 3.7 %). The defaults of
+    the tool's `SearchConfig` are set to it. Correction to change 9: the 28.3 %
+    given there for `whenframe` was read before the second run had finished;
+    the run's final figure is 29.0 % (`results/didemo_tuned_second_run.json`).
+    It does not change the rule of change 8 or its outcome.
+
 ## Changes after the first test run
 
 None yet.

@@ -30,13 +30,13 @@ class SearchConfig:
     moments: str = "windows"  # "windows": a fixed length around the best frames; "spans": grown around peaks
     window: float = 10.0  # seconds, for "windows"
     per_video: int = 3
-    bank: float = 0.5  # weight of the query-bank correction; 0 turns it off
+    bank: float = 1.0  # weight of the query-bank correction; 0 turns it off
     beta: float = 50.0
     shortlist: int = 64  # videos examined in detail
     # for "spans"
     step: float = 0.5  # seconds per grid cell
-    sigma: float = 1.0  # smoothing, in grid cells
-    alpha: float = 0.5  # where a span stops, between the video's floor (0) and the peak (1)
+    sigma: float = 0.0  # smoothing, in grid cells
+    alpha: float = 0.6  # where a span stops, between the video's floor (0) and the peak (1)
     contrast: float = 0.0  # weight of (peak - floor) in the ranking score
     min_length: float = 10.0
 
