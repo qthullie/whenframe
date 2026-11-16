@@ -1,7 +1,7 @@
 """Build the data of the demo site (site/): three Blender films, embedded once, searched in the browser.
 
     python scripts/site.py --films DIR      # Big Buck Bunny, Sintel, Tears of Steel (Blender Foundation, CC BY 3.0)
-    python scripts/site.py --preview        # then the README's animation of the site, docs/figures/site.webp
+    python scripts/site.py --preview        # then the README's animation of the site, docs/figures/site(-dark).webp
 
 Writes site/data/:
     frames.bin       the frame embeddings of the default model, float16, as the tool stores them
@@ -54,7 +54,7 @@ def frames_at_one_fps(path: Path) -> np.ndarray:
     return np.frombuffer(raw, dtype=np.uint8).reshape(-1, h, w, 3)
 
 
-def preview(out: Path) -> None:
+def preview(out: Path, scheme: str) -> None:
     """Serve site/, drive it with scripts/site_preview.mjs (Playwright), and make an animated WebP of it."""
     import functools
     import tempfile
@@ -63,17 +63,22 @@ def preview(out: Path) -> None:
 
     from PIL import Image
 
-    serve = functools.partial(SimpleHTTPRequestHandler, directory=str(ROOT / "site"))
-    serve.log_message = lambda *a: None
-    httpd = ThreadingHTTPServer(("127.0.0.1", 0), serve)
+    class Quiet(SimpleHTTPRequestHandler):
+        def log_message(self, *args) -> None:
+            pass
+
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(Quiet, directory=str(ROOT / "site")))
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     with tempfile.TemporaryDirectory() as tmp:
         try:
             run = subprocess.run(["node", str(ROOT / "scripts" / "site_preview.mjs"), f"http://127.0.0.1:{httpd.server_port}",
-                                  tmp], capture_output=True, text=True, check=True)  # fmt: skip
+                                  tmp, scheme], capture_output=True, text=True, check=True)  # fmt: skip
         finally:
             httpd.shutdown()
+        # captured at twice the size, kept at 1600 pixels wide: sharp at the README's 800
         frames = [Image.open(line).convert("RGB") for line in run.stdout.split()]
+        size = (1600, round(frames[0].height * 1600 / frames[0].width))
+        frames = [f.resize(size, Image.LANCZOS) for f in frames]
         frames[0].save(out, "WEBP", save_all=True, append_images=frames[1:], duration=140, loop=0, quality=60,
                        method=6)  # fmt: skip
     print(f"wrote {out}: {len(frames)} frames, {out.stat().st_size / 1e6:.1f} MB")
@@ -89,7 +94,9 @@ def main() -> None:
     ap.add_argument("--out", default=str(ROOT / "site" / "data"))
     a = ap.parse_args()
     if a.preview:
-        return preview(ROOT / "docs" / "figures" / "site.webp")
+        preview(ROOT / "docs" / "figures" / "site.webp", "light")
+        preview(ROOT / "docs" / "figures" / "site-dark.webp", "dark")
+        return
     if not a.films:
         ap.error("--films is required to build the data")
     out = Path(a.out)

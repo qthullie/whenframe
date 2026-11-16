@@ -1,4 +1,4 @@
-"""The pictures of the README: whenframe serve on three Blender open movies, driven by a browser.
+"""The pictures of the README and the tutorial: whenframe serve on three Blender open movies, driven by a browser.
 
     python scripts/demo.py --films DIR      # Big Buck Bunny, Sintel and Tears of Steel, from download.blender.org
 
@@ -23,7 +23,7 @@ from whenframe import Library  # noqa: E402
 from whenframe.server import App, handler  # noqa: E402
 from whenframe.video import find_videos  # noqa: E402
 
-SEARCHES = ["two people arguing on a bridge", "a girl hugging a baby dragon", "a giant rabbit wakes up and stretches"]
+SEARCHES = ["two people arguing on a bridge", "a girl hugging a baby dragon"]
 
 
 def main() -> None:

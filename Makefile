@@ -1,8 +1,10 @@
 PY ?= python3
 DIDEMO ?= data/didemo
 TRANSLATOR ?= data/opus-mt-en-fr
+FILMS ?= data/films
 
-.PHONY: install check lint test didemo-extract didemo-tune didemo-eval didemo-explore didemo-round2 tables figures
+.PHONY: install check lint test didemo-extract didemo-tune didemo-eval didemo-explore didemo-round2 tables figures \
+	demo site
 
 install:
 	$(PY) -m pip install -e ".[dev]"
@@ -53,3 +55,11 @@ didemo-round2:
 		--train-annotations $(DIDEMO)/didemo_train.json
 	$(PY) scripts/didemo.py evaluate --split test --round 2 --annotations $(DIDEMO)/didemo_test.json \
 		--train-annotations $(DIDEMO)/didemo_train.json
+
+# the Blender films (Big Buck Bunny, Sintel, Tears of Steel) in $(FILMS): the screenshots, then the site's data
+demo:
+	$(PY) scripts/demo.py --films $(FILMS)
+
+site:
+	$(PY) scripts/site.py --films $(FILMS)
+	$(PY) scripts/site.py --preview

@@ -76,6 +76,13 @@ changes that) and loads nothing from the internet. Browsers play mp4 and webm;
 for other formats the page gives the file's folder, to open it in a video
 player.
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="figures/demo-2-dark.webp">
+    <img src="figures/demo-2.webp" alt="whenframe serve on three Blender films: 'a girl hugging a baby dragon' finds three moments of Sintel first" width="800">
+  </picture>
+</p>
+
 ## From Python
 
 ```python

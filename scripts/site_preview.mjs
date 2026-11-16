@@ -1,13 +1,13 @@
-// Frames of the site in use, for the README's animation: node scripts/site_preview.mjs URL OUTDIR
+// Frames of the site in use, for the README's animation: node scripts/site_preview.mjs URL OUTDIR [light|dark]
 import { createRequire } from "node:module";
 import path from "node:path";
 
 const require = createRequire(import.meta.url);
 const { chromium } = require("playwright");
-const [url, out] = process.argv.slice(2);
+const [url, out, scheme = "light"] = process.argv.slice(2);
 
 const browser = await chromium.launch();
-const page = await browser.newPage({ viewport: { width: 1100, height: 760 }, deviceScaleFactor: 1 });
+const page = await browser.newPage({ viewport: { width: 1100, height: 760 }, deviceScaleFactor: 2, colorScheme: scheme });
 let n = 0;
 const snap = async (repeat = 1) => {
   const file = path.join(out, `frame-${String(n).padStart(3, "0")}.png`);
@@ -24,7 +24,7 @@ await page.evaluate(() => {
   document.querySelector("#q").value = "";
   document.querySelector("#results").replaceChildren();
   document.querySelector("#status").textContent = "";
-  window.scrollTo(0, 120);
+  window.scrollTo(0, document.querySelector(".demo").offsetTop - 12);
 });
 await snap(4);
 const query = "a girl hugging a baby dragon";

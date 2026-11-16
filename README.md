@@ -9,12 +9,14 @@ of videos on your computer, with no GPU and nothing sent anywhere, and answers
 **[Try it in your browser](https://qthullie.github.io/whenframe/)** on three open movies, or install it below.
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/figures/demo-1-dark.webp">
-    <img src="docs/figures/demo-1.webp" alt="The whenframe search page: 'two people arguing on a bridge' finds the opening scene of Tears of Steel first, among three films" width="800">
-  </picture>
+  <a href="https://qthullie.github.io/whenframe/">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="docs/figures/site-dark.webp">
+      <img src="docs/figures/site.webp" alt="The demo site: 'a girl hugging a baby dragon' finds a scene of Sintel at 3:28 first, 81 % sure; its storyboard shows each second of the moment; then 'two people arguing on a bridge' finds the opening scene of Tears of Steel" width="800">
+    </picture>
+  </a>
   <br>
-  <sub><code>whenframe serve</code> on three Blender open movies: Big Buck Bunny, Sintel and Tears of Steel (© Blender Foundation, CC BY 3.0).</sub>
+  <sub>The demo site, searching Big Buck Bunny, Sintel and Tears of Steel (© Blender Foundation, CC BY 3.0) in the browser.</sub>
 </p>
 
 <!-- table readme-headline -->
@@ -27,13 +29,23 @@ Searching 979 personal videos at once (DiDeMo test) for 3,902 descriptions writt
 pip install git+https://github.com/qthullie/whenframe   # Python 3.10+, and ffmpeg on the PATH
 whenframe index ~/Videos                                # once, then again to add new videos
 whenframe search "the dog jumps into the pool"
-whenframe serve                                         # the page above, at http://127.0.0.1:8765
+whenframe serve                                         # a search page, at http://127.0.0.1:8765
 ```
 
 ```
  83%     1:12 - 1:22      /home/me/Videos/2024/summer/IMG_4120.MOV
  71%     0:03 - 0:13      /home/me/Videos/2023/garden.mp4
 ```
+
+`whenframe serve` opens a search page on your own library, which plays each
+video from the moment found:
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/figures/demo-1-dark.webp">
+    <img src="docs/figures/demo-1.webp" alt="The local search page of whenframe serve: 'two people arguing on a bridge' finds the opening scene of Tears of Steel first, among three films" width="800">
+  </picture>
+</p>
 
 The first run downloads the SigLIP 2 model (1.5 GB). A library is indexed in
 one of three modes, chosen the first time (`--mode`):
