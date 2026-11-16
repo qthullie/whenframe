@@ -1,12 +1,12 @@
 // whenframe in the browser: the frames of three films, embedded once with SigLIP 2 (scripts/site.py), searched here
 // the way the tool searches: cosine minus the query-bank offset, 10-second windows around the best frames.
+// The twelve descriptions were embedded by the tool too; the films play from small copies (scripts/site_videos.sh).
 const DATA = "data/";
-const TRANSFORMERS = "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.5";
-const MODEL = "onnx-community/siglip2-base-patch16-224-ONNX";
+const HIDDEN_BELOW = 0.005;  // moments shown as "0 %" sure say nothing: left out
 const $ = (id) => document.getElementById(id);
 
 let meta, frames, offsets, suggestions, vectors;
-let encode = null;
+let playing = null;  // the moment being played, which stops at its end; null for a whole film
 
 // float16 -> float32, through a table of the 65,536 values
 const F16 = new Float32Array(65536);
@@ -22,12 +22,6 @@ const el = (tag, cls, text) => {
   if (text !== undefined) e.textContent = text;
   return e;
 };
-const unit = (v) => {
-  let n = 0;
-  for (const x of v) n += x * x;
-  n = Math.sqrt(n);
-  return v.map((x) => x / n);
-};
 
 function tile(row) {
   // a div showing frame `row` from the thumbnail sheets
@@ -36,6 +30,12 @@ function tile(row) {
   div.style.backgroundImage = `url(${DATA}sheets/${Math.floor(row / meta.per_sheet)}.webp)`;
   div.style.backgroundPosition = `${((k % meta.cols) / (meta.cols - 1)) * 100}% ${(Math.floor(k / meta.cols) / (rows - 1)) * 100}%`;
   return div;
+}
+
+function source(film) {
+  // H.264 where the browser has it, VP9 elsewhere
+  const mp4 = document.createElement("video").canPlayType('video/mp4; codecs="avc1.4D401E, mp4a.40.2"');
+  return `${film.video}.${mp4 ? "mp4" : "webm"}`;
 }
 
 function search(q) {
@@ -67,14 +67,37 @@ function search(q) {
   return out.sort((a, b) => b.score - a.score);
 }
 
-function render(query, vector, ms) {
-  const t0 = performance.now();
-  const hits = search(vector);
-  const took = ms + performance.now() - t0;
-  $("status").textContent = `${hits.length} moments in ${Math.round(took)} ms, for “${query}”`;
+function showFilms() {
+  // no description picked: the films themselves, to watch from the start
+  $("status").textContent = "The three films the search runs on. Pick a description above to find a moment in them.";
   const box = $("results");
   box.replaceChildren();
-  hits.forEach((h, i) => {
+  meta.films.forEach((film, f) => {
+    const rows = [];
+    for (let i = 0; i < meta.count; i++) if (meta.film[i] === f) rows.push(i);
+    const card = el("button", "card");
+    card.type = "button";
+    const shot = tile(rows[Math.floor(rows.length / 3)]);
+    shot.append(el("span", "when", clock(film.duration)));
+    const info = el("div", "meta");
+    info.append(el("div", "title", film.title), el("div", "conf", `${rows.length.toLocaleString("en")} frames indexed`));
+    card.append(shot, info);
+    card.addEventListener("click", () => open(film, null));
+    box.append(card);
+  });
+}
+
+function showMoments(query, vector, ms) {
+  const t0 = performance.now();
+  const hits = search(vector);
+  const shown = hits.filter((h) => h.confidence >= HIDDEN_BELOW);
+  const took = ms + performance.now() - t0;
+  const hidden = hits.length - shown.length;
+  $("status").textContent = `${shown.length} moments in ${Math.round(took)} ms, for “${query}”` +
+    (hidden ? ` (${hidden} more at 0 % left out)` : "");
+  const box = $("results");
+  box.replaceChildren();
+  shown.forEach((h, i) => {
     const card = el("button", h.confidence < 0.05 ? "card unlikely" : "card");
     card.type = "button";
     const shot = tile(h.row);
@@ -83,65 +106,65 @@ function render(query, vector, ms) {
     info.append(el("div", "title", meta.films[h.film].title),
                 el("div", "conf", `${Math.round(100 * h.confidence)} % sure the best frame matches`));
     card.append(shot, info);
-    card.addEventListener("click", () => storyboard(h));
+    card.addEventListener("click", () => open(meta.films[h.film], h));
     box.append(card);
   });
 }
 
-function storyboard(h) {
-  const film = meta.films[h.film];
+function open(film, h) {
+  // a moment plays its ten seconds and stops; a film plays from the start
+  playing = h;
+  const v = $("m-video");
   $("m-title").textContent = film.title;
-  $("m-when").textContent = `${clock(h.start)} – ${clock(h.end)}`;
-  $("m-link").href = film.url;
+  $("m-when").textContent = h ? `${clock(h.start)} – ${clock(h.end)}` : clock(film.duration);
+  $("m-again").hidden = !h;
   const board = $("m-board");
   board.replaceChildren();
-  for (let i = 0; i < meta.count; i++) {
-    if (meta.film[i] !== h.film || meta.times[i] < h.start || meta.times[i] >= h.end) continue;
-    const shot = tile(i);
-    if (i === h.row) shot.classList.add("best");
-    shot.append(el("span", "", clock(meta.times[i])));
-    board.append(shot);
+  if (h) {
+    for (let i = 0; i < meta.count; i++) {
+      if (meta.films[meta.film[i]] !== film || meta.times[i] < h.start || meta.times[i] >= h.end) continue;
+      const shot = tile(i);
+      if (i === h.row) shot.classList.add("best");
+      shot.append(el("span", "", clock(meta.times[i])));
+      shot.title = "Play from here";
+      const t = meta.times[i];
+      shot.addEventListener("click", () => { v.currentTime = t; v.play().catch(() => {}); });
+      board.append(shot);
+    }
   }
+  const caption = $("m-caption");
+  caption.replaceChildren(h ? "The frames of the moment as the search saw them; the outlined one matches best. "
+                            : "The whole film. ", Object.assign(el("a", "", "About the film"),
+                                                                { href: film.url, target: "_blank", rel: "noopener" }));
+  v.src = source(film);
+  v.onloadedmetadata = () => { v.currentTime = h ? h.start : 0; v.play().catch(() => {}); };
+  v.onerror = () => { caption.prepend("This browser could not load the film. "); };
   $("moment").showModal();
 }
 
-async function loadEncoder() {
-  if (encode) return encode;
-  $("load").disabled = true;
-  const progress = $("progress");
-  progress.hidden = false;
-  const { AutoTokenizer, SiglipTextModel, env } = await import(TRANSFORMERS);
-  env.allowLocalModels = false;
-  const tokenizer = await AutoTokenizer.from_pretrained(MODEL);
-  const model = await SiglipTextModel.from_pretrained(MODEL, {
-    dtype: "q8",
-    progress_callback: (p) => { if (p.status === "progress" && p.file.endsWith(".onnx")) progress.value = p.progress; },
-  });
-  encode = async (text) => {
-    const inputs = tokenizer([text.toLowerCase()], { padding: "max_length", max_length: meta.text_length, truncation: true });
-    const { pooler_output } = await model(inputs);
-    return unit(Float32Array.from(pooler_output.data));
-  };
-  $("model").classList.remove("show");
-  return encode;
-}
+$("m-video").addEventListener("timeupdate", () => {
+  const v = $("m-video");
+  if (playing && v.currentTime >= playing.end && !v.paused) v.pause();
+});
+$("m-again").addEventListener("click", () => {
+  const v = $("m-video");
+  if (playing) { v.currentTime = playing.start; v.play().catch(() => {}); }
+});
+$("m-close").addEventListener("click", () => $("moment").close());
+$("moment").addEventListener("close", () => {
+  const v = $("m-video");
+  v.pause();
+  v.removeAttribute("src");
+  v.load();
+});
 
-async function run(query) {
-  query = query.trim();
-  history.replaceState(null, "", query ? `?q=${encodeURIComponent(query)}` : location.pathname);
-  if (!query) return;
-  const known = suggestions.findIndex((s) => s.toLowerCase() === query.toLowerCase());
-  if (known >= 0) {
-    render(query, vectors.subarray(known * meta.dim, (known + 1) * meta.dim), 0);
-    return;
-  }
-  if (!encode) {
-    $("model").classList.add("show");
-    $("status").textContent = "";
-    return;
-  }
-  const t0 = performance.now();
-  render(query, await encode(query), performance.now() - t0);
+function pick(query) {
+  // a description from the list, or none: the films
+  const known = suggestions.findIndex((s) => s === query);
+  history.replaceState(null, "", known >= 0 ? `?q=${encodeURIComponent(query)}` : location.pathname);
+  document.querySelectorAll(".chip").forEach((c) => c.classList.toggle("on", c.textContent === query));
+  if (known < 0) showFilms();
+  else showMoments(query, vectors.subarray(known * meta.dim, (known + 1) * meta.dim), 0);
 }
 
 async function start() {
@@ -156,11 +179,11 @@ async function start() {
   suggestions = s;
   vectors = new Float32Array(v);
   const minutes = Math.round(meta.films.reduce((t, x) => t + x.duration, 0) / 60);
-  $("what").textContent = `Try it on three open movies: ${meta.count.toLocaleString("en")} frames, ${minutes} minutes`;
+  $("what").textContent = `Three open movies: ${meta.count.toLocaleString("en")} frames, ${minutes} minutes`;
   for (const text of suggestions) {
     const chip = el("button", "chip", text);
     chip.type = "button";
-    chip.addEventListener("click", () => { $("q").value = text; run(text); });
+    chip.addEventListener("click", () => pick(chip.classList.contains("on") ? null : text));
     $("chips").append(chip);
   }
   fetch(DATA + "summary.json").then((r) => r.json()).then((sum) => {
@@ -168,19 +191,8 @@ async function start() {
     $("n-videos").textContent = sum.videos.toLocaleString("en");
     $("n-shots").textContent = `${(100 * sum.shots).toFixed(1)} %`;
   }).catch(() => {});
-  const initial = new URLSearchParams(location.search).get("q") || suggestions[0];
-  $("q").value = initial;
-  run(initial);
+  pick(new URLSearchParams(location.search).get("q"));
 }
 
-$("form").addEventListener("submit", (e) => { e.preventDefault(); run($("q").value); });
-$("load").addEventListener("click", async () => {
-  try {
-    await loadEncoder();
-    run($("q").value);
-  } catch (err) {
-    $("model-text").textContent = `The model could not be loaded here (${err.message}). The suggested searches still work.`;
-  }
-});
-$("m-close").addEventListener("click", () => $("moment").close());
+$("all").addEventListener("click", () => pick(null));
 start();

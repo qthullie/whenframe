@@ -8,3 +8,4 @@ results/cache/
 *.onnx
 /build/
 /dist/
+/site/videos/

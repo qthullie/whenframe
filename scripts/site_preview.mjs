@@ -16,33 +16,24 @@ const snap = async (repeat = 1) => {
   console.log(file);
   n += 1;
 };
-const settle = () => page.waitForFunction(() => [...document.querySelectorAll(".card .shot")].length > 0);
 
-await page.goto(`${url}/?q=${encodeURIComponent("a girl hugging a baby dragon")}`);
-await settle();
-await page.evaluate(() => {
-  document.querySelector("#q").value = "";
-  document.querySelector("#results").replaceChildren();
-  document.querySelector("#status").textContent = "";
-  window.scrollTo(0, document.querySelector(".demo").offsetTop - 12);
-});
-await snap(4);
-const query = "a girl hugging a baby dragon";
-for (let i = 1; i <= query.length; i += 2) {
-  await page.fill("#q", query.slice(0, i));
-  await snap();
-}
-await page.fill("#q", query);
-await page.press("#q", "Enter");
+await page.goto(url);
+await page.waitForFunction(() => [...document.querySelectorAll(".card .shot")].length > 0);
+await page.evaluate(() => window.scrollTo(0, document.querySelector(".demo").offsetTop - 12));
+await page.waitForTimeout(300);
+await snap(8);  // the films, before any description is picked
+await page.click("text=a girl hugging a baby dragon");
 await page.waitForFunction(() => document.querySelector("#status").textContent.includes("dragon"));
 await page.waitForTimeout(400);
 await snap(10);
-await page.click(".card");
-await page.waitForSelector("#m-board .shot");
-await page.waitForTimeout(400);
-await snap(14);
+await page.click(".card");  // the first moment plays its ten seconds
+await page.waitForFunction(() => { const v = document.querySelector("#m-video"); return v.currentTime > 0 && !v.paused; });
+for (let i = 0; i < 18; i++) {
+  await snap();
+  await page.waitForTimeout(110);
+}
 await page.click("#m-close");
-await page.click(".chip");
+await page.click("text=two people arguing on a bridge");
 await page.waitForFunction(() => document.querySelector("#status").textContent.includes("bridge"));
 await page.waitForTimeout(400);
 await snap(12);

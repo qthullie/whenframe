@@ -3,7 +3,7 @@
     python scripts/site.py --films DIR      # Big Buck Bunny, Sintel, Tears of Steel (Blender Foundation, CC BY 3.0)
     python scripts/site.py --preview        # then the README's animation of the site, docs/figures/site(-dark).webp
 
-Writes site/data/:
+Writes site/data/ (and scripts/site_videos.sh the films' small copies, in site/videos/):
     frames.bin       the frame embeddings of the default model, float16, as the tool stores them
     offsets.bin      each frame's query-bank offset times the tuned strength, float32
     frames.json      when each frame is, which film it belongs to, the films, the model's calibration
@@ -32,10 +32,10 @@ from whenframe.video import find_videos  # noqa: E402
 
 TILE = (192, 108)
 COLS, ROWS = 10, 10
-FILMS = {
-    "BigBuckBunny_640x360.m4v": ("Big Buck Bunny", "https://peach.blender.org/"),
-    "Sintel.2010.720p.mkv": ("Sintel", "https://durian.blender.org/"),
-    "tears_of_steel_720p.mov": ("Tears of Steel", "https://mango.blender.org/"),
+FILMS = {  # file indexed: title, the film's page, and the name of its small copy in site/videos (site_videos.sh)
+    "BigBuckBunny_640x360.m4v": ("Big Buck Bunny", "https://peach.blender.org/", "big-buck-bunny"),
+    "Sintel.2010.720p.mkv": ("Sintel", "https://durian.blender.org/", "sintel"),
+    "tears_of_steel_720p.mov": ("Tears of Steel", "https://mango.blender.org/", "tears-of-steel"),
 }
 SUGGESTIONS = [
     "two people arguing on a bridge", "a girl hugging a baby dragon", "a giant rabbit wakes up and stretches",
@@ -57,6 +57,8 @@ def frames_at_one_fps(path: Path) -> np.ndarray:
 def preview(out: Path, scheme: str) -> None:
     """Serve site/, drive it with scripts/site_preview.mjs (Playwright), and make an animated WebP of it."""
     import functools
+    import os
+    import re
     import tempfile
     import threading
     from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -64,8 +66,32 @@ def preview(out: Path, scheme: str) -> None:
     from PIL import Image
 
     class Quiet(SimpleHTTPRequestHandler):
+        """Quiet, and answering byte ranges as GitHub Pages does, so that the videos can be seeked."""
+
         def log_message(self, *args) -> None:
             pass
+
+        def send_head(self):
+            path = self.translate_path(self.path.split("?")[0])
+            ranged = re.match(r"bytes=(\d+)-(\d*)$", self.headers.get("Range", ""))
+            if not ranged or not os.path.isfile(path):
+                return super().send_head()
+            size = os.path.getsize(path)
+            start, end = int(ranged[1]), int(ranged[2] or size - 1)
+            f = open(path, "rb")  # noqa: SIM115 (closed by the server once copied)
+            f.seek(start)
+            self.send_response(206)
+            for k, v in (("Content-Type", self.guess_type(path)), ("Content-Range", f"bytes {start}-{end}/{size}"),
+                         ("Content-Length", str(end - start + 1)), ("Accept-Ranges", "bytes")):  # fmt: skip
+                self.send_header(k, v)
+            self.end_headers()
+            return f
+
+        def copyfile(self, source, outputfile) -> None:
+            try:
+                super().copyfile(source, outputfile)
+            except (BrokenPipeError, ConnectionResetError):  # the browser seeked elsewhere
+                pass
 
     httpd = ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(Quiet, directory=str(ROOT / "site")))
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
@@ -114,8 +140,9 @@ def main() -> None:
     thumbs, films, film_of = [], [], []
     for i, v in enumerate(videos):
         name = Path(v.path).name
-        title, url = FILMS.get(name, (Path(v.path).stem, ""))
-        films.append({"title": title, "file": name, "duration": round(v.duration, 2), "url": url})
+        title, url, video = FILMS.get(name, (Path(v.path).stem, "", Path(v.path).stem))
+        films.append({"title": title, "file": name, "duration": round(v.duration, 2), "url": url,
+                      "video": f"videos/{video}"})  # fmt: skip
         frames = frames_at_one_fps(Path(v.path))
         for t in times[v.start : v.start + v.count]:
             thumbs.append(frames[min(int(round(float(t))), len(frames) - 1)])
