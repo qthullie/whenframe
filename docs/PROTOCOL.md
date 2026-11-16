@@ -298,6 +298,12 @@ On the 500 tuning videos (`scripts/backends.py --split train`), OpenVINO in
 bfloat16 encodes for 2.9 CPU minutes per hour of video against 21.6, and the
 default search finds 31.0 % of the descriptions among its first five moments
 against 31.5 %: 6 descriptions won, 16 lost (sign test p = 0.05).
+*Correction, after the test run:* 2.9 was the OpenVINO run's CPU time divided by
+the hours of the whole videos, while it embedded only their first 30 seconds
+(the older ONNX Runtime cache holds whole videos). Per hour of what each run
+embedded, OpenVINO takes 4.8 minutes against 21.6; `scripts/backends.py` now
+divides each run by its own hours. The time per frame, 80 ms against 360, was
+right. Criterion 9 below was set with the wrong figure in view.
 
 `import openvino` sends a usage event to Google Analytics, from its model
 converter (openvino.tools.ovc, through the openvino_telemetry package).

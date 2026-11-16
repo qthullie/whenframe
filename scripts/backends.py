@@ -48,7 +48,8 @@ def main() -> None:
     cos = (frozen.emb * other.emb).sum(axis=1) / (
         np.linalg.norm(frozen.emb, axis=1) * np.linalg.norm(other.emb, axis=1)
     )
-    hours = cost["hours"]
+    # each run's own hours: older ONNX Runtime caches hold whole videos, the OpenVINO ones their first 30 seconds
+    hours = {"onnxruntime": cost["hours"], "openvino": float(z["durations"].sum() / 3600)}
     result = {"split": args.split, "videos": len(frozen.names), "queries": len(queries), "hours": hours,
               "method": method, "cosine": {"mean": float(cos.mean()), "min": float(cos.min()),
                                            "p01": float(np.percentile(cos, 1))}}  # fmt: skip
@@ -59,8 +60,8 @@ def main() -> None:
         frames = int(len(z["times"])) if name == "openvino" else cost["frames"]
         result[name] = {
             **r,
-            "cpu_min_per_hour": {k: timing[k] / 60 / hours for k in ("decode_cpu", "encode_cpu")},
-            "wall_min_per_hour": {k: timing[k] / 60 / hours for k in ("decode_wall", "encode_wall")},
+            "cpu_min_per_hour": {k: timing[k] / 60 / hours[name] for k in ("decode_cpu", "encode_cpu")},
+            "wall_min_per_hour": {k: timing[k] / 60 / hours[name] for k in ("decode_wall", "encode_wall")},
             "encode_ms_per_frame": 1000 * timing["encode_cpu"] / frames,
         }
         per_hour = result[name]["cpu_min_per_hour"]["encode_cpu"]

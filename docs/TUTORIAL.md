@@ -18,10 +18,10 @@ pip install "whenframe[speech] @ git+https://github.com/qthullie/whenframe"  # W
 
 With `fast`, OpenVINO encodes the frames instead of ONNX Runtime, in bfloat16
 on processors that compute in it (recent Intel Xeon with AMX, AMD Zen 4 and
-later). On the DiDeMo tuning videos, on the Xeon of the benchmark, encoding
-took 7 times less CPU time for half a point of recall
-([PROTOCOL.md](PROTOCOL.md), third round). Other processors were not measured.
-`--backend onnxruntime` keeps ONNX Runtime.
+later). On the DiDeMo test videos, on the Xeon of the benchmark, encoding took
+4.8 CPU minutes per hour of video instead of 22.6, and the search found as many
+moments ([RESULTS.md](RESULTS.md), third round). Other processors were not
+measured. `--backend onnxruntime` keeps ONNX Runtime.
 
 The first run downloads the SigLIP 2 model (about 1.5 GB) into
 `~/.cache/whenframe` (or `$WHENFRAME_CACHE`); `--speech` downloads Whisper
@@ -40,6 +40,13 @@ whenframe index ~/Videos
 Every video under the folder is read at one frame per second. Frames that
 barely differ from the previous one are skipped. Run the same command again
 later: only new or modified videos are indexed.
+
+Photos in the folder (JPEG, PNG, WebP, TIFF, BMP, and HEIC or AVIF where ffmpeg
+can read them) are indexed too, turned upright as their EXIF says, each as a
+single frame: a search ranks them with the moments of the videos, and shows
+them as photos. `--no-photos`, the first time a library is indexed, keeps it to
+videos. A video's moment is judged on its best frame among about ten, a photo
+on its only one, which can favour videos slightly; it was not measured.
 
 A library is built in one of three modes, chosen the first time it is indexed:
 

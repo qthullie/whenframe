@@ -67,10 +67,15 @@ def split(names: list[str]) -> set[str]:
 
 
 def extract(args) -> None:
+    """One frame per second of every video, repeats skipped, embedded with OpenVINO; resumes where it stopped."""
     enc = didemo.make_encoder(args.model_dir, MAIN, "openvino")
-    cols = {k: [] for k in ("emb", "times", "starts", "counts", "durations", "decode_cpu", "encode_cpu", "seen")}
-    names, row, t0 = [], 0, time.time()
-    for name in video_names(args):
+    parts = CACHE / "youcook2_parts"
+    parts.mkdir(parents=True, exist_ok=True)
+    names, t0 = video_names(args), time.time()
+    for n, name in enumerate(names, 1):
+        part = parts / f"{name}.npz"
+        if part.exists():
+            continue
         p = Path(args.videos) / f"{name}.mp4"
         c0 = cpu()
         info = probe(p)
@@ -79,17 +84,21 @@ def extract(args) -> None:
         c1 = cpu()
         e = enc.encode_images(frames[keep])
         c2 = cpu()
-        for k, v in (("emb", e.astype(np.float16)), ("times", t[keep].astype(np.float32)), ("starts", row),
-                     ("counts", len(keep)), ("durations", info.duration or len(frames)), ("decode_cpu", c1 - c0),
-                     ("encode_cpu", c2 - c1), ("seen", len(frames))):  # fmt: skip
-            cols[k].append(v)
-        names.append(name)
-        row += len(keep)
-        if len(names) % 25 == 0:
-            print(f"{len(names)} videos, {row} frames, {time.time() - t0:.0f} s", flush=True)
-    arrays = {k: np.concatenate(v) if k in ("emb", "times") else np.array(v) for k, v in cols.items()}
-    np.savez_compressed(FRAMES, names=np.array(names), precision=np.array(enc.images.precision), **arrays)
-    print(f"wrote {FRAMES}: {len(names)} videos, {row} frames in {time.time() - t0:.0f} s")
+        cost = {"duration": info.duration or len(frames), "decode_cpu": c1 - c0, "encode_cpu": c2 - c1,
+                "seen": len(frames)}  # fmt: skip
+        np.savez(part.with_suffix(".tmp.npz"), emb=e.astype(np.float16), times=t[keep].astype(np.float32), **cost)
+        part.with_suffix(".tmp.npz").replace(part)  # a video is either done or not started
+        if n % 25 == 0:
+            print(f"{n}/{len(names)} videos, {time.time() - t0:.0f} s", flush=True)
+    z = [np.load(parts / f"{name}.npz") for name in names]
+    counts = np.array([len(x["times"]) for x in z])
+    np.savez_compressed(
+        FRAMES, names=np.array(names), precision=np.array(enc.images.precision),
+        emb=np.concatenate([x["emb"] for x in z]), times=np.concatenate([x["times"] for x in z]),
+        starts=np.concatenate([[0], np.cumsum(counts)[:-1]]), counts=counts,
+        **{k: np.array([float(x[k]) for x in z]) for k in ("duration", "decode_cpu", "encode_cpu", "seen")},
+    )  # fmt: skip
+    print(f"wrote {FRAMES}: {len(names)} videos, {counts.sum()} frames")
 
 
 def transcribe(args) -> None:
@@ -116,7 +125,7 @@ def load(args):
     z = np.load(FRAMES)
     names = z["names"].tolist()
     f = Frozen(names=names, emb=z["emb"].astype(np.float32), times=z["times"], starts=z["starts"], counts=z["counts"],
-               durations=z["durations"].astype(np.float64), keep=np.ones(len(z["times"]), bool),
+               durations=z["duration"].astype(np.float64), keep=np.ones(len(z["times"]), bool),
                cuts=[[] for _ in names])  # fmt: skip
     f.bank = didemo.bank(args)  # the DiDeMo query bank, unchanged
     index = {n: i for i, n in enumerate(names)}
@@ -214,7 +223,7 @@ def evaluate(args) -> None:
     best = json.loads((ROOT / "results" / "youcook2_tuned.json").read_text())["best"]
     cfg = speech.SpeechConfig(best["weight"], best["pad"], best["normalise"])
     res = {"videos": len(f.names), "test_videos": len(f.names) - len(tuning), "test_steps": len(which),
-           "hours": float(z["durations"].sum() / 3600), "speech": {"weight": cfg.weight, "pad": cfg.pad,
+           "hours": float(z["duration"].sum() / 3600), "speech": {"weight": cfg.weight, "pad": cfg.pad,
                                                                    "normalise": cfg.normalise}}  # fmt: skip
     for m in METHODS:
         res[m] = measure(f, queries, frame_scores(f, text, m, params[m]), m, params[m], which)

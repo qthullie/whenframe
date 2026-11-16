@@ -357,3 +357,40 @@ so the annotated video is one of many that fit, and the metric counts the others
 as wrong. This number does not compare with the 27.2 % of DiDeMo, whose videos
 differ much more from each other; it does say that whenframe cannot tell apart
 videos that show the same thing.
+
+## Third round
+
+The third round of the protocol ([PROTOCOL.md](PROTOCOL.md)): OpenVINO for the
+image encoder, YouCook2 for long videos, and the search of what is said.
+
+<!-- table round3-criteria -->
+| criterion (fixed before the third run) | measured on test | met |
+|---|---|---|
+| 9. indexing with OpenVINO takes at most 10 min of CPU time per hour of video | 6.5 min | yes |
+| 10. OpenVINO loses at most 1 point on the primary metric | +0.4 points | yes |
+<!-- /table -->
+
+### OpenVINO for the image encoder
+
+The same frames, embedded by ONNX Runtime in float32 and by OpenVINO in
+bfloat16 on this Xeon (`scripts/backends.py`); the default search runs on each,
+unchanged.
+
+<!-- table round3-runtimes -->
+| image encoder | videos | R@5 | encoding, CPU min per hour of video | CPU ms per frame | won / lost |
+|---|---|---|---|---|---|
+| ONNX Runtime, float32, tuning videos | 500 | 31.5 | 21.6 | 360 |  |
+| OpenVINO, bfloat16, tuning videos | 500 | 31.0 | 4.8 | 80 | 6 / 16 (p = 0.05) |
+| ONNX Runtime, float32, test videos | 979 | 27.2 | 22.6 | 377 |  |
+| OpenVINO, bfloat16, test videos | 979 | 27.5 | 4.8 | 79 | 26 / 11 (p = 0.02) |
+<!-- /table -->
+
+The two sets of embeddings agree to a cosine of 0.9998 on average (0.992 at
+worst), and the search finds the same moments but for borderline ones, which
+move either way: OpenVINO lost 16 tuning descriptions and won 6, then won 26
+test descriptions and lost 11. A frame takes 79 ms of CPU time instead of 377,
+so an hour of video is indexed in 6.5 CPU minutes, decoding included, against
+24.9: criterion 3 of the first round, missed with ONNX Runtime, is met. The gain
+comes from the processor's bfloat16 units (AMX); in float32, OpenVINO was only
+1.3 times faster than ONNX Runtime (342 against 265 ms on 58 frames), and
+processors without bfloat16 were not measured.

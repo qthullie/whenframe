@@ -2,7 +2,10 @@
  "split": "train",
  "videos": 500,
  "queries": 1957,
- "hours": 6.733377933502197,
+ "hours": {
+  "onnxruntime": 6.733377933502197,
+  "openvino": 4.010403633117676
+ },
  "method": "frame_window_bank",
  "cosine": {
   "mean": 0.9998000860214233,
@@ -76,12 +79,12 @@
    "R@100": 0.8170669391926418
   },
   "cpu_min_per_hour": {
-   "decode_cpu": 1.1603435926504648,
-   "encode_cpu": 2.8553330751107966
+   "decode_cpu": 1.9481909196156086,
+   "encode_cpu": 4.794040321024681
   },
   "wall_min_per_hour": {
-   "decode_wall": 0.6660165648826725,
-   "encode_wall": 0.8352931293343059
+   "decode_wall": 1.1182269047172322,
+   "encode_wall": 1.4024384674450496
   },
   "encode_ms_per_frame": 79.89211186681906
  },

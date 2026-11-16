@@ -212,7 +212,8 @@ def round3_tables() -> dict[str, str]:
         out["round3-runtimes"] = table(
             ["image encoder", "videos", "R@5", "encoding, CPU min per hour of video", "CPU ms per frame",
              "won / lost"],
-            [[f"{name} ({x['split']})", f"{x['videos']:,}", pct(x[k]["corpus"][PRIMARY]),
+            [[f"{name}, {'tuning' if x['split'] == 'train' else 'test'} videos", f"{x['videos']:,}",
+              pct(x[k]["corpus"][PRIMARY]),
               f"{x[k]['cpu_min_per_hour']['encode_cpu']:.1f}", f"{x[k]['encode_ms_per_frame']:.0f}",
               "" if k == "onnxruntime" else f"{x['wins']} / {x['losses']} (p = {x['p']:.2f})"]
              for x in both for k, name in (("onnxruntime", "ONNX Runtime, float32"),

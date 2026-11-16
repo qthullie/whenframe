@@ -3,16 +3,17 @@
 <img src="site/logo.svg" alt="" width="56" align="left">
 
 Find a moment in your own videos by describing it. whenframe indexes a folder
-of videos on your computer, with no GPU and nothing sent anywhere, and answers
-"the dog jumps into the pool" with the video and the seconds where it happens.
+of videos (and photos) on your computer, with no GPU and nothing sent anywhere,
+and answers "the dog jumps into the pool" with the video and the seconds where
+it happens.
 
-**[Try it in your browser](https://qthullie.github.io/whenframe/)** on three open movies, or install it below.
+**[See it at work in your browser](https://qthullie.github.io/whenframe/)** on three open movies, or install it below.
 
 <p align="center">
   <a href="https://qthullie.github.io/whenframe/">
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset="docs/figures/site-dark.webp">
-      <img src="docs/figures/site.webp" alt="The demo site: 'a girl hugging a baby dragon' finds a scene of Sintel at 3:28 first, 81 % sure; its storyboard shows each second of the moment; then 'two people arguing on a bridge' finds the opening scene of Tears of Steel" width="800">
+      <img src="docs/figures/site.webp" alt="The demo site: the three films; 'a girl hugging a baby dragon' finds three moments of Sintel, and the first, at 3:28, plays its ten seconds; then 'two people arguing on a bridge' finds the opening scene of Tears of Steel" width="800">
     </picture>
   </a>
   <br>
@@ -60,9 +61,12 @@ one of three modes, chosen the first time (`--mode`):
 <!-- /table -->
 
 <!-- table readme-openvino -->
+With OpenVINO (`pip install 'whenframe[fast]'`) on a processor that computes in bfloat16, as this one does, the standard mode indexes for 6.5 CPU minutes per hour of video instead of 24.9, and finds 27.5 % of the moments instead of 27.2 % (DiDeMo test).
 <!-- /table -->
 
-`whenframe index --speech base` also transcribes what is said (Whisper, on the
+Photos in the same folders are indexed too, each as a moment of its own, so a
+search returns photos and moments of videos together (`--no-photos` to leave
+them out). `whenframe index --speech base` also transcribes what is said (Whisper, on the
 CPU, `pip install 'whenframe[speech]'`), and a search then finds the words
 said as well as what is seen. `serve --jellyfin` links each moment to the
 video in a Jellyfin server.
@@ -125,6 +129,15 @@ On Charades-STA, with the parameters chosen on DiDeMo and nothing tuned, it
 places the moment in a given video 45.7 % of the time at IoU >= 0.5; a
 7-billion-parameter vision-language model, run over the video's frames for each
 sentence, is reported at 56.8 %.
+
+Third round (OpenVINO, long videos, what is said):
+
+<!-- table round3-criteria -->
+| criterion (fixed before the third run) | measured on test | met |
+|---|---|---|
+| 9. indexing with OpenVINO takes at most 10 min of CPU time per hour of video | 6.5 min | yes |
+| 10. OpenVINO loses at most 1 point on the primary metric | +0.4 points | yes |
+<!-- /table -->
 
 All tables, the costs and the figures: [docs/RESULTS.md](docs/RESULTS.md).
 
