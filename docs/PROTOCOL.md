@@ -272,3 +272,94 @@ corpus setting does not.
   IoU >= 0.5).
 - **No criterion.** Published numbers are quoted as their authors report them,
   with what their methods run on; they are not reproduced here.
+- **Added after the run:** a reference that ignores the sentence (10 seconds in
+  the middle of the video, `scripts/charades.py prior`), so the numbers can be
+  read against what the window alone scores.
+
+## Third round
+
+Written before the test split is used a third time, and before any YouCook2
+video is embedded or transcribed.
+
+**What was tried on the tuning videos first: the runtime of the image encoder.**
+Measured on 58 frames, 4 threads, this Xeon (with AMX, AVX512-BF16), CPU time
+per frame:
+
+- ONNX Runtime, float32 (the first two rounds): 342 ms.
+- ONNX Runtime, the int8 file of the onnx-community export (dynamic
+  quantization): 158 ms, but cosine 0.75 with the float32 embeddings. Not used.
+- OpenVINO 2026.4, float32: 265 ms, cosine 1.00000.
+- OpenVINO, bfloat16, which it picks by itself on processors that compute in it:
+  67 ms, cosine 0.9998 on average.
+- ONNX Runtime's transformer optimiser needs PyTorch, which is not installed
+  here: not tried.
+
+On the 500 tuning videos (`scripts/backends.py --split train`), OpenVINO in
+bfloat16 encodes for 2.9 CPU minutes per hour of video against 21.6, and the
+default search finds 31.0 % of the descriptions among its first five moments
+against 31.5 %: 6 descriptions won, 16 lost (sign test p = 0.05).
+
+`import openvino` sends a usage event to Google Analytics, from its model
+converter (openvino.tools.ovc, through the openvino_telemetry package).
+whenframe makes that package unimportable before loading OpenVINO, which then
+falls back on its own silent stub; tracing every connection of an indexing and
+a search run shows none.
+
+**Changed in the tool.** The image encoder runs with OpenVINO when it is
+installed (`pip install whenframe[fast]`), in the precision OpenVINO picks;
+otherwise with ONNX Runtime, as before. The text encoder stays on ONNX Runtime
+in float32.
+
+**Criteria for the third test run** (DiDeMo test, the same 979 videos and 3,902
+descriptions, embedded again with OpenVINO; the default search with its
+first-round parameters and query bank):
+
+9. Indexing with OpenVINO takes at most 10 minutes of CPU time per hour of
+   video, decoding included (criterion 3 of the first round, missed then).
+10. The primary metric loses at most 1 point against ONNX Runtime float32.
+
+### Long videos: YouCook2
+
+- **Data:** the YouCook2 validation split (Zhou et al., AAAI 2018), cooking
+  videos from YouTube with each recipe step described and timed. Annotations from
+  the lmms-eval/YouCook2 copy on the Hugging Face Hub (3,179 steps in 414
+  videos); videos from the nguyenminh04/youcook2-videos copy, which holds 252 of
+  them in full: 21.7 hours, 5.2 minutes on average (up to 11.3), 1,950 steps of
+  19 seconds on average (median 14). The other 162 videos were not found.
+- **Split:** a third of the 252 videos, drawn at random (Python's
+  `random.Random(0).sample` of the sorted names), are for tuning: 84 videos,
+  619 steps. The other 168 videos and their 1,331 steps are the test. Every
+  search runs over all 252 videos.
+- **Images:** one frame per second of the whole video, embedded with OpenVINO,
+  repeats skipped as in the tool. `frame_window_bank` (the default search) and
+  `whenframe_bank` (adaptive spans), with their DiDeMo parameters and the DiDeMo
+  query bank: nothing is tuned on YouCook2.
+- **Metrics:** on the test steps, as for Charades: R1 at IoU >= 0.3, 0.5 and 0.7
+  and mean IoU in the given video; over the 252 videos, R@1, R@5 and R@10 at
+  IoU >= 0.3 and 0.5, the primary metric being R@5 at IoU >= 0.5 as for DiDeMo;
+  and R@5 counting a moment as right when its best frame falls inside the step,
+  since a step longer than 20 seconds cannot be matched by a 10-second window at
+  IoU >= 0.5.
+
+### What is said: speech
+
+- **Transcription:** Whisper base (faster-whisper 1.2.1, CTranslate2 int8, 4
+  threads, its voice activity filter, greedy decoding, language detected),
+  audio decoded by ffmpeg at 16 kHz. On two tuning videos it took 6.6 and 13.5
+  CPU minutes per hour of video; Whisper small took 17.3 and 23.9.
+- **Search:** the transcript segments go into an SQLite FTS5 index (Porter
+  stemmer, unicode61 tokenizer). A query's words, stop words removed, are
+  matched with OR, and each segment gets its BM25 score. A frame gets the best
+  score of the segments of its video that start before it plus `pad` seconds and
+  end after it minus `pad`; its search score becomes the image score plus
+  `weight` times that speech score (`normalise`: either the BM25 score itself,
+  or divided by the query's best segment score).
+- **Tuning:** `weight` in {0.001, 0.002, 0.005, 0.01, 0.02, 0.05}, `pad` in
+  {0, 5} seconds and `normalise` in {raw, best}, 24 combinations, chosen on the
+  619 tuning steps with the primary metric; the image part is the default
+  search, unchanged.
+- **Criteria:**
+  11. Speech raises the primary metric on the YouCook2 test steps by at least
+      2 points over the default search.
+  12. Transcription takes at most 15 minutes of CPU time per hour of video on
+      the YouCook2 videos.
