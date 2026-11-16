@@ -12,11 +12,18 @@ MobileCLIP-S2 is measured in the benchmark but is not used by any mode: Apple
 licenses its weights for non-commercial research only. It was trained with a
 softmax; its scale and bias map its cosine onto SigLIP's logit, fitted on DiDeMo
 training pairs (`scripts/didemo.py calibrate`).
+
+The image tower runs with OpenVINO when it is installed (`pip install
+whenframe[fast]`), which computes in bfloat16 on processors that do so natively
+(AMX, AVX512-BF16) and in float32 elsewhere; otherwise with ONNX Runtime. The
+text tower always runs with ONNX Runtime in float32.
 """
 
 from __future__ import annotations
 
+import importlib.util
 import os
+import sys
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
@@ -96,16 +103,72 @@ def _session(path: Path, threads: int | None) -> ort.InferenceSession:
     return ort.InferenceSession(str(path), opts, providers=["CPUExecutionProvider"])
 
 
+BACKENDS = ("auto", "onnxruntime", "openvino")
+
+
+def backend_name(name: str | None = None) -> str:
+    """The runtime of the image tower: the one asked for, else $WHENFRAME_BACKEND, else OpenVINO if installed."""
+    name = name or os.environ.get("WHENFRAME_BACKEND") or "auto"
+    if name not in BACKENDS:
+        raise ValueError(f"unknown backend {name!r}; one of {', '.join(BACKENDS)}")
+    if name != "auto":
+        return name
+    return "openvino" if importlib.util.find_spec("openvino") else "onnxruntime"
+
+
+def _import_openvino():
+    """OpenVINO, without the usage report its model converter sends to Google Analytics on import.
+
+    `import openvino` loads openvino.tools.ovc, which sends an "import" event through
+    the openvino_telemetry package; when that package cannot be imported, OpenVINO
+    uses a silent stub of its own instead.
+    """
+    sys.modules.setdefault("openvino_telemetry", None)  # a None entry makes the import fail
+    import openvino
+
+    return openvino
+
+
+class _OnnxRuntimeImages:
+    precision = "f32"
+
+    def __init__(self, path: Path, output: str, threads: int | None):
+        self._session = _session(path, threads)
+        self._output = output
+        self.dim = next(o for o in self._session.get_outputs() if o.name == output).shape[-1]
+
+    def __call__(self, x: np.ndarray) -> np.ndarray:
+        return self._session.run([self._output], {"pixel_values": x})[0]
+
+
+class _OpenVINOImages:
+    """The image tower compiled by OpenVINO, in the precision OpenVINO picks for this processor."""
+
+    def __init__(self, path: Path, output: str, threads: int | None):
+        core = _import_openvino().Core()
+        config = {"INFERENCE_NUM_THREADS": threads} if threads else {}
+        self._compiled = core.compile_model(core.read_model(str(path)), "CPU", config)
+        self._output = self._compiled.output(output)
+        self.dim = self._output.get_partial_shape()[-1].get_length()
+        self.precision = str(self._compiled.get_property("INFERENCE_PRECISION_HINT"))
+
+    def __call__(self, x: np.ndarray) -> np.ndarray:
+        return self._compiled(x)[self._output]
+
+
 def _normalize(x: np.ndarray) -> np.ndarray:
     return x / np.maximum(np.linalg.norm(x, axis=1, keepdims=True), 1e-12)
 
 
 class Encoder:
-    def __init__(self, model: str = DEFAULT_MODEL, folder: str | Path | None = None, threads: int | None = None):
+    def __init__(self, model: str = DEFAULT_MODEL, folder: str | Path | None = None, threads: int | None = None,
+                 backend: str | None = None):  # fmt: skip
         self.name = model
         self.spec = MODELS[model]
+        self.backend = backend_name(backend)
         folder = Path(folder) if folder else fetch(self.spec)
-        self._vision = _session(folder / self.spec.vision_file, threads)
+        self._vision_path = folder / self.spec.vision_file
+        self._vision = None  # loaded when the first frames come: searching only needs the text tower
         self._text = None
         self._text_path = folder / self.spec.text_file
         self._threads = threads
@@ -120,14 +183,21 @@ class Encoder:
     def size(self) -> int:
         return self.spec.image_size
 
+    @property
+    def images(self) -> _OnnxRuntimeImages | _OpenVINOImages:
+        """The image tower, loaded on first use."""
+        if self._vision is None:
+            runtime = _OpenVINOImages if self.backend == "openvino" else _OnnxRuntimeImages
+            self._vision = runtime(self._vision_path, self.spec.image_output, self._threads)
+        return self._vision
+
     def encode_images(self, frames: np.ndarray, batch: int = 32) -> np.ndarray:
         """uint8 (n, size, size, 3) RGB -> unit vectors (n, d)."""
         out = []
         for i in range(0, len(frames), batch):
             x = frames[i : i + batch].astype(np.float32)
             x = x / 255.0 if self.spec.pixels == "unit" else x / 127.5 - 1.0
-            x = np.ascontiguousarray(x.transpose(0, 3, 1, 2))
-            out.append(self._vision.run([self.spec.image_output], {"pixel_values": x})[0])
+            out.append(self.images(np.ascontiguousarray(x.transpose(0, 3, 1, 2))))
         if not out:
             return np.zeros((0, self.dim), dtype=np.float32)
         return _normalize(np.concatenate(out))
@@ -144,7 +214,7 @@ class Encoder:
 
     @property
     def dim(self) -> int:
-        return next(o for o in self._vision.get_outputs() if o.name == self.spec.image_output).shape[-1]
+        return self.images.dim
 
     def probability(self, cos: np.ndarray) -> np.ndarray:
         """The model's estimate that a frame matches the text."""

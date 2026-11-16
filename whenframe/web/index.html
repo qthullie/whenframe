@@ -71,7 +71,8 @@
 <dialog id="player">
   <video id="video" controls preload="metadata"></video>
   <div class="bar">
-    <div class="grow"><div class="name" id="p-name"></div><div class="folder" id="p-where"></div></div>
+    <div class="grow"><div class="name" id="p-name"></div><div class="folder" id="p-where"></div>
+      <div class="folder" id="p-links"></div></div>
     <button class="plain" id="again" type="button">Play the moment again</button>
     <button class="plain" id="close" type="button">Close</button>
   </div>
@@ -135,6 +136,13 @@ function play(h) {
   const v = $("video");
   $("p-name").textContent = `${h.name}, ${clock(h.start)} – ${clock(h.end)}`;
   $("p-where").textContent = h.folder;
+  $("p-links").replaceChildren(...(h.links || []).map((l) => {
+    const a = el("a", "", `Open in ${l.name}`);
+    a.href = l.url;
+    a.target = "_blank";
+    a.rel = "noopener";
+    return a;
+  }));
   v.src = `/video?id=${h.video}`;
   v.onloadedmetadata = () => { v.currentTime = h.start; v.play().catch(() => {}); };
   v.onerror = () => { $("p-where").textContent = `${h.folder} (this browser cannot play this file: open it in your video player)`; };

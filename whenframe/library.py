@@ -66,7 +66,7 @@ create table if not exists videos (
 
 class Library:
     def __init__(self, folder: str | Path, settings: Settings | None = None, encoder: Encoder | None = None,
-                 encoders: dict[str, Encoder] | None = None):  # fmt: skip
+                 encoders: dict[str, Encoder] | None = None, backend: str | None = None):  # fmt: skip
         self.folder = Path(folder)
         self.folder.mkdir(parents=True, exist_ok=True)
         cfg = self.folder / "config.json"
@@ -82,6 +82,7 @@ class Library:
         self.db = sqlite3.connect(self.folder / "library.sqlite", check_same_thread=False)
         self.db.executescript(SCHEMA)
         self._lock = threading.RLock()
+        self.backend = backend  # runtime of the image tower (encoder.BACKENDS); None: the default
         self._encoders = dict(encoders or {})
         if encoder is not None:
             self._encoders[self.settings.models[0]] = encoder
@@ -89,7 +90,7 @@ class Library:
 
     def encoder_for(self, model: str) -> Encoder:
         if model not in self._encoders:
-            self._encoders[model] = Encoder(model)
+            self._encoders[model] = Encoder(model, backend=self.backend)
         return self._encoders[model]
 
     @property
@@ -137,23 +138,26 @@ class Library:
         if not seen:
             raise VideoError(f"{path}: no frame decoded")
         times = np.concatenate(kept_times)
-        start = self._rows()
-        for model in s.models:
-            with open(self.folder / f"frames.{model}.f16", "ab") as f:
-                f.write(np.concatenate(embs[model]).tobytes())
-        with open(self.folder / "times.f32", "ab") as f:
-            f.write(times.tobytes())
         st = path.stat()
         duration = info.duration or float(seen / s.fps)
-        self.db.execute(
-            "insert into videos (path, size, mtime, duration, start, count, indexed_at) values (?, ?, ?, ?, ?, ?, ?)"
-            " on conflict(path) do update set size=excluded.size, mtime=excluded.mtime, duration=excluded.duration,"
-            " start=excluded.start, count=excluded.count, indexed_at=excluded.indexed_at",
-            (str(path), st.st_size, st.st_mtime, duration, start, len(times), time.time()),
-        )
-        self.db.commit()
-        self._cache = None
-        vid = self.db.execute("select id from videos where path = ?", (str(path),)).fetchone()[0]
+        with self._lock:  # readers see the video with all its rows, or not at all
+            start = self._rows()
+            for model in s.models:
+                with open(self.folder / f"frames.{model}.f16", "ab") as f:
+                    f.write(np.concatenate(embs[model]).tobytes())
+            with open(self.folder / "times.f32", "ab") as f:
+                f.write(times.tobytes())
+            self.db.execute(
+                "insert into videos (path, size, mtime, duration, start, count, indexed_at)"
+                " values (?, ?, ?, ?, ?, ?, ?)"
+                " on conflict(path) do update set size=excluded.size, mtime=excluded.mtime,"
+                " duration=excluded.duration, start=excluded.start, count=excluded.count,"
+                " indexed_at=excluded.indexed_at",
+                (str(path), st.st_size, st.st_mtime, duration, start, len(times), time.time()),
+            )
+            self.db.commit()
+            self._cache = None
+            vid = self.db.execute("select id from videos where path = ?", (str(path),)).fetchone()[0]
         return Video(vid, str(path), duration, start, len(times))
 
     def add_many(self, paths: Iterable[str | Path], on_done: Callable[[Path, Video | None, Exception | None], None]
@@ -168,12 +172,31 @@ class Library:
                 on_done(Path(p), v, err)
 
     def remove(self, path: str | Path) -> None:
-        self.db.execute("delete from videos where path = ?", (str(Path(path).resolve()),))
-        self.db.commit()
-        self._cache = None
+        with self._lock:
+            self.db.execute("delete from videos where path = ?", (str(Path(path).resolve()),))
+            self.db.commit()
+            self._cache = None
+
+    def dead_rows(self) -> int:
+        """Rows left behind by re-indexed or removed videos."""
+        with self._lock:
+            return self._rows() - sum(v.count for v in self.videos())
 
     def compact(self) -> None:
         """Rewrite the embedding files without rows that no video points to any more."""
+        with self._lock:
+            self._compact()
+
+    def compact_if_needed(self, share: float = 0.25) -> bool:
+        """Compact when more than `share` of the rows are dead; True if it did."""
+        with self._lock:
+            rows = self._rows()
+            if not rows or self.dead_rows() <= share * rows:
+                return False
+            self._compact()
+            return True
+
+    def _compact(self) -> None:
         videos = self.videos()
         keep = np.concatenate([np.arange(v.start, v.start + v.count) for v in videos]) if videos else np.zeros(0, int)
         for model in self.settings.models:
@@ -218,6 +241,10 @@ class Library:
 
     def offsets(self, model: str, bank: np.ndarray, beta: float) -> np.ndarray:
         """The query-bank offset of every row for one model, computed once for rows that lack one."""
+        with self._lock:
+            return self._offsets(model, bank, beta)
+
+    def _offsets(self, model: str, bank: np.ndarray, beta: float) -> np.ndarray:
         emb, _ = self._arrays(model)
         path, meta = self.folder / f"offsets.{model}.f32", self.folder / f"offsets.{model}.json"
         key = {"bank": qbank.digest(bank), "beta": beta}

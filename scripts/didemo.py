@@ -83,16 +83,18 @@ def video_names(args, ann) -> list[str]:
     return names[: args.limit] if args.limit else names
 
 
-def suffix(model: str) -> str:
-    return "" if model == MAIN else f"_{model}"
+def suffix(model: str, backend: str = "onnxruntime") -> str:
+    """How cache files are told apart: by model, and by runtime when it is not ONNX Runtime."""
+    return ("" if model == MAIN else f"_{model}") + ("" if backend == "onnxruntime" else f"_{backend}")
 
 
 def extract(args) -> None:
     ann = json.loads(Path(args.annotations).read_text())
     folder = Path(args.videos)
     names = video_names(args, ann)
-    enc = make_encoder(args.model_dir, args.model)
-    out = CACHE / f"didemo_{args.split}{suffix(args.model)}.npz"
+    enc = make_encoder(args.model_dir, args.model, args.backend)
+    out = CACHE / f"didemo_{args.split}{suffix(args.model, args.backend)}.npz"
+    main = args.model == MAIN and args.backend == "onnxruntime"  # the run the other caches are compared with
     cols = {k: [] for k in ("emb", "times", "keep", "thumbs", "starts", "counts", "durations", "cuts")}
     cost = {k: [] for k in ("decode_cpu", "decode_wall", "encode_cpu", "encode_wall", "scene_cpu", "scene_wall")}
     done, row = [], 0
@@ -106,7 +108,7 @@ def extract(args) -> None:
             c1, p1, w1 = children_cpu(), time.process_time(), time.time()
             e = enc.encode_images(frames)
             p2, w2 = time.process_time(), time.time()
-            cuts = scene_cuts(p) if args.model == MAIN else []  # shots are only needed once
+            cuts = scene_cuts(p) if main else []  # shots are only needed once
             c3, w3 = children_cpu(), time.time()
         except Exception as ex:  # noqa: BLE001 - a broken file is skipped, not fatal
             print(f"skip {name}: {ex}", file=sys.stderr)
@@ -135,14 +137,15 @@ def extract(args) -> None:
         cuts=np.array(json.dumps(cols["cuts"])), model=np.array(enc.name),
         **{k: np.array(v) for k, v in cost.items()},
     )  # fmt: skip
-    if args.model == MAIN:
+    if main:
         (ROOT / "results" / f"didemo_{args.split}_videos.txt").write_text("\n".join(done) + "\n")
     print(f"wrote {out}: {len(done)} videos, {row} frames, {time.time() - t_all:.0f} s")
 
 
-def make_encoder(model_dir: str | None, model: str = MAIN) -> Encoder:
+def make_encoder(model_dir: str | None, model: str = MAIN, backend: str = "onnxruntime") -> Encoder:
     """--model-dir points at the main model's files; other models come from the usual cache."""
-    return Encoder(model, folder=model_dir) if model_dir and model == MAIN else Encoder(model)
+    folder = model_dir if model_dir and model == MAIN else None
+    return Encoder(model, folder=folder, backend=backend)
 
 
 def load(split: str, annotations: str | None = None, extra: tuple[str, ...] = ()):
@@ -329,6 +332,8 @@ def main_args(argv: list[str] | None = None) -> argparse.Namespace:
     ap.add_argument("--train-annotations", help="training annotations, for the query bank")
     ap.add_argument("--model-dir", help="folder of the main model's files (default: the usual download cache)")
     ap.add_argument("--model", default=MAIN, help="encoder to extract with, or to calibrate")
+    ap.add_argument("--backend", default="onnxruntime", choices=["onnxruntime", "openvino"],
+                    help="runtime of the image encoder at extraction (the first two rounds: onnxruntime)")  # fmt: skip
     ap.add_argument("--round", type=int, default=1, choices=[1, 2], help="2: the second round of the protocol")
     ap.add_argument("--translator-dir", help="folder of the Opus-MT English-French export, for translate")
     ap.add_argument("--limit", type=int, default=0, help="keep the first N videos, in name order")

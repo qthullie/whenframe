@@ -39,8 +39,9 @@ def thumbnail(path: str, at: float, width: int = 480) -> bytes:
 
 
 class App:
-    def __init__(self, library: Library, config: SearchConfig | None = None):
+    def __init__(self, library: Library, config: SearchConfig | None = None, links: list | None = None):
         self.library = library
+        self.links = links or []  # objects with a name and link(path) -> url | None, e.g. jellyfin.Jellyfin
         self.searcher = Searcher(library, config)
         self.lock = threading.Lock()
         self.thumbs: OrderedDict[tuple[int, float], bytes] = OrderedDict()
@@ -59,7 +60,9 @@ class App:
             "query": query,
             "ms": round(1000 * (time.perf_counter() - t0)),
             "hits": [{"video": h.video_id, "name": Path(h.path).name, "folder": str(Path(h.path).parent),
-                      "start": h.start, "end": h.end, "at": h.at, "confidence": h.confidence} for h in hits],
+                      "start": h.start, "end": h.end, "at": h.at, "confidence": h.confidence,
+                      "links": [{"name": s.name, "url": u} for s in self.links if (u := s.link(h.path))]}
+                     for h in hits],
         }  # fmt: skip
 
     def thumb(self, video: int, at: float) -> bytes | None:
@@ -162,8 +165,9 @@ def handler(app: App) -> type[BaseHTTPRequestHandler]:
     return Handler
 
 
-def serve(library: Library, host: str = "127.0.0.1", port: int = 8765, config: SearchConfig | None = None) -> None:
-    app = App(library, config)
+def serve(library: Library, host: str = "127.0.0.1", port: int = 8765, config: SearchConfig | None = None,
+          links: list | None = None) -> None:  # fmt: skip
+    app = App(library, config, links)
     app.searcher.search("warm up", k=1)  # loads the text model and the bank offsets before the first visitor
     httpd = ThreadingHTTPServer((host, port), handler(app))
     print(f"whenframe: searching {len(app.paths())} videos at http://{host}:{port} (Ctrl-C to stop)", flush=True)
