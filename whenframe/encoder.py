@@ -5,8 +5,9 @@ trained on each pair independently, so its score is an absolute "does this
 match" that can be compared across videos. The ONNX export leaves the scale and
 bias out; they are those of the original google/siglip2 checkpoint.
 
-MobileCLIP-S2 was trained with a softmax and has no such calibration: its scale
-and bias were fitted on DiDeMo training pairs (`scripts/didemo.py calibrate`).
+MobileCLIP-S2 was trained with a softmax and has no such calibration. Its scale
+and bias map its cosine onto SigLIP's logit, fitted on DiDeMo training pairs
+(`scripts/didemo.py calibrate`), so every mode shows confidences on one scale.
 It takes about 2.3 times less CPU per frame (docs/RESULTS.md).
 """
 
@@ -46,7 +47,7 @@ class ModelSpec:
 MODELS = {
     "siglip2-base": ModelSpec("onnx-community/siglip2-base-patch16-224-ONNX", 224, 112.6689, -16.7717),
     "mobileclip-s2": ModelSpec(
-        "Xenova/mobileclip_s2", 256, 1.0, 0.0, pixels="unit", image_output="image_embeds",
+        "Xenova/mobileclip_s2", 256, 66.86, -19.567, pixels="unit", image_output="image_embeds",
         text_output="text_embeds", text_length=77, pad_token=None, lowercase=False,
     ),
 }  # fmt: skip

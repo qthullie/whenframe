@@ -35,6 +35,8 @@
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
           cursor: pointer; text-align: left; padding: 0; color: inherit; font: inherit; }
   .card:hover, .card:focus-visible { border-color: var(--accent); outline: none; }
+  .card.unlikely { opacity: .5; }
+  .card.unlikely:hover, .card.unlikely:focus-visible { opacity: 1; }
   .shot { position: relative; aspect-ratio: 16 / 9; background: var(--line); }
   .shot img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .when { position: absolute; left: 8px; bottom: 8px; background: var(--shade); color: #fff;
@@ -111,7 +113,7 @@ function render(data) {
     ? `${data.hits.length} moments in ${data.ms} ms`
     : "No video indexed yet: run whenframe index <folder>, then reload.";
   data.hits.forEach((h, i) => {
-    const card = el("button", "card");
+    const card = el("button", h.confidence < 0.05 ? "card unlikely" : "card");
     card.type = "button";
     const shot = el("div", "shot");
     const img = el("img");
