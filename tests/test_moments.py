@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from whenframe.moments import on_grid, smooth, spans, windows
 
@@ -52,3 +53,32 @@ def test_windows_are_centred_on_the_best_frames_and_do_not_repeat_them():
     first, second = windows(times, values, duration=30.0, length=10.0, count=2)
     assert (first.start, first.end, first.peak) == (0.0, 10.0, 1.0)  # 4.5 +- 5, kept inside the video
     assert (second.start, second.end, second.peak) == (15.5, 25.5, 0.8)  # 6 is too close to 4
+
+
+def test_the_search_defaults_are_the_tuned_ones():
+    import json
+    from pathlib import Path
+
+    from whenframe import SearchConfig, Searcher
+    from whenframe.encoder import MODELS
+
+    tuned = Path(__file__).resolve().parents[1] / "results" / "didemo_tuned.json"
+    if not tuned.exists():
+        pytest.skip("no tuning run")
+    t = json.loads(tuned.read_text())
+    windows, spans = t["whenframe_dedup"]["params"], t["whenframe_bank"]["params"]
+    c = SearchConfig()
+    assert (c.window, c.per_video) == (windows["window"], windows["per_video"])
+    assert (c.step, c.sigma, c.alpha, c.contrast, c.min_length) == tuple(
+        spans[k] for k in ("step", "sigma", "alpha", "contrast", "min_length")
+    )
+    spec = MODELS["siglip2-base"]
+    assert (spec.bank_beta, spec.bank_lambda) == (windows["beta"], windows["lam"])
+    assert (spec.bank_beta, spec.spans_lambda) == (spans["beta"], spans["lam"])
+
+    class Bare(Searcher):  # only the parameters, no library
+        def __init__(self, config):
+            self.config = config
+
+    assert Bare(SearchConfig())._tuned("siglip2-base") == (50.0, 1.0)
+    assert Bare(SearchConfig(moments="spans"))._tuned("siglip2-base") == (50.0, 0.5)

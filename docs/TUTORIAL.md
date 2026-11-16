@@ -86,6 +86,20 @@ per hour of video on 252 YouCook2 cooking videos, where it raised the right step
 among the first five moments from 12.3 % to 18.8 % ([RESULTS.md](RESULTS.md),
 third round); the time depends on how much is said.
 
+### Long moments
+
+```bash
+whenframe search --moments spans "add the onions to the pan"
+whenframe serve --moments spans
+```
+
+By default a moment lasts 10 seconds, around the frames that match best. With
+`--moments spans` it lasts as long as the frames keep matching, which suits
+long videos whose moments last longer: on the YouCook2 cooking videos the right
+step was among the first five moments 19.4 % of the time instead of 12.3 %, and
+25.8 % with speech ([RESULTS.md](RESULTS.md), fourth round). On DiDeMo's short
+home videos, the fixed windows did better.
+
 ## Keep the library up to date
 
 ```bash

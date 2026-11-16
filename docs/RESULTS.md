@@ -443,6 +443,44 @@ instead of 12.3 % at IoU >= 0.5, 38.6 % instead of 26.7 % at IoU >= 0.3, and its
 best frame falls inside the step 47.6 % of the time instead of 34.2 %. The first
 moment is right twice as often (10.7 % against 5.2 %). Speech was added to the
 fixed windows, as the protocol says; added to the adaptive spans, better on
-these long steps, it was not measured. In home videos, what is said matches a
-description less often than a cook's commentary does, so the gain there is
-likely smaller; it was not measured either.
+these long steps, it was measured in the fourth round, below. In home videos,
+what is said matches a description less often than a cook's commentary does,
+so the gain there is likely smaller; it was not measured.
+
+## Fourth round
+
+The fourth round of the protocol ([PROTOCOL.md](PROTOCOL.md)), written part by
+part, each before its test run.
+
+<!-- table round4-criteria -->
+| criterion (fixed before its test run) | measured on test | met |
+|---|---|---|
+| 13. speech with adaptive spans beats speech with fixed windows by at least 2 points (YouCook2) | +7.0 points | yes |
+<!-- /table -->
+
+### Speech with adaptive spans
+
+The same 1,331 YouCook2 test steps, searched among the 252 videos. The weight of
+speech was chosen again for the adaptive spans, on the 619 tuning steps: the
+same weight, 0.005, came out best.
+
+<!-- table youcook2-round4 -->
+| method | R1 IoU>=0.3 | R1 IoU>=0.5 | R1 IoU>=0.7 | mean IoU | all 252 videos: R@1 IoU>=0.5 | R@5 IoU>=0.5 | R@5, best frame inside the step |
+|---|---|---|---|---|---|---|---|
+| adaptive spans + query bank | 46.3 | 26.8 | 12.7 | 29.4 | 8.6 | 19.4 | 35.8 |
+| fixed windows + query bank + speech (third round) | 47.8 | 23.8 | 8.2 | 29.0 | 10.7 | 18.8 | 47.6 |
+| adaptive spans + query bank + speech | 52.7 | 30.0 | 12.1 | 33.0 | 14.4 | 25.8 | 50.0 |
+<!-- /table -->
+
+<!-- table youcook2-round4-wins -->
+Against speech with fixed windows, speech with adaptive spans moves 129 test steps into the first five moments and 36 out of them (sign test p = 1.7e-13); against the adaptive spans without speech, 174 in and 89 out (p = 1.8e-07).
+<!-- /table -->
+
+Spans grow to the length of what the frames show, and speech tells which of the
+cook's gestures is the one described: together, the right step is among the
+first five moments 25.8 % of the time, against 18.8 % for speech with fixed
+windows and 19.4 % for the spans alone, and the first moment is right 14.4 % of
+the time. In a given video, the step is placed at IoU >= 0.5 30.0 % of the
+time. In the tool, `--moments spans` places spans instead of windows, with the
+query bank's strength they were tuned with on DiDeMo (0.5 instead of 1); the
+fixed windows stay the default, as they did better on DiDeMo's short moments.

@@ -24,6 +24,7 @@ LABEL = {
     "whenframe_dedup": "default search, repeats skipped",
 }
 PRIMARY = "R@5 IoU>=0.5"
+YC = PRIMARY  # the same metric on YouCook2
 
 
 def pct(x: float) -> str:
@@ -272,6 +273,44 @@ def round3_tables() -> dict[str, str]:
     return out
 
 
+def round4_tables() -> dict[str, str]:
+    """Whatever of the fourth round has been run: speech with adaptive spans first."""
+    out, rows = {}, []
+    f = RESULTS / "youcook2_test_round4.json"
+    if f.exists():
+        r = json.loads(f.read_text())
+        windows, spans = r["speech_bank"]["corpus"][YC], r["speech_spans"]["corpus"][YC]
+        rows.append(["13. speech with adaptive spans beats speech with fixed windows by at least 2 points (YouCook2)",
+                     f"{100 * (spans - windows):+.1f} points", spans - windows >= 0.02])  # fmt: skip
+        labels = {
+            "whenframe_bank": "adaptive spans + query bank",
+            "speech_bank": "fixed windows + query bank + speech (third round)",
+            "speech_spans": "adaptive spans + query bank + speech",
+        }
+        out["youcook2-round4"] = table(
+            ["method", "R1 IoU>=0.3", "R1 IoU>=0.5", "R1 IoU>=0.7", "mean IoU",
+             "all 252 videos: R@1 IoU>=0.5", "R@5 IoU>=0.5", "R@5, best frame inside the step"],
+            [[label, pct(r[m]["single"]["R1 IoU>=0.3"]), pct(r[m]["single"]["R1 IoU>=0.5"]),
+              pct(r[m]["single"]["R1 IoU>=0.7"]), pct(r[m]["single"]["mIoU"]), pct(r[m]["corpus"]["R@1 IoU>=0.5"]),
+              pct(r[m]["corpus"][YC]), pct(r[m]["corpus_inside"]["R@5"])] for m, label in labels.items()],
+        )  # fmt: skip
+        w, a = r["vs_speech_bank"], r["vs_whenframe_bank"]
+        out["youcook2-round4-wins"] = (
+            f"Against speech with fixed windows, speech with adaptive spans moves {w['wins']} test steps into the "
+            f"first five moments and {w['losses']} out of them (sign test p = {w['p']:.2g}); against the adaptive "
+            f"spans without speech, {a['wins']} in and {a['losses']} out (p = {a['p']:.2g})."
+        )
+        out["readme-youcook2"] = (
+            f"On 252 YouCook2 cooking videos (5 minutes on average, searched all at once), the right step is among "
+            f"the first five moments {pct(r['whenframe_bank']['corpus'][YC])} % of the time with adaptive spans "
+            f"(`--moments spans`), and {pct(spans)} % when what is said is searched too (indexed with `--speech`)."
+        )
+    if rows:
+        out["round4-criteria"] = table(["criterion (fixed before its test run)", "measured on test", "met"],
+                                       [[n, m, "yes" if ok else "no"] for n, m, ok in rows])  # fmt: skip
+    return out
+
+
 def charades_table() -> str | None:
     f = RESULTS / "charades_test.json"
     if not f.exists():
@@ -339,6 +378,7 @@ def main() -> int:
     if rerank:
         tables["didemo-rerank"] = rerank
     tables.update(round3_tables())
+    tables.update(round4_tables())  # after the third round's: replaces its README sentence on YouCook2
     f2 = RESULTS / "didemo_test_round2.json"
     if f2.exists():
         tables.update(round2_tables(json.loads(f2.read_text()), json.loads(f.read_text()) if f.exists() else None))

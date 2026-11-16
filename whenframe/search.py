@@ -76,9 +76,14 @@ class Searcher:
         self._offsets = {}
 
     def _tuned(self, model: str) -> tuple[float, float]:
+        """The query bank's beta and strength for this model, as tuned for the kind of moments placed."""
         spec = MODELS.get(model)
         beta = self.config.beta or (spec.bank_beta if spec else 50.0)
-        return beta, (spec.bank_lambda if spec else 1.0)
+        if spec is None:
+            return beta, 1.0
+        if self.config.moments == "spans" and spec.spans_lambda is not None:
+            return beta, spec.spans_lambda
+        return beta, spec.bank_lambda
 
     def offsets(self, model: str) -> np.ndarray | None:
         if self.config.bank <= 0 or self.banks.get(model) is None:

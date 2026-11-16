@@ -36,7 +36,18 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from benchmark import CORPUS_KS, ENSEMBLE, MAIN, METHODS, SECOND, Frozen, cost_curve, evaluate_all, grid_search, run  # noqa: E402,E501
+from benchmark import (  # noqa: E402
+    CORPUS_KS,
+    ENSEMBLE,
+    MAIN,
+    METHODS,
+    SECOND,
+    Frozen,
+    cost_curve,
+    evaluate_all,
+    grid_search,
+    run,
+)
 from translate import Translator  # noqa: E402
 
 from whenframe.encoder import Encoder  # noqa: E402

@@ -65,7 +65,7 @@ def cmd_index(args) -> int:
 
 def cmd_search(args) -> int:
     lib = Library(args.library)
-    found = Searcher(lib, SearchConfig()).search(" ".join(args.query), k=args.k)
+    found = Searcher(lib, SearchConfig(moments=args.moments)).search(" ".join(args.query), k=args.k)
     if not found:
         print("no video indexed yet: run `whenframe index <folder>` first")
         return 1
@@ -130,7 +130,7 @@ def cmd_serve(args) -> int:
             print("--jellyfin needs an API key in $JELLYFIN_API_KEY (Jellyfin: Dashboard, API Keys)", file=sys.stderr)
             return 2
         links.append(Jellyfin(args.jellyfin, key, path_pairs(args.jellyfin_path)))
-    serve(lib, args.host, args.port, links=links)
+    serve(lib, args.host, args.port, SearchConfig(moments=args.moments), links=links)
     return 0
 
 
@@ -159,6 +159,11 @@ def main(argv: list[str] | None = None) -> int:
                        help="also transcribe what is said, with this Whisper model (pip install whenframe[speech]); "
                             "kept for the library from then on")  # fmt: skip
 
+    def moment_options(p: argparse.ArgumentParser) -> None:
+        p.add_argument("--moments", choices=["windows", "spans"], default="windows",
+                       help="windows: 10 seconds around the best frames (default, best on short clips); spans: "
+                            "as long as the frames match, better on long videos and with --speech")  # fmt: skip
+
     def watching_options(p: argparse.ArgumentParser) -> None:
         p.add_argument("--every", type=float, default=300.0, help="seconds between two passes (default 300)")
         p.add_argument("--settle", type=float, default=60.0,
@@ -178,10 +183,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("query", nargs="+")
     p.add_argument("-k", type=int, default=10, help="number of moments to show")
     p.add_argument("--all", action="store_true", help="also show the moments the model is 0 %% sure of")
+    moment_options(p)
     p.set_defaults(fn=cmd_search)
     p = sub.add_parser("serve", help="a search page in the browser, with the model kept loaded")
     p.add_argument("--host", default="127.0.0.1", help="address to listen on (default: this computer only)")
     p.add_argument("--port", type=int, default=8765)
+    moment_options(p)
     p.add_argument("--watch", nargs="+", metavar="FOLDER", help="also keep the library in step with these folders")
     watching_options(p)
     p.add_argument("--jellyfin", metavar="URL", help="link each moment to its video in this Jellyfin server "

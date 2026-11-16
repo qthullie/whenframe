@@ -131,7 +131,7 @@ places the moment in a given video 45.7 % of the time at IoU >= 0.5; a
 sentence, is reported at 56.8 %.
 
 <!-- table readme-youcook2 -->
-On 252 YouCook2 cooking videos (5 minutes on average, searched all at once), the right step is among the first five moments 12.3 % of the time, and 18.8 % when what is said is searched too (`--speech`).
+On 252 YouCook2 cooking videos (5 minutes on average, searched all at once), the right step is among the first five moments 19.4 % of the time with adaptive spans (`--moments spans`), and 25.8 % when what is said is searched too (indexed with `--speech`).
 <!-- /table -->
 
 Third round (OpenVINO, long videos, what is said):
@@ -145,6 +145,14 @@ Third round (OpenVINO, long videos, what is said):
 | 12. transcription takes at most 15 min of CPU time per hour of video | 8.1 min | yes |
 <!-- /table -->
 
+Fourth round, under way (each part fixed before its test run):
+
+<!-- table round4-criteria -->
+| criterion (fixed before its test run) | measured on test | met |
+|---|---|---|
+| 13. speech with adaptive spans beats speech with fixed windows by at least 2 points (YouCook2) | +7.0 points | yes |
+<!-- /table -->
+
 All tables, the costs and the figures: [docs/RESULTS.md](docs/RESULTS.md).
 
 ## Limits
@@ -155,8 +163,9 @@ All tables, the costs and the figures: [docs/RESULTS.md](docs/RESULTS.md).
 - It was measured on short personal videos (DiDeMo, their first 30 seconds) and
   on cooking videos of about 5 minutes (YouCook2); recordings of an hour or more
   were not measured.
-- On YouCook2's long recipe steps, adaptive spans did better than the default
-  fixed windows, which were chosen on DiDeMo and stay the default.
+- On YouCook2's long recipe steps, adaptive spans (`--moments spans`) did
+  better than the default fixed windows, which were chosen on DiDeMo and stay
+  the default.
 - It cannot tell apart videos that show the same thing: among Charades'
   1,334 look-alike videos of people at home, the right one is in the first five
   results 4 % of the time.

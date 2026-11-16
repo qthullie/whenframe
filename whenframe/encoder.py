@@ -52,10 +52,12 @@ class ModelSpec:
     lowercase: bool = True  # SigLIP was trained on lower-cased text; CLIP tokenizers lower-case by themselves
     bank_beta: float = 50.0  # query-bank correction, as tuned on DiDeMo training videos
     bank_lambda: float = 1.0
+    spans_lambda: float | None = None  # its strength when moments are adaptive spans; None: as bank_lambda
 
 
 MODELS = {
-    "siglip2-base": ModelSpec("onnx-community/siglip2-base-patch16-224-ONNX", 224, 112.6689, -16.7717),
+    "siglip2-base": ModelSpec("onnx-community/siglip2-base-patch16-224-ONNX", 224, 112.6689, -16.7717,
+                              spans_lambda=0.5),
     "siglip2-b32": ModelSpec("onnx-community/siglip2-base-patch32-256-ONNX", 256, 111.8326, -16.7669,
                              bank_lambda=0.5),
     # research use only (Apple Machine Learning Research Model licence)
