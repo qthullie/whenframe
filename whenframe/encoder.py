@@ -63,6 +63,8 @@ def _session(path: Path, threads: int | None) -> ort.InferenceSession:
     if threads:
         opts.intra_op_num_threads = threads
     opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+    # idle threads sleep instead of spinning: as fast here, and less CPU burnt on a shared machine
+    opts.add_session_config_entry("session.intra_op.allow_spinning", "0")
     return ort.InferenceSession(str(path), opts, providers=["CPUExecutionProvider"])
 
 

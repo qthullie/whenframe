@@ -23,7 +23,7 @@ from pathlib import Path
 import numpy as np
 
 from .encoder import DEFAULT_MODEL, Encoder
-from .video import VideoError, drop_repeats, probe, sample_frames
+from .video import RepeatFilter, VideoError, iter_frames, probe, thumbnails
 
 
 @dataclass
@@ -98,28 +98,34 @@ class Library:
             return None
         info = probe(path)
         s = self.settings
-        times, frames = sample_frames(path, s.fps, self.encoder.size)
-        if len(frames) == 0:
+        repeats = RepeatFilter(s.dedup, s.max_gap) if s.dedup > 0 else None
+        embs, kept_times, seen = [], [], 0
+        for times, frames in iter_frames(path, s.fps, self.encoder.size):
+            seen += len(frames)
+            keep = repeats(thumbnails(frames)) if repeats else np.arange(len(frames))
+            if len(keep):
+                embs.append(self.encoder.encode_images(frames[keep]).astype(np.float16))
+                kept_times.append(times[keep].astype(np.float32))
+        if not seen:
             raise VideoError(f"{path}: no frame decoded")
-        keep = drop_repeats(frames, s.dedup, s.max_gap) if s.dedup > 0 else np.arange(len(frames))
-        emb = self.encoder.encode_images(frames[keep]).astype(np.float16)
+        emb, times = np.concatenate(embs), np.concatenate(kept_times)
         start = self._rows()
         with open(self.folder / "frames.f16", "ab") as f:
             f.write(emb.tobytes())
         with open(self.folder / "times.f32", "ab") as f:
-            f.write(times[keep].astype(np.float32).tobytes())
+            f.write(times.tobytes())
         st = path.stat()
-        duration = info.duration or float(len(frames) / s.fps)
+        duration = info.duration or float(seen / s.fps)
         self.db.execute(
             "insert into videos (path, size, mtime, duration, start, count, indexed_at) values (?, ?, ?, ?, ?, ?, ?)"
             " on conflict(path) do update set size=excluded.size, mtime=excluded.mtime, duration=excluded.duration,"
             " start=excluded.start, count=excluded.count, indexed_at=excluded.indexed_at",
-            (str(path), st.st_size, st.st_mtime, duration, start, len(keep), time.time()),
+            (str(path), st.st_size, st.st_mtime, duration, start, len(times), time.time()),
         )
         self.db.commit()
         self._cache = None
         vid = self.db.execute("select id from videos where path = ?", (str(path),)).fetchone()[0]
-        return Video(vid, str(path), duration, start, len(keep))
+        return Video(vid, str(path), duration, start, len(times))
 
     def add_many(self, paths: Iterable[str | Path], on_done: Callable[[Path, Video | None, Exception | None], None]
                  | None = None) -> None:  # fmt: skip

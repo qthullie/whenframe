@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -45,46 +46,84 @@ def probe(path: str | Path) -> VideoInfo:
     return VideoInfo(duration, int(s.get("width", 0)), int(s.get("height", 0)))
 
 
-def sample_frames(path: str | Path, fps: float = 1.0, size: int = 224) -> tuple[np.ndarray, np.ndarray]:
-    """Frames at a fixed rate, squashed to size x size as the encoder expects.
+def iter_frames(path: str | Path, fps: float = 1.0, size: int = 224, chunk: int = 256):
+    """Frames at a fixed rate, squashed to size x size as the encoder expects, `chunk` at a time.
 
-    Returns (times, frames): times in seconds, frames as uint8 (n, size, size, 3).
+    Yields (times, frames): times in seconds, frames as uint8 (n, size, size, 3).
     The fps filter takes the frame nearest to each tick of the new clock, so the
-    i-th output frame stands for the instant i / fps.
+    i-th output frame stands for the instant i / fps. Memory stays bounded by
+    the chunk, whatever the length of the video.
     """
     cmd = [
         "ffmpeg", "-v", "error", "-nostdin", "-i", str(path), "-an", "-sn",
         "-vf", f"fps={fps},scale={size}:{size}:flags=bilinear",
         "-f", "rawvideo", "-pix_fmt", "rgb24", "-",
     ]  # fmt: skip
-    out = subprocess.run(cmd, capture_output=True)
-    if out.returncode != 0:
-        raise VideoError(f"{path}: {out.stderr.decode(errors='replace').strip() or 'ffmpeg failed'}")
     frame_bytes = size * size * 3
-    n = len(out.stdout) // frame_bytes
-    frames = np.frombuffer(out.stdout[: n * frame_bytes], dtype=np.uint8).reshape(n, size, size, 3)
-    return np.arange(n) / fps, frames
+    done = 0
+    with tempfile.TemporaryFile() as err, subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=err) as proc:
+        while True:
+            buf = proc.stdout.read(frame_bytes * chunk)
+            n = len(buf) // frame_bytes
+            if n:
+                frames = np.frombuffer(buf[: n * frame_bytes], dtype=np.uint8).reshape(n, size, size, 3)
+                yield np.arange(done, done + n) / fps, frames
+                done += n
+            if n < chunk:
+                break
+        if proc.wait() != 0:
+            err.seek(0)
+            raise VideoError(f"{path}: {err.read().decode(errors='replace').strip() or 'ffmpeg failed'}")
+
+
+def sample_frames(path: str | Path, fps: float = 1.0, size: int = 224) -> tuple[np.ndarray, np.ndarray]:
+    """All frames of `iter_frames` at once."""
+    parts = list(iter_frames(path, fps, size))
+    if not parts:
+        return np.zeros(0), np.zeros((0, size, size, 3), dtype=np.uint8)
+    return np.concatenate([t for t, _ in parts]), np.concatenate([f for _, f in parts])
+
+
+def thumbnails(frames: np.ndarray) -> np.ndarray:
+    """16x16 grey versions of the frames, float32 on the 0-255 scale."""
+    n, h, w, _ = frames.shape
+    kh, kw = h // 16, w // 16
+    grey = frames[:, : kh * 16, : kw * 16].mean(axis=3, dtype=np.float32)
+    return grey.reshape(n, 16, kh, 16, kw).mean(axis=(2, 4))
+
+
+class RepeatFilter:
+    """Decides which frames are worth encoding, chunk after chunk of one video.
+
+    A frame is kept when it differs from the last kept one (mean absolute
+    difference of the thumbnails above `threshold`), or when `max_gap` frames
+    in a row were skipped. Still shots, which are common in home videos, then
+    cost one embedding instead of one per second.
+    """
+
+    def __init__(self, threshold: float = 4.0, max_gap: int = 4):
+        self.threshold = threshold
+        self.max_gap = max_gap
+        self._last = None
+        self._skipped = 0
+
+    def __call__(self, thumbs: np.ndarray) -> np.ndarray:
+        keep = []
+        for i, t in enumerate(thumbs):
+            if self._last is None or self._skipped >= self.max_gap or np.abs(t - self._last).mean() > self.threshold:
+                keep.append(i)
+                self._last = t
+                self._skipped = 0
+            else:
+                self._skipped += 1
+        return np.asarray(keep, dtype=np.int64)
 
 
 def drop_repeats(frames: np.ndarray, threshold: float = 4.0, max_gap: int = 4) -> np.ndarray:
-    """Indices of the frames worth encoding.
-
-    A frame is kept when it differs from the last kept one (mean absolute
-    difference of 16x16 grey thumbnails, 0-255 scale, above `threshold`), or
-    when `max_gap` frames have been skipped in a row. Still shots, which are
-    common in home videos, then cost one embedding instead of one per second.
-    """
+    """Indices of the frames of a whole video that `RepeatFilter` keeps."""
     if len(frames) == 0:
         return np.zeros(0, dtype=np.int64)
-    n, h, w, _ = frames.shape
-    grey = frames.mean(axis=3)
-    k = h // 16
-    thumbs = grey[:, : k * 16, : k * 16].reshape(n, 16, k, 16, k).mean(axis=(2, 4))
-    keep = [0]
-    for i in range(1, n):
-        if np.abs(thumbs[i] - thumbs[keep[-1]]).mean() > threshold or i - keep[-1] > max_gap:
-            keep.append(i)
-    return np.asarray(keep, dtype=np.int64)
+    return RepeatFilter(threshold, max_gap)(thumbnails(frames))
 
 
 def find_videos(paths: list[str | Path]) -> list[Path]:

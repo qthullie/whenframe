@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 
 from whenframe import Library, SearchConfig, Searcher, Settings
-from whenframe.video import drop_repeats, sample_frames
+from whenframe.video import RepeatFilter, drop_repeats, iter_frames, sample_frames, thumbnails
 
 pytestmark = pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="needs ffmpeg")
 
@@ -58,6 +58,16 @@ def test_sampling_and_repeats(videos):
     assert len(frames) == 15 and times[3] == 3.0
     keep = drop_repeats(frames, threshold=4.0, max_gap=100)
     assert keep.tolist() == [0, 6, 9]  # grey, then red, then grey again
+
+
+def test_frames_read_in_chunks_give_the_same_frames_and_choices(videos):
+    times, frames = sample_frames(videos / "a.mp4", fps=1.0, size=32)
+    repeats = RepeatFilter(threshold=4.0, max_gap=2)
+    chunks = list(iter_frames(videos / "a.mp4", fps=1.0, size=32, chunk=4))
+    assert [len(f) for _, f in chunks] == [4, 4, 4, 3]
+    assert np.array_equal(np.concatenate([f for _, f in chunks]), frames)
+    kept = np.concatenate([t[repeats(thumbnails(f))] for t, f in chunks])
+    assert kept.tolist() == times[drop_repeats(frames, threshold=4.0, max_gap=2)].tolist()
 
 
 def test_search_finds_the_right_video_and_moment(videos, tmp_path):
