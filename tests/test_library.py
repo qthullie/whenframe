@@ -63,6 +63,16 @@ def test_sampling_and_repeats(videos):
     assert keep.tolist() == [0, 6, 9]  # grey, then red, then grey again
 
 
+def test_onnx_runtime_telemetry_is_off_unless_asked_for():
+    import os
+    import sys
+
+    env = {k: v for k, v in os.environ.items() if k != "ORT_DISABLE_TELEMETRY"}
+    code = "import os, whenframe; print(os.environ.get('ORT_DISABLE_TELEMETRY'))"
+    out = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True, check=True)
+    assert out.stdout.strip() == "1"
+
+
 def test_reading_can_stop_early(videos):
     times, frames = sample_frames(videos / "a.mp4", fps=1.0, size=32, seconds=5)
     assert len(frames) == 5 and times[-1] == 4.0

@@ -17,9 +17,12 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
-import numpy as np
-import onnxruntime as ort
-from tokenizers import Tokenizer
+# ONNX Runtime 1.29 sends usage telemetry to Microsoft unless told not to; nothing should leave the machine
+os.environ.setdefault("ORT_DISABLE_TELEMETRY", "1")
+
+import numpy as np  # noqa: E402
+import onnxruntime as ort  # noqa: E402
+from tokenizers import Tokenizer  # noqa: E402
 
 
 @dataclass(frozen=True)

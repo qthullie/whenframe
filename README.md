@@ -31,6 +31,10 @@ whenframe search "the dog jumps into the pool"
 The first run downloads the SigLIP 2 model (1.5 GB). Indexing again only reads
 new or modified videos. More in [docs/TUTORIAL.md](docs/TUTORIAL.md).
 
+Nothing else goes over the network. ONNX Runtime 1.29 sends usage telemetry to
+Microsoft by default; whenframe sets `ORT_DISABLE_TELEMETRY=1` before loading
+it (checked by logging every outbound connection of an indexing and search run).
+
 ## How it works
 
 1. ffmpeg reads one frame per second; frames that barely differ from the last
