@@ -50,7 +50,7 @@ per-frame scores become ranked moments.
 
 | Method | Moments | Ranking |
 | --- | --- | --- |
-| `frame_window` | a fixed window around the best frame of the video | best frame score |
+| `frame_window` | a fixed window around the best frame of the video; since change 8, up to three windows, each around the best frame at least a window away from the previous ones | score of that frame |
 | `scene` | shots found by ffmpeg's scene detector (threshold 0.3) | score of the frame in the middle of the shot |
 | `whenframe` | grown around peaks of the smoothed curve until it falls back towards the video's median | peak score + contrast x (peak - median) |
 | `whenframe_dedup` | as `whenframe`, using only frames that differ from the previous kept one | same |
@@ -121,6 +121,30 @@ training or test videos was computed.
    right. Test videos are decoded up to 30 s. The tuning videos had already
    been extracted whole when this was noticed, and are cut to 30 s when
    loaded. Costs are per hour of video decoded.
+
+8. **After the first tuning run.** On the tuning videos (the test split was
+   not touched), `whenframe` reached 22.3 % on the primary metric and
+   `frame_window` 24.5 % (`results/didemo_tuned_first_run.json`). Both found the
+   right video equally often (48.9 % in the first five); they differed in
+   placing the moment. 77 % of the reference moments are a single 5-second
+   segment, so IoU >= 0.5 needs a moment of at most 10 s around it, and every
+   leading `whenframe` combination sat at the largest minimum length allowed,
+   5 s. With a 10-second minimum, `whenframe` reached 28.4 %, but a fixed
+   10-second window allowed three windows per video reached 29.0 %: the gain
+   came from proposing several moments per video, not from their adaptive
+   length. Before the second tuning run, therefore:
+   - `frame_window` may propose up to three windows per video, window 5 to
+     11 s: all 21 combinations are tried;
+   - `whenframe` may use a minimum length of 5, 7.5 or 10 s, and its grid is
+     narrowed to what the first run found useful (sigma 0, 1 or 2; alpha 0.5
+     to 0.8; contrast 0, 0.5 or 1; two or three moments per video): 60 of its
+     216 combinations, drawn at random;
+   - `scene` and the query-bank parameters are unchanged.
+   Criteria 1 to 4 are unchanged; criterion 1 is judged against the stronger
+   `frame_window`. The default search of the tool is the method with the best
+   primary metric on the tuning videos in the second run, among
+   `frame_window`, `whenframe` and `whenframe_bank`, and is written here
+   before the test run.
 
 ## Changes after the first test run
 

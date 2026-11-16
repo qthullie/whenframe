@@ -1,0 +1,56 @@
+{
+ "frame_window": {
+  "params": {
+   "window": 10.0
+  },
+  "train_score": 0.2447623914154318,
+  "tried": 6
+ },
+ "scene": {
+  "params": {
+   "per_video": 1
+  },
+  "train_score": 0.036791006642820645,
+  "tried": 3
+ },
+ "whenframe": {
+  "params": {
+   "step": 0.5,
+   "sigma": 0.0,
+   "alpha": 0.7,
+   "contrast": 0.0,
+   "min_length": 5.0,
+   "per_video": 3
+  },
+  "train_score": 0.2227899846704139,
+  "tried": 60
+ },
+ "whenframe_bank": {
+  "params": {
+   "step": 0.5,
+   "sigma": 0.0,
+   "alpha": 0.7,
+   "contrast": 0.0,
+   "min_length": 5.0,
+   "per_video": 3,
+   "beta": 50.0,
+   "lam": 0.5
+  },
+  "train_score": 0.23198773633111905,
+  "tried": 12
+ },
+ "whenframe_dedup": {
+  "params": {
+   "step": 0.5,
+   "sigma": 0.0,
+   "alpha": 0.7,
+   "contrast": 0.0,
+   "min_length": 5.0,
+   "per_video": 3
+  },
+  "train_score": 0.2227899846704139,
+  "tried": 60
+ },
+ "queries": 1957,
+ "videos": 500
+}

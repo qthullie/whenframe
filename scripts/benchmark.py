@@ -3,7 +3,7 @@
 All methods see the same frame embeddings and the same query embeddings; they
 only differ in how they turn per-frame scores into ranked moments.
 
-    frame_window     the best frame of each video, with a fixed window around it
+    frame_window     fixed windows around the best frames of each video
     scene            shots from ffmpeg's scene detector, each scored by its middle
                      frame (in the spirit of tools that index one keyframe per shot)
     whenframe        moments grown around peaks of the smoothed curve, ranked by
@@ -94,11 +94,20 @@ def iou(a: tuple[float, float], b: tuple[float, float]) -> float:
 
 # ---------------------------------------------------------------- methods
 def frame_window(f: Frozen, scores: np.ndarray, v: int, p: dict) -> list[tuple[float, float, float]]:
+    """Fixed windows around the best frame, then around the best frame at least a window away, and so on."""
     s, c = f.starts[v], f.counts[v]
-    i = int(np.argmax(scores[s : s + c]))
-    t, w, d = float(f.times[s + i]), p["window"], float(f.durations[v])
-    start = min(max(0.0, t + 0.5 - w / 2), max(0.0, d - w))
-    return [(start, min(d, start + w), float(scores[s + i]))]
+    times, left = f.times[s : s + c], scores[s : s + c].astype(np.float64)
+    w, d = p["window"], float(f.durations[v])
+    out = []
+    for _ in range(p.get("per_video", 1)):
+        i = int(np.argmax(left))
+        if left[i] == -np.inf:
+            break
+        t = float(times[i])
+        start = min(max(0.0, t + 0.5 - w / 2), max(0.0, d - w))
+        out.append((start, min(d, start + w), float(scores[s + i])))
+        left[np.abs(times - t) < w] = -np.inf
+    return out
 
 
 def scene(f: Frozen, scores: np.ndarray, v: int, p: dict) -> list[tuple[float, float, float]]:
@@ -125,11 +134,12 @@ def whenframe(f: Frozen, scores: np.ndarray, v: int, p: dict) -> list[tuple[floa
 PREDICT = {"frame_window": frame_window, "scene": scene, "whenframe": whenframe, "whenframe_dedup": whenframe,
            "whenframe_bank": whenframe}  # fmt: skip
 
+# The grids of the second tuning run (see "Changes made before the first test run" in docs/PROTOCOL.md).
 SPACE = {
-    "frame_window": {"window": [2.0, 3.0, 5.0, 7.0, 10.0, 15.0]},
+    "frame_window": {"window": [5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0], "per_video": [1, 2, 3]},
     "scene": {"per_video": [1, 2, 3]},
-    "whenframe": {"step": [0.5], "sigma": [0.0, 1.0, 2.0, 4.0], "alpha": [0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
-                  "contrast": [0.0, 0.5, 1.0, 2.0], "min_length": [2.0, 5.0], "per_video": [1, 2, 3]},
+    "whenframe": {"step": [0.5], "sigma": [0.0, 1.0, 2.0], "alpha": [0.5, 0.6, 0.7, 0.8],
+                  "contrast": [0.0, 0.5, 1.0], "min_length": [5.0, 7.5, 10.0], "per_video": [2, 3]},
     # tried on top of the tuned whenframe parameters
     "whenframe_bank": {"beta": [10.0, 20.0, 50.0, 100.0], "lam": [0.25, 0.5, 1.0]},
 }  # fmt: skip
