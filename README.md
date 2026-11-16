@@ -130,6 +130,10 @@ places the moment in a given video 45.7 % of the time at IoU >= 0.5; a
 7-billion-parameter vision-language model, run over the video's frames for each
 sentence, is reported at 56.8 %.
 
+<!-- table readme-youcook2 -->
+On 252 YouCook2 cooking videos (5 minutes on average, searched all at once), the right step is among the first five moments 12.3 % of the time, and 18.8 % when what is said is searched too (`--speech`).
+<!-- /table -->
+
 Third round (OpenVINO, long videos, what is said):
 
 <!-- table round3-criteria -->
@@ -137,20 +141,27 @@ Third round (OpenVINO, long videos, what is said):
 |---|---|---|
 | 9. indexing with OpenVINO takes at most 10 min of CPU time per hour of video | 6.5 min | yes |
 | 10. OpenVINO loses at most 1 point on the primary metric | +0.4 points | yes |
+| 11. speech adds at least 2 points on YouCook2 | +6.5 points | yes |
+| 12. transcription takes at most 15 min of CPU time per hour of video | 8.1 min | yes |
 <!-- /table -->
 
 All tables, the costs and the figures: [docs/RESULTS.md](docs/RESULTS.md).
 
 ## Limits
 
-- It sees frames, not motion or sound: "the camera pans left" or "someone
-  laughs" are out of its reach.
-- It was measured on the first 30 seconds of short personal videos (DiDeMo);
-  long videos were not measured.
+- It sees frames, not motion: "the camera pans left" is out of its reach. Of
+  the sound it only hears speech, with `--speech`: "someone laughs" is not
+  found.
+- It was measured on short personal videos (DiDeMo, their first 30 seconds) and
+  on cooking videos of about 5 minutes (YouCook2); recordings of an hour or more
+  were not measured.
+- On YouCook2's long recipe steps, adaptive spans did better than the default
+  fixed windows, which were chosen on DiDeMo and stay the default.
 - It cannot tell apart videos that show the same thing: among Charades'
   1,334 look-alike videos of people at home, the right one is in the first five
   results 4 % of the time.
-- Indexing is slow on a small machine (see the modes above, measured on 4 vCPUs).
+- Indexing is slow on a small machine without OpenVINO (see the modes above,
+  measured on 4 vCPUs); OpenVINO's speed-up was measured on one processor only.
 - Descriptions in French were measured through machine translation only.
 - Several criteria set in advance were not met; the results page says which and
   why.

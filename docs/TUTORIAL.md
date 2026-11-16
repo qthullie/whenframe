@@ -81,9 +81,10 @@ search looks for its words in what is said as well as in the frames: "when she
 says happy birthday" finds the moment even if nothing in the picture shows it.
 The words that matched are shown with the moment. The library keeps the setting:
 later runs transcribe new videos, and running it on a library indexed without it
-transcribes the videos it already has. Whisper base took 7 and 14 minutes of CPU
-time per hour of video on two YouCook2 cooking videos ([PROTOCOL.md](PROTOCOL.md),
-third round): it depends on how much is said.
+transcribes the videos it already has. Whisper base took 8.1 minutes of CPU time
+per hour of video on 252 YouCook2 cooking videos, where it raised the right step
+among the first five moments from 12.3 % to 18.8 % ([RESULTS.md](RESULTS.md),
+third round); the time depends on how much is said.
 
 ## Keep the library up to date
 

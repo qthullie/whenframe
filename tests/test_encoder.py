@@ -53,7 +53,9 @@ def test_onnxruntime(tiny):
 @pytest.mark.skipif(importlib.util.find_spec("openvino") is None, reason="OpenVINO is not installed")
 def test_openvino_matches_onnxruntime(tiny):
     a = enc.Encoder("tiny", folder=tiny, backend="onnxruntime").encode_images(frames())
-    b = enc.Encoder("tiny", folder=tiny, backend="openvino").encode_images(frames())
+    openvino = enc.Encoder("tiny", folder=tiny, backend="openvino")
+    b = openvino.encode_images(frames())
+    assert openvino.images.precision in ("f32", "bf16", "f16")
     assert (a * b).sum(axis=1).min() > 0.999  # bfloat16 on processors that have it
     from openvino.tools.ovc import telemetry_utils
 

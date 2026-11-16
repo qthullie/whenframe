@@ -368,6 +368,8 @@ image encoder, YouCook2 for long videos, and the search of what is said.
 |---|---|---|
 | 9. indexing with OpenVINO takes at most 10 min of CPU time per hour of video | 6.5 min | yes |
 | 10. OpenVINO loses at most 1 point on the primary metric | +0.4 points | yes |
+| 11. speech adds at least 2 points on YouCook2 | +6.5 points | yes |
+| 12. transcription takes at most 15 min of CPU time per hour of video | 8.1 min | yes |
 <!-- /table -->
 
 ### OpenVINO for the image encoder
@@ -394,3 +396,53 @@ so an hour of video is indexed in 6.5 CPU minutes, decoding included, against
 comes from the processor's bfloat16 units (AMX); in float32, OpenVINO was only
 1.3 times faster than ONNX Runtime (342 against 265 ms on 58 frames), and
 processors without bfloat16 were not measured.
+
+### Long videos: YouCook2
+
+The YouCook2 validation videos found in full: 252 cooking videos, 21.7 hours,
+5.2 minutes on average. The 1,331 recipe steps of the 168 test videos are each
+searched for among all 252 videos ([PROTOCOL.md](PROTOCOL.md), third round).
+Nothing was tuned on them: the image search keeps its DiDeMo parameters, and the
+weight of speech was chosen on the other 84 videos.
+
+<!-- table youcook2 -->
+| method (DiDeMo parameters) | R1 IoU>=0.3 | R1 IoU>=0.5 | R1 IoU>=0.7 | mean IoU | all 252 videos: R@5 IoU>=0.3 | R@5 IoU>=0.5 | R@5, best frame inside the step |
+|---|---|---|---|---|---|---|---|
+| fixed windows + query bank (the default search) | 39.6 | 19.4 | 6.3 | 24.4 | 26.7 | 12.3 | 34.2 |
+| adaptive spans + query bank | 46.3 | 26.8 | 12.7 | 29.4 | 32.5 | 19.4 | 35.8 |
+| the default search + speech | 47.8 | 23.8 | 8.2 | 29.0 | 38.6 | 18.8 | 47.6 |
+<!-- /table -->
+
+In a given video, the default search places 19.4 % of the steps at IoU >= 0.5,
+and the adaptive spans 26.8 %; across the 252 videos, the right step is among
+the first five moments 12.3 % and 19.4 % of the time. Unlike DiDeMo's moments,
+cut on a 5-second grid, YouCook2's steps last 19 seconds on average and a third
+of them more than 20, which a 10-second window cannot match at IoU >= 0.5,
+while spans grow to the length of what the frames show. Counted by where the
+player starts, the best frame of the moment falls inside the step for 34.2 % of
+the steps with the default search. These videos last minutes; recordings of an
+hour or more were not measured.
+
+<!-- table youcook2-cost -->
+| per hour of video | CPU time (min) |
+|---|---|
+| decoding (ffmpeg, 1 frame per second) | 1.2 |
+| encoding the frames kept (83 %), OpenVINO in bfloat16 | 3.4 |
+| transcribing (Whisper base, int8) | 8.1 |
+<!-- /table -->
+
+### What is said
+
+<!-- table youcook2-speech -->
+Speech moves 134 test steps into the first five moments and 48 out of them (sign test p = 1.3e-10), with weight 0.005, pad 0 s and raw scores, chosen on the 619 tuning steps.
+<!-- /table -->
+
+The cooks say what they do, and the steps' descriptions use their words: with
+speech, the right step is among the first five moments 18.8 % of the time
+instead of 12.3 % at IoU >= 0.5, 38.6 % instead of 26.7 % at IoU >= 0.3, and its
+best frame falls inside the step 47.6 % of the time instead of 34.2 %. The first
+moment is right twice as often (10.7 % against 5.2 %). Speech was added to the
+fixed windows, as the protocol says; added to the adaptive spans, better on
+these long steps, it was not measured. In home videos, what is said matches a
+description less often than a cook's commentary does, so the gain there is
+likely smaller; it was not measured either.

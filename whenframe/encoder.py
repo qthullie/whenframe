@@ -155,7 +155,7 @@ class _OpenVINOImages:
         self._compiled = core.compile_model(core.read_model(str(path)), "CPU", config)
         self._output = self._compiled.output(output)
         self.dim = self._output.get_partial_shape()[-1].get_length()
-        self.precision = str(self._compiled.get_property("INFERENCE_PRECISION_HINT"))
+        self.precision = self._compiled.get_property("INFERENCE_PRECISION_HINT").get_type_name()  # bf16, f32
 
     def __call__(self, x: np.ndarray) -> np.ndarray:
         return self._compiled(x)[self._output]

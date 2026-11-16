@@ -249,10 +249,16 @@ def round3_tables() -> dict[str, str]:
         out["youcook2-cost"] = table(
             ["per hour of video", "CPU time (min)"],
             [["decoding (ffmpeg, 1 frame per second)", f"{c['decode_cpu_min_per_hour']:.1f}"],
-             [f"encoding the frames kept ({100 * c['frames_kept'] / c['frames_seen']:.0f} %), OpenVINO "
-              f"{c['precision']}", f"{c['encode_cpu_min_per_hour']:.1f}"],
+             [f"encoding the frames kept ({100 * c['frames_kept'] / c['frames_seen']:.0f} %), OpenVINO in "
+              f"{'bfloat16' if 'bf' in c['precision'] else c['precision']}", f"{c['encode_cpu_min_per_hour']:.1f}"],
              ["transcribing (Whisper base, int8)", f"{c['transcribe_cpu_min_per_hour']:.1f}"]],
         )  # fmt: skip
+        default, said = r["frame_window_bank"]["corpus"], r["speech_bank"]["corpus"]
+        out["readme-youcook2"] = (
+            f"On {r['videos']} YouCook2 cooking videos (5 minutes on average, searched all at once), the right "
+            f"step is among the first five moments {pct(default['R@5 IoU>=0.5'])} % of the time, and "
+            f"{pct(said['R@5 IoU>=0.5'])} % when what is said is searched too (`--speech`)."
+        )
         w = r["speech_vs_default"]
         out["youcook2-speech"] = (
             f"Speech moves {w['wins']} test steps into the first five moments and {w['losses']} out of them "
