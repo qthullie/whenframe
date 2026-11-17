@@ -54,7 +54,8 @@ def cmd_index(args) -> int:
     print(f"{len(paths)} videos and photos found, {len(todo)} to index")
     if todo:
         enc = lib.encoder
-        print(f"image encoder: {enc.name} on {enc.backend} ({enc.images.precision})")
+        print(f"image encoder: {enc.name} on {enc.backend} ({enc.images.precision})"
+              + (f", then whenframe's {lib.settings.temporal}" if lib.settings.temporal else ""))  # fmt: skip
     t0 = time.time()
     failed = 0
 
