@@ -14,5 +14,21 @@
    "normalise": "raw"
   },
   "sound_weight": 2.0
+ },
+ "v1": {
+  "spec": "v1",
+  "model": "siglip2-base",
+  "weights": "/home/user/whenframe/whenframe/data/temporal-siglip2-base.npz",
+  "alpha": 1.0,
+  "didemo": 0.34082779764946347,
+  "youcook2": 0.28917609046849757,
+  "unav": 0.4102564102564102,
+  "mean": 0.34675343279145704,
+  "speech": {
+   "weight": 0.005,
+   "pad": 5.0,
+   "normalise": "raw"
+  },
+  "sound_weight": 1.5
  }
 }
