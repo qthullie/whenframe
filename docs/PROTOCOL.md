@@ -474,3 +474,128 @@ video.
 
 17. On the 262 test videos, frames and sound together raise P@10 over the
     frames alone by at least 4 points.
+
+## Fifth round: whenframe's own model
+
+Until this round nothing was trained: whenframe searched SigLIP 2's
+embeddings of single frames as the encoder gave them, and DiDeMo's training
+annotations served only to build the query bank and to choose a few settings.
+This round trains a model of its own on DiDeMo's training videos, on top of
+SigLIP 2, and measures it with the same splits, metrics and search as before:
+does a small model trained on one collection of personal videos find moments
+better than SigLIP 2 alone, there and on the other benchmarks?
+
+### The model
+
+A temporal adapter (`whenframe/temporal.py`): two transformer layers (width
+256, four heads) read a video's frames together, 32 at a time, with their
+times as sines and cosines of periods 2 to 64 seconds counted from the
+window's first frame, and add to each frame's SigLIP 2 embedding what its
+neighbours show; the sum is normalised again and searched exactly as before,
+with the same text embeddings, query bank and moments. Windows start every 16
+frames and are blended where they overlap, so a video of any length goes
+through it. Its output projection starts at zero, so that before training it
+is SigLIP 2 itself (CLIP4Clip's temporal transformer, Luo et al. 2021; the
+zero-initialised residual of CLIP-Adapter and ControlNet). 1.45 million
+weights, run once per frame when a video is indexed (about half a millisecond
+of CPU per frame, against some 80 for SigLIP 2's image tower with OpenVINO);
+photos keep their embedding.
+
+### Training data
+
+DiDeMo's training videos, from the copy on the Hugging Face Hub
+(friedrichor/DiDeMo, a tar archive cut in eight parts, read as a stream: no
+video is kept; `scripts/train_data.py`), the 500 tuning videos left out:
+their first 30 seconds at one frame per second, embedded by SigLIP 2 base with
+OpenVINO and repeats marked, as the tuning and test videos were; their
+descriptions embedded by SigLIP 2's text tower with ONNX Runtime, as the tool
+embeds a query (31,048 descriptions of 7,901 videos; those whose video is
+not in the archive or cannot be read are left out).
+
+### Training (`scripts/temporal.py train`)
+
+Losses, each after a published idea:
+
+- between videos: each description's own video among the batch's, scored as
+  the search scores it (the best frame's cosine minus the query bank's
+  offset, the offset computed from bank descriptions drawn for each batch),
+  with InfoNCE (CLIP4Clip; the bank: Bogolin et al. 2022);
+- within a video: the share of the frames' softmax that falls inside the
+  described moment (the saliency losses of Moment-DETR and QD-DETR, Lei et
+  al. 2021, Moon et al. 2023; the rest of the video as hard negatives, as in
+  ReLoCLNet, Zhang et al. 2021);
+- a leash, 1 - cos(new, old), towards SigLIP 2's embedding of each frame.
+
+Each batch takes one description per video; its moment is half the time one
+of its four annotators', half the time the most common one. Frames are
+dropped as the tool drops repeats (half the time), 30 % more of them
+sometimes, and half the time the window starts and ends a few frames inside
+the video, the described moment kept whole. Adam with weight decay, warm-up
+then cosine decay, gradients clipped at 1. The model is checked on the 500
+tuning videos as it trains, with the default search on its frames; the best
+check is kept.
+
+### Choices made on the tuning videos
+
+Five short runs (600 steps of 64 descriptions, on the 1,454 training videos
+embedded at the time), each checked on the tuning videos every 200 steps
+(`results/temporal/e*.json`). Without the model: R@5 31.3 %, the right video
+among the first five 51.4 %, single-video R1 at IoU 0.5 46.4 %.
+
+| run | between | within | leash | best R@5 | right video in top 5 | single R1 |
+|---|---|---|---|---|---|---|
+| e1, with a head (below) | 1 | 1 | 10 | 32.9 | 51.7 | 50.1 |
+| e3 (stopped at 400 steps) | 0 | 1 | 10 | 30.8 | 49.5 | 49.1 |
+| e4 | 1 | 1 | 100 | 33.0 | 52.8 | 48.3 |
+| e5 | 1 | 2 | 100 | 33.1 | 52.7 | 49.1 |
+
+Without the loss between videos, the right video falls back as the moments
+get better placed (e3). A leash ten times stronger keeps the frames at a
+cosine of 0.997 from SigLIP 2's (0.96 in e1) for the same R@5. e5's settings
+are kept: the same R@5 as e4, the moments better placed in their video.
+
+**A head, tried and not kept.** A second small network was trained with the
+adapter, run at search time on each shortlisted video for the description:
+one attention layer over the frames with the description mixed into each
+(as FiLM), giving each frame a corrected logit and how far the moment reaches
+before and after it (an anchor-free placement, as FCOS, and UniVTG for
+moments), trained with binary cross-entropy, a ranking against four other
+videos and Moment-DETR's span loss (L1 and generalised IoU), without
+reshaping the adapter. Its moments did much worse than the default search's
+windows (e1: R@5 24.2 %), for a reason the tuning videos show: three
+quarters of DiDeMo's reference moments last 5 seconds, and a 10-second window
+around the right frame overlaps them at IoU 0.5 exactly, so the primary
+metric favours the default windows over tighter moments (around the best
+frame of SigLIP 2's scores, a fixed 5-second moment gives a single-video R1
+of 31.6 %, 7 seconds 39.0 %, 10 seconds 46.4 %). Used only to score the
+frames inside the default windows, it did no better either (e1: 32.3 %
+against 32.9 % for the adapter alone; trained alone on SigLIP 2's frames,
+e2: 31.3 %). Its code stays in `scripts/temporal.py`.
+
+### The model trained for the test
+
+e5's settings on every training video embedded (`scripts/train_data.py`, run
+to the end of the archive): 3,000 steps of 128 descriptions, learning rate
+1e-4 after 200 steps of warm-up, 1,024 bank descriptions per batch, checked on
+the tuning videos every 250 steps, the best check kept. Before the test, the
+evaluation was run with an untrained adapter (the identity), which gave back
+every published number of the benchmarks below (DiDeMo 27.6 %, Charades-STA
+45.7 %, YouCook2 12.3 and 25.8 %, UnAV-100 42.9 and 53.2 %), one DiDeMo
+description in 3,902 aside (a tie broken otherwise by rounding).
+
+The test (`scripts/temporal.py evaluate`, run once): the default search on
+the adapted frames against the same search on SigLIP 2's, on the DiDeMo test
+videos (OpenVINO, repeats skipped) and, each as in its own round, on
+Charades-STA, YouCook2 (test steps) and UnAV-100 (test videos), with a sign
+test over the descriptions (labels for UnAV-100).
+
+18. On the DiDeMo test, the adapted frames raise the primary metric by at
+    least 1 point.
+19. On each of Charades-STA (R1 at IoU >= 0.5 in the given video), YouCook2
+    (R@5 at IoU >= 0.5, speech added to the adaptive spans) and UnAV-100
+    (P@10, frames and sound), the adapted frames lose at most 1 point.
+20. The adapter adds at most 1 CPU minute per hour of video to indexing.
+
+If 18 and 19 hold, a new library goes through the model by default
+(`--no-temporal` keeps SigLIP 2's embeddings); libraries already indexed keep
+theirs.
