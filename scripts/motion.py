@@ -9,10 +9,12 @@ frame's is, is added to the frame's with a weight chosen on the tuning videos.
 
     python scripts/motion.py extract --split train --videos ... --annotations ...
     python scripts/motion.py tune --split train --annotations ... --train-annotations ...
+    python scripts/motion.py extract --split test ...
+    python scripts/motion.py evaluate --split test ...   # once, with the weight chosen on the tuning videos
 
 Writes results/didemo_train_motion.json: the weights tried, on all the tuning
 descriptions and on those that say how something moves (MOTION below, fixed
-before any grid was scored).
+before any grid was scored); then results/didemo_test_motion.json.
 """
 
 from __future__ import annotations
@@ -90,7 +92,8 @@ def extract(args) -> None:
     print(f"wrote {path}: {len(out)} grids, {cost['encode_cpu'] / 60:.1f} CPU min to embed")
 
 
-def tune(args) -> None:
+def scores(args):
+    """The split's descriptions, and the frames' and the grids' corrected scores, as the tool would rank them."""
     frozen, queries, _ = didemo.load(args.split, args.annotations)
     frozen.bank = didemo.bank(args)
     text = didemo.text_embeddings(queries, args.split, args.model_dir)
@@ -106,13 +109,19 @@ def tune(args) -> None:
     p = tuned[method]["params"]
     still, moving = frame_scores(kept, text, method, p), frame_scores(grid, text, method, p)
     motion = np.array([bool(MOTION.search(q["text"])) for q in queries])
+    cost = {k: float(z[k]) for k in ("decode_cpu", "encode_cpu")}
+    cost["hours"] = float(frozen.durations.sum() / 3600)
+    return kept, queries, text, method, p, still, moving, motion, cost
+
+
+def measure(kept, queries, text, method, p, variants, motion) -> list[dict]:
     rows = []
-    for name, w in (("frames", 0.0), *((f"frames + {w:g} x grids", w) for w in WEIGHTS), ("grids alone", None)):
-        scores = moving if w is None else still + w * moving
-        r = run(kept, queries, text, method, p, scores=scores, per_query=True)
+    for name, w, s in variants:
+        r = run(kept, queries, text, method, p, scores=s, per_query=True)
         found = np.array(r.pop("found"))
         rows.append({"variant": name, "weight": w, "score": r[PRIMARY[0]][PRIMARY[1]], "found": found,
-                     "motion": float(found[motion].mean()), "other": float(found[~motion].mean())})  # fmt: skip
+                     "motion": float(found[motion].mean()), "other": float(found[~motion].mean()),
+                     "corpus": r["corpus"], "video": r["video"]})  # fmt: skip
         print(f"{name:24s} R@5 {100 * rows[-1]['score']:.1f}   motion {100 * rows[-1]['motion']:.1f}   "
               f"other {100 * rows[-1]['other']:.1f}", flush=True)  # fmt: skip
     first = rows[0]["found"]
@@ -122,17 +131,39 @@ def tune(args) -> None:
         mw, ml = int((f & ~first & motion).sum()), int((~f & first & motion).sum())
         r.update(wins=win, losses=loss, p=sign_test(win, loss), motion_wins=mw, motion_losses=ml,
                  motion_p=sign_test(mw, ml))  # fmt: skip
+    return rows
+
+
+def tune(args) -> None:
+    kept, queries, text, method, p, still, moving, motion, cost = scores(args)
+    variants = [("frames", 0.0, still), *((f"frames + {w:g} x grids", w, still + w * moving) for w in WEIGHTS),
+                ("grids alone", None, moving)]  # fmt: skip
+    rows = measure(kept, queries, text, method, p, variants, motion)
     out = {"split": args.split, "queries": len(queries), "motion_queries": int(motion.sum()), "method": method,
-           "params": p, "cost": {k: float(z[k]) for k in ("decode_cpu", "encode_cpu")}, "rows": rows}  # fmt: skip
+           "params": p, "cost": cost, "rows": rows}  # fmt: skip
     path = ROOT / "results" / f"didemo_{args.split}_motion.json"
     path.write_text(json.dumps(out, indent=1))
     print(f"{int(motion.sum())} of {len(queries)} descriptions say how something moves; wrote {path.relative_to(ROOT)}")
 
 
+def evaluate(args) -> None:
+    tuned = json.loads((ROOT / "results" / "didemo_train_motion.json").read_text())
+    w = max((r for r in tuned["rows"] if r["weight"]), key=lambda r: r["score"])["weight"]
+    kept, queries, text, method, p, still, moving, motion, cost = scores(args)
+    rows = measure(kept, queries, text, method, p, [("frames", 0.0, still), (f"frames + {w:g} x grids", w,
+                                                                             still + w * moving)], motion)  # fmt: skip
+    out = {"split": args.split, "queries": len(queries), "motion_queries": int(motion.sum()), "weight": w,
+           "method": method, "params": p, "cost": cost, "rows": rows}  # fmt: skip
+    path = ROOT / "results" / f"didemo_{args.split}_motion.json"
+    path.write_text(json.dumps(out, indent=1))
+    r = rows[1]
+    print(f"grids +{r['wins']} / -{r['losses']} (p = {r['p']:.2g}); wrote {path.relative_to(ROOT)}")
+
+
 def main() -> None:
     stage = sys.argv[1]
     args = didemo.main_args(["evaluate", *sys.argv[2:]])
-    {"extract": extract, "tune": tune}[stage](args)
+    {"extract": extract, "tune": tune, "evaluate": evaluate}[stage](args)
 
 
 if __name__ == "__main__":

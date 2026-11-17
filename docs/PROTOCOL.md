@@ -419,3 +419,23 @@ hour of video, decoding included.
 15. Indexing with So400m on OpenVINO takes at most 30 CPU minutes per hour of
     video, decoding included (the base model took 24.9 with ONNX Runtime in the
     first round).
+
+### Motion: grids of four frames
+
+SigLIP 2 sees still images. Each second of a video is also shown to it as a
+2x2 grid of the four frames a quarter of a second apart (224 pixels, each
+frame at 112), embedded with OpenVINO (`scripts/motion.py extract`); the grid's
+score, corrected by the query bank as the frame's is, is added to the frame's
+with a weight chosen among 0.25, 0.5, 0.75 and 1 on the 500 tuning videos
+(`scripts/motion.py tune`). With 0.25, the right moment was among the first
+five for 32.5 % of the tuning descriptions against 31.3 % for the frames
+alone (52 won, 29 lost), and 33.4 % against 31.5 % for the 826 that say how
+something moves (a fixed list of verbs, in the script, written before any grid
+was scored); the grids alone found 29.0 %. The weight was picked among four on
+the same descriptions, so the gain on new ones is likely smaller. Decoding and
+embedding the grids took 6.8 CPU minutes per hour of video, about as much as
+the frames.
+
+16. On the DiDeMo test, adding the grids' score with weight 0.25 to the
+    frames' raises the primary metric by at least 1 point (both embedded by
+    OpenVINO, repeats skipped; `scripts/motion.py evaluate`).
