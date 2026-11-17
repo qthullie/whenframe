@@ -8,6 +8,7 @@ import sys
 import time
 from pathlib import Path
 
+from . import __version__
 from .encoder import BACKENDS, MODES
 from .library import Library, Settings
 from .search import HEARD, SearchConfig, Searcher, worth_showing
@@ -135,6 +136,15 @@ def cmd_serve(args) -> int:
             print("--jellyfin needs an API key in $JELLYFIN_API_KEY (Jellyfin: Dashboard, API Keys)", file=sys.stderr)
             return 2
         links.append(Jellyfin(args.jellyfin, key, path_pairs(args.jellyfin_path)))
+    if args.immich:
+        from .immich import Immich
+        from .jellyfin import path_pairs
+
+        key = os.environ.get("IMMICH_API_KEY")
+        if not key:
+            print("--immich needs an API key in $IMMICH_API_KEY (Immich: Account Settings, API Keys)", file=sys.stderr)
+            return 2
+        links.append(Immich(args.immich, key, path_pairs(args.immich_path)))
     serve(lib, args.host, args.port, SearchConfig(moments=args.moments), links=links)
     return 0
 
@@ -146,6 +156,7 @@ def cmd_compact(args) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="whenframe", description="Find the moment you are looking for in your videos.")
+    ap.add_argument("--version", action="version", version=f"whenframe {__version__}")
     ap.add_argument("--library", type=Path, default=default_library(), help="where the index lives")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
@@ -204,6 +215,10 @@ def main(argv: list[str] | None = None) -> int:
                    "(API key in $JELLYFIN_API_KEY)")  # fmt: skip
     p.add_argument("--jellyfin-path", action="append", metavar="HERE=THERE",
                    help="a folder as whenframe sees it, and as Jellyfin does (repeatable)")  # fmt: skip
+    p.add_argument("--immich", metavar="URL", help="link each moment to its video or photo in this Immich server "
+                   "(API key in $IMMICH_API_KEY)")  # fmt: skip
+    p.add_argument("--immich-path", action="append", metavar="HERE=THERE",
+                   help="a folder as whenframe sees it, and as Immich does (repeatable)")  # fmt: skip
     p.set_defaults(fn=cmd_serve)
     sub.add_parser("stats", help="what the library contains").set_defaults(fn=cmd_stats)
     sub.add_parser("compact", help="reclaim space left by re-indexed or removed videos").set_defaults(fn=cmd_compact)

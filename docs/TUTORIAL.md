@@ -204,6 +204,24 @@ inside a video, so the link opens the video's page; whenframe's own player
 plays the moment. Tested against Jellyfin 10.11.3, run in Docker with its
 library on the same folder.
 
+## Next to Immich
+
+If the videos and photos are also in an Immich server (uploaded, or in an
+external library), `serve` can link each moment to its page there:
+
+```bash
+export IMMICH_API_KEY=...         # Immich: Account Settings, API Keys (asset.read)
+whenframe serve --host 0.0.0.0 --watch /srv/photos \
+    --immich http://192.168.1.10:2283 --immich-path /srv/photos=/mnt/media
+```
+
+`--immich-path HERE=THERE` works as for Jellyfin: Immich in its container
+usually sees the files under another path. Immich finds them by that path;
+the player of the search page then shows "Open in Immich", which opens the
+video or photo in Immich's viewer. Written from Immich's API documentation
+(version 1.140) and tested against a stand-in server, not against a running
+Immich.
+
 ## In a container
 
 ```bash

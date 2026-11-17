@@ -1,6 +1,6 @@
 # whenframe
 
-<img src="site/logo.svg" alt="" width="56" align="left">
+<img src="https://raw.githubusercontent.com/qthullie/whenframe/main/site/logo.svg" alt="" width="56" align="left">
 
 Find a moment in your own videos by describing it. whenframe indexes a folder
 of videos (and photos) on your computer, with no GPU and nothing sent anywhere,
@@ -12,8 +12,8 @@ it happens.
 <p align="center">
   <a href="https://qthullie.github.io/whenframe/">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="docs/figures/site-dark.webp">
-      <img src="docs/figures/site.webp" alt="The demo site: the three films; 'a girl hugging a baby dragon' finds three moments of Sintel, and the first, at 3:28, plays its ten seconds; then 'two people arguing on a bridge' finds the opening scene of Tears of Steel" width="800">
+      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/qthullie/whenframe/main/docs/figures/site-dark.webp">
+      <img src="https://raw.githubusercontent.com/qthullie/whenframe/main/docs/figures/site.webp" alt="The demo site: the three films; 'a girl hugging a baby dragon' finds three moments of Sintel, and the first, at 3:28, plays its ten seconds; then 'two people arguing on a bridge' finds the opening scene of Tears of Steel" width="800">
     </picture>
   </a>
   <br>
@@ -44,8 +44,8 @@ video from the moment found:
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/figures/demo-1-dark.webp">
-    <img src="docs/figures/demo-1.webp" alt="The local search page of whenframe serve: 'two people arguing on a bridge' finds the opening scene of Tears of Steel first, among three films" width="800">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/qthullie/whenframe/main/docs/figures/demo-1-dark.webp">
+    <img src="https://raw.githubusercontent.com/qthullie/whenframe/main/docs/figures/demo-1.webp" alt="The local search page of whenframe serve: 'two people arguing on a bridge' finds the opening scene of Tears of Steel first, among three films" width="800">
   </picture>
 </p>
 
@@ -72,14 +72,14 @@ CPU, `pip install 'whenframe[speech]'`), and a search then finds the words
 said as well as what is seen. `whenframe index --sounds` also listens to the
 sound tracks (CLAP), to find laughter, applause, a dog barking or a siren.
 `search --moments spans` lets a moment last as long as the frames match, which
-suits long videos. `serve --jellyfin` links each moment to the video in a
-Jellyfin server.
+suits long videos. `serve --jellyfin` and `serve --immich` link each moment to
+the video in a Jellyfin or Immich server.
 
 Nothing else goes over the network. ONNX Runtime 1.29 sends usage telemetry to
 Microsoft by default, and `import openvino` reports to Google Analytics;
 whenframe turns off the first and keeps the second from loading (checked by
 logging every outbound connection of an indexing and search run). More in
-[docs/TUTORIAL.md](docs/TUTORIAL.md): watching folders, Jellyfin, Docker.
+[docs/TUTORIAL.md](https://github.com/qthullie/whenframe/blob/main/docs/TUTORIAL.md): watching folders, Jellyfin, Immich, Docker.
 
 ## How it works
 
@@ -104,23 +104,23 @@ logging every outbound connection of an indexing and search run). More in
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/figures/benchmark-dark.png">
-    <img src="docs/figures/benchmark.png" alt="whenframe against what exists: on Charades-STA it places 45.7 to 47.2 % of the moments, between VTG-GPT (43.7 %) and TFVTG (50.0 %) and below a 7-billion-parameter vision-language model (56.8 %); on DiDeMo it finds the right video among the first five 46.4 % of the time against 28 to 31 % for one image per video, and the right moment 27.2 % against 2.3 % for one keyframe per shot; on YouCook2, adaptive spans and speech raise 12.3 % to 25.8 %; on UnAV-100, adding the sound raises 42.9 % to 53.2 %" width="800">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/qthullie/whenframe/main/docs/figures/benchmark-dark.png">
+    <img src="https://raw.githubusercontent.com/qthullie/whenframe/main/docs/figures/benchmark.png" alt="whenframe against what exists: on Charades-STA it places 45.7 to 47.2 % of the moments, between VTG-GPT (43.7 %) and TFVTG (50.0 %) and below a 7-billion-parameter vision-language model (56.8 %); on DiDeMo it finds the right video among the first five 46.4 % of the time against 28 to 31 % for one image per video, and the right moment 27.2 % against 2.3 % for one keyframe per shot; on YouCook2, adaptive spans and speech raise 12.3 % to 25.8 %; on UnAV-100, adding the sound raises 42.9 % to 53.2 %" width="800">
   </picture>
 </p>
 
 Beside published zero-shot methods, on the one benchmark and metric they
 share, and beside the ways home tools index videos, run here on the same
-videos ([docs/RESEARCH.md](docs/RESEARCH.md) gives the sources).
+videos ([docs/RESEARCH.md](https://github.com/qthullie/whenframe/blob/main/docs/RESEARCH.md) gives the sources).
 
 DiDeMo test split, with the protocol fixed in advance and every change to it
-listed ([docs/PROTOCOL.md](docs/PROTOCOL.md)). The numbers on this page are
+listed ([docs/PROTOCOL.md](https://github.com/qthullie/whenframe/blob/main/docs/PROTOCOL.md)). The numbers on this page are
 written by `scripts/tables.py` from `results/*.json`.
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/figures/results-dark.png">
-    <img src="docs/figures/results.png" alt="Share of DiDeMo test descriptions whose moment is among the first five results, for each search method of the first round" width="800">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/qthullie/whenframe/main/docs/figures/results-dark.png">
+    <img src="https://raw.githubusercontent.com/qthullie/whenframe/main/docs/figures/results.png" alt="Share of DiDeMo test descriptions whose moment is among the first five results, for each search method of the first round" width="800">
   </picture>
 </p>
 
@@ -177,7 +177,7 @@ before its test run):
 | 17. frames and sound together beat the frames alone by at least 4 points (UnAV-100, P@10) | +10.3 points | yes |
 <!-- /table -->
 
-All tables, the costs and the figures: [docs/RESULTS.md](docs/RESULTS.md).
+All tables, the costs and the figures: [docs/RESULTS.md](https://github.com/qthullie/whenframe/blob/main/docs/RESULTS.md).
 
 ## Limits
 
@@ -203,10 +203,10 @@ All tables, the costs and the figures: [docs/RESULTS.md](docs/RESULTS.md).
 
 ## Documents
 
-- [docs/RESEARCH.md](docs/RESEARCH.md): what already exists, and what is new here
-- [docs/PROTOCOL.md](docs/PROTOCOL.md): the evaluation, written before each test run, and every change made to it
-- [docs/RESULTS.md](docs/RESULTS.md): all the numbers
-- [docs/TUTORIAL.md](docs/TUTORIAL.md): installing, indexing, searching, the page, reproducing the benchmark
+- [docs/RESEARCH.md](https://github.com/qthullie/whenframe/blob/main/docs/RESEARCH.md): what already exists, and what is new here
+- [docs/PROTOCOL.md](https://github.com/qthullie/whenframe/blob/main/docs/PROTOCOL.md): the evaluation, written before each test run, and every change made to it
+- [docs/RESULTS.md](https://github.com/qthullie/whenframe/blob/main/docs/RESULTS.md): all the numbers
+- [docs/TUTORIAL.md](https://github.com/qthullie/whenframe/blob/main/docs/TUTORIAL.md): installing, indexing, searching, the page, reproducing the benchmark
 
 ## Credits
 
@@ -228,7 +228,7 @@ All tables, the costs and the figures: [docs/RESULTS.md](docs/RESULTS.md).
   Large-Scale Weak Supervision*, 2022 (OpenAI, MIT licence), run by
   faster-whisper (SYSTRAN, MIT) on CTranslate2.
 - The query banks hold embeddings of DiDeMo training descriptions (BSD 2-Clause);
-  see [whenframe/data/NOTICE](whenframe/data/NOTICE).
+  see [whenframe/data/NOTICE](https://github.com/qthullie/whenframe/blob/main/whenframe/data/NOTICE).
 - The benchmark also measures MobileCLIP-S2 (Apple, research-only licence) and
   translates descriptions with Opus-MT (Helsinki-NLP, Apache 2.0); the tool uses
   neither.
