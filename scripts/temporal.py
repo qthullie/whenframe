@@ -52,6 +52,8 @@ QUERIES = CACHE / "didemo_all_queries.json"
 OUT = ROOT / "results" / "temporal"
 SEGMENT = 5.0  # DiDeMo's moments are counted in 5-second segments
 FIXED = ("scale", "bias", "lam", "beta")  # SigLIP 2's logit scale and bias, the search's bank correction
+# other training clips (sixth round): frames, description embeddings, descriptions
+SOURCES = {"msrvtt": (CACHE / "msrvtt_openvino.npz", CACHE / "msrvtt_text.npy", CACHE / "msrvtt_queries.json")}
 
 
 def stem(name: str) -> str:
@@ -242,8 +244,15 @@ def loss(p, batch, layers, heads, key, cfg):
     z = a * (jnp.einsum("vld,qd->vql", new, q) - p["lam"] * off[:, None, :])
     z = jnp.where(mask[:, None, :], z, -1e9)
     best = jax.nn.logsumexp(z, axis=-1)  # (V, Q): a smooth best frame of each video, for each description
-    # each description's own video, among the batch's (InfoNCE, as CLIP4Clip's): the corpus search's ranking
-    between = jnp.mean(jax.nn.logsumexp(best, axis=0) - jnp.diagonal(best))
+    if cfg["between_loss"] == "sigmoid":
+        # SigLIP's own pretraining loss, every pair of the batch, on the raw best-frame logits with its scale and
+        # bias: fine-tuned as it was pretrained (FLYP, Goyal et al., 2023)
+        raw = jnp.where(mask[:, None, :], a * jnp.einsum("vld,qd->vql", new, q) + p["bias"], -1e9)
+        y = 2 * jnp.eye(q.shape[0]) - 1
+        between = jnp.sum(jax.nn.softplus(-y * jax.nn.logsumexp(raw, axis=-1))) / q.shape[0]
+    else:
+        # each description's own video, among the batch's (InfoNCE, as CLIP4Clip's): the corpus search's ranking
+        between = jnp.mean(jax.nn.logsumexp(best, axis=0) - jnp.diagonal(best))
     own = jnp.diagonal(z, axis1=0, axis2=1).T  # (n, L): each description against its own video
     within = jnp.mean(jax.nn.logsumexp(own, axis=-1) - jax.nn.logsumexp(jnp.where(inside, own, -1e9), axis=-1))
     leash = jnp.sum((1 - jnp.sum(new * x, -1)) * mask) / jnp.sum(mask)
@@ -260,15 +269,19 @@ def loss(p, batch, layers, heads, key, cfg):
 class Videos:
     """Frames of the training videos and their descriptions, in batches."""
 
-    def __init__(self, seed: int, bank: np.ndarray, bank_sample: int):
+    def __init__(self, seed: int, bank: np.ndarray, bank_sample: int, extra: tuple[str, ...] = ()):
         self.bank, self.bank_sample = bank.astype(np.float32), bank_sample
-        z = np.load(TRAIN)
-        self.names = z["names"].tolist()
-        self.emb, self.times, self.keep = z["emb"], z["times"], z["keep"]
-        self.starts, self.counts, self.durations = z["starts"], z["counts"], z["durations"]
+        sources = [(TRAIN, TEXTS, QUERIES)] + [SOURCES[e] for e in extra]
+        zs = [np.load(f) for f, _, _ in sources]
+        self.names = [n for z in zs for n in z["names"].tolist()]
+        self.emb = np.concatenate([z["emb"] for z in zs])
+        self.times, self.keep = np.concatenate([z["times"] for z in zs]), np.concatenate([z["keep"] for z in zs])
+        self.counts = np.concatenate([z["counts"] for z in zs])
+        self.starts = np.concatenate([[0], np.cumsum(self.counts)[:-1]])
+        self.durations = np.concatenate([z["durations"] for z in zs])
         index = {n: i for i, n in enumerate(self.names)}
-        self.text = np.load(TEXTS)
-        self.queries = json.loads(QUERIES.read_text())
+        self.text = np.concatenate([np.load(t) for _, t, _ in sources])
+        self.queries = [q for _, _, qs in sources for q in json.loads(qs.read_text())]
         self.by_video: dict[int, list[int]] = {}
         for qi, q in enumerate(self.queries):
             if q["video"] in index:  # the others' videos were not embedded (yet, or could not be read)
@@ -279,6 +292,8 @@ class Videos:
 
     def moment(self, qi: int, v: int) -> tuple[float, float]:
         times = self.queries[qi]["times"]
+        if times is None:  # a description of the whole clip
+            return 0.0, max(float(self.durations[v]), 1.0)
         if self.rng.random() < 0.5:
             a, b = self.rng.choice(times)  # one annotator's
         else:
@@ -553,11 +568,13 @@ def train(args) -> None:
     import jax.numpy as jnp
 
     cfg = {"between": args.between, "within": args.within, "leash": args.leash, "dropout": args.dropout,
-           "head": args.head, "negatives": args.negatives}  # fmt: skip
+           "head": args.head, "negatives": args.negatives, "between_loss": args.between_loss}  # fmt: skip
     tuning = DiDeMo(args)
-    data = Videos(args.seed, tuning.kept.bank, args.bank_sample)
-    key = jax.random.PRNGKey(args.seed)
-    params = jax.tree.map(jnp.asarray, init(key, args.width, args.layers, args.heads, lam=tuning.params["lam"],
+    extra = tuple(e for e in (args.extra or "").split(",") if e)
+    data = Videos(args.seed, tuning.kept.bank, args.bank_sample, extra)
+    key = jax.random.PRNGKey(args.seed)  # the fifth round's runs: one key for the weights and the training
+    init_key = key if args.init_seed is None else jax.random.PRNGKey(args.init_seed)
+    params = jax.tree.map(jnp.asarray, init(init_key, args.width, args.layers, args.heads, lam=tuning.params["lam"],
                                             beta=tuning.params["beta"]))  # fmt: skip
     params["h_s_b"] = jnp.float32(calibrated_bias(params, data.batch(args.batch)))
     adam_m = jax.tree.map(jnp.zeros_like, params)
@@ -731,6 +748,19 @@ def evaluate(args) -> None:
     print(f"wrote {out}")
 
 
+def soup(args) -> None:
+    """The average of several runs' weights, from the same initialisation (Wortsman et al., 2022)."""
+    runs = [np.load(m) for m in args.models.split(",")]
+    keys = runs[0].files
+    out = {k: np.mean([r[k] for r in runs], axis=0).astype(runs[0][k].dtype) if runs[0][k].ndim else runs[0][k]
+           for k in keys}  # fmt: skip
+    for r in runs[1:]:
+        assert int(r["layers"]) == int(out["layers"]) and int(r["heads"]) == int(out["heads"])
+    OUT.mkdir(parents=True, exist_ok=True)
+    np.savez(OUT / f"{args.name}.npz", **out)
+    print(f"wrote {OUT / args.name}.npz: the average of {len(runs)} runs")
+
+
 def export(args) -> None:
     """The adapter's weights, as the package ships them (float16; the head's, never trained here, left out)."""
     z = np.load(args.model)
@@ -742,7 +772,7 @@ def export(args) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("stage", choices=["texts", "train", "export", "evaluate"])
+    ap.add_argument("stage", choices=["texts", "train", "soup", "export", "evaluate"])
     ap.add_argument("--annotations", required=True, help="DiDeMo's didemo_train.json")
     ap.add_argument("--train-annotations", help="the same, for the query bank (default: --annotations)")
     ap.add_argument("--model-dir", help="folder of SigLIP 2 base's files (default: the usual download cache)")
@@ -764,7 +794,16 @@ def main() -> None:
     ap.add_argument("--head", type=float, default=1.0, help="weight of the head's losses")
     ap.add_argument("--negatives", type=int, default=4, help="other videos per description, for the head")
     ap.add_argument("--every", type=int, default=500, help="steps between two checks on the tuning videos")
-    ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--seed", type=int, default=0, help="the data's order and draws")
+    ap.add_argument("--init-seed", type=int, help="the initial weights' (default: --seed); a soup's runs share it")
+    ap.add_argument("--extra", help="other training clips besides DiDeMo's, comma-separated: msrvtt")
+    ap.add_argument(
+        "--between-loss",
+        choices=["infonce", "sigmoid"],
+        default="infonce",
+        help="between videos: InfoNCE on the search's scores, or SigLIP's own sigmoid loss (FLYP)",
+    )
+    ap.add_argument("--models", help="soup: the runs' weights to average, comma-separated")
     ap.add_argument("--model", help="export, evaluate: the trained weights (results/temporal/NAME.npz)")
     ap.add_argument("--test-annotations", help="evaluate: DiDeMo's didemo_test.json")
     ap.add_argument("--charades-annotations", help="evaluate: Charades-STA's test parquet")
@@ -779,7 +818,7 @@ def main() -> None:
     args = ap.parse_args()
     args.train_annotations = args.train_annotations or args.annotations
     args.split = "train"
-    {"texts": texts, "train": train, "export": export, "evaluate": evaluate}[args.stage](args)
+    {"texts": texts, "train": train, "soup": soup, "export": export, "evaluate": evaluate}[args.stage](args)
 
 
 if __name__ == "__main__":
