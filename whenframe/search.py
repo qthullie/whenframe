@@ -63,6 +63,16 @@ class Hit:
     at: float = 0.0  # the instant of the moment's best frame
     said: str = ""  # what is said there that matches the query, when the library is transcribed
     photo: bool = False  # a photo: start and end are 0, the moment is the photo itself
+    heard: float = 0.0  # how well the sound around the best frame matches, in standard deviations (--sounds)
+
+
+HIDDEN_BELOW = 0.005  # shown as 0 %: rarely right (0.8 % of the right moments on DiDeMo) when only frames count
+HEARD = 1.0  # a sound this many standard deviations above the library's usual match is worth showing
+
+
+def worth_showing(hit: Hit) -> bool:
+    """Whether a moment is shown by default: the frames match, or what is said or heard there does."""
+    return hit.confidence >= HIDDEN_BELOW or bool(hit.said) or hit.heard >= HEARD
 
 
 def standardise(x: np.ndarray) -> np.ndarray:
@@ -146,18 +156,17 @@ class Searcher:
         scale = 1.0 if len(self.models) == 1 else 1.0 / max(float(self._first_corrected.std()), 1e-9)
         return cfg.weight * scale * said, hits
 
-    def sound_scores(self, query: str, ranking: np.ndarray, videos, times, heard: np.ndarray | None = None):
-        """What the sound adds to each frame's ranking score: CLAP's standardised score of the window around it,
-        times the weight and the spread of the frames' own scores, so the two are added as standardised scores.
+    def sound_scores(self, query: str, videos, times, heard: np.ndarray | None = None) -> np.ndarray:
+        """For each frame, CLAP's score of the window around it, standardised over the library (0 without sound).
         `heard` gives CLAP's cosine of every window instead of embedding the query (tests)."""
         if not self.library.has_sounds():
-            return np.zeros_like(ranking)
+            return np.zeros(len(times), dtype=np.float32)
         ids, starts, emb = self.library.sound_windows()
         if heard is None:
             heard = emb @ self.library.listener.clap.encode_texts([query])[0]
-        cfg = self.config.sound
-        cos = sounds.frame_scores(times, {v.id: (v.start, v.count) for v in videos}, ids, starts, heard, cfg.length)
-        return cfg.weight * float(ranking.std()) * sounds.standardised(cos)
+        length = self.config.sound.length
+        cos = sounds.frame_scores(times, {v.id: (v.start, v.count) for v in videos}, ids, starts, heard, length)
+        return sounds.standardised(cos)
 
     def search(self, query: str, k: int = 10, scores: dict[str, np.ndarray] | None = None,
                heard: np.ndarray | None = None) -> list[Hit]:  # fmt: skip
@@ -167,7 +176,9 @@ class Searcher:
         raw = self.frame_scores(query) if scores is None else scores
         ranking = self.ranking_scores(raw)
         extra, segments = self.speech_scores(query, ranking, videos, times)
-        ranking = ranking + extra + self.sound_scores(query, ranking, videos, times, heard)
+        # what is heard and what is seen are added as standardised scores, with the tuned weight
+        loud = self.sound_scores(query, videos, times, heard)
+        ranking = ranking + extra + self.config.sound.weight * float(ranking.std()) * loud
         first = raw[self.models[0]]
         prob = self.library.encoder.probability
         best = np.array([ranking[v.start : v.start + v.count].max() for v in videos])
@@ -180,9 +191,10 @@ class Searcher:
                 inside = np.flatnonzero((t >= s.start) & (t < s.end))
                 inside = inside if len(inside) else np.arange(len(t))
                 top = r[inside].max()
-                at = float(t[inside[np.argmax(g[inside])]])
+                best = inside[np.argmax(g[inside])]
+                at = float(t[best])
                 hit = Hit(v.path, s.start, s.end, self.rank_score(s), float(prob(np.float64(top))), v.id, at,
-                          photo=v.duration == 0)  # fmt: skip
+                          photo=v.duration == 0, heard=float(loud[v.start + best]))  # fmt: skip
                 hits.append(hit)
         hits.sort(key=lambda h: -h.score)
         return [self._with_quote(h, segments) for h in hits[:k]]

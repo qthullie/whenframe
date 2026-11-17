@@ -10,7 +10,7 @@ from pathlib import Path
 
 from .encoder import BACKENDS, MODES
 from .library import Library, Settings
-from .search import SearchConfig, Searcher
+from .search import HEARD, SearchConfig, Searcher, worth_showing
 from .video import find_media
 
 
@@ -72,15 +72,17 @@ def cmd_search(args) -> int:
     if not found:
         print("no video indexed yet: run `whenframe index <folder>` first")
         return 1
-    hits = found if args.all else [h for h in found if h.confidence >= 0.005]
+    hits = found if args.all else [h for h in found if worth_showing(h)]
     for h in hits:
         when = f"{'photo':>17}" if h.photo else f"{clock(h.start):>7} - {clock(h.end):<7}"
         print(f"{h.confidence:5.0%}  {when}  {h.path}")
         if h.said:
             print(f"{'':16}said: “{h.said}”")
+        if h.heard >= HEARD:
+            print(f"{'':16}heard: the sound matches")
     if not hits:
         print("nothing in the library matches this well")
-    if len(hits) < len(found):  # under 0.5 %, shown as 0 %: rarely right (0.8 % of the right moments on DiDeMo)
+    if len(hits) < len(found):  # 0 % sure, and nothing said or heard there matches
         print(f"({len(found) - len(hits)} more at 0 % left out; --all shows them)")
     return 0
 

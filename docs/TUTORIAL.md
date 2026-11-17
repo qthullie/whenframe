@@ -101,7 +101,10 @@ that overlap by half, and each is embedded by CLAP (LAION, Apache 2.0; a 0.8 GB
 download at the first run). A search then adds what is heard around each frame
 to what is seen: "a dog barking", "people laughing", "a fire truck siren".
 Like `--speech`, the library keeps the setting, and running it on a library
-indexed without it embeds the sound of the videos it already has. It took 4.7
+indexed without it embeds the sound of the videos it already has. A moment
+whose sound matches is shown with "heard: the sound matches", even when no
+frame does (the frames' confidence then reads 0 %), as one with matching
+speech is shown with the words said. It took 4.7
 CPU minutes per hour of video with OpenVINO. On the clips of UnAV-100, it
 raised the share of right moments among the first ten from 42.9 % to 53.2 %
 ([RESULTS.md](RESULTS.md), fourth round); it moves wrong moments up when CLAP

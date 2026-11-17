@@ -96,7 +96,7 @@ const el = (tag, cls, text) => {
 };
 let current = null;
 let last = null, showAll = false;  // the last results, and whether the 0 % ones are shown
-const HIDDEN_BELOW = 0.005;  // shown as "0 %": on DiDeMo, 0.8 % of the right moments found were that low
+// moments the model is 0 % sure of are left out unless what is said or heard there matches (search.worth_showing)
 
 async function search(q) {
   history.replaceState(null, "", q ? `?q=${encodeURIComponent(q)}` : location.pathname);
@@ -117,7 +117,7 @@ function render(data) {
   last = data;
   const box = $("results");
   box.replaceChildren();
-  const hits = showAll ? data.hits : data.hits.filter((h) => h.confidence >= HIDDEN_BELOW);
+  const hits = showAll ? data.hits : data.hits.filter((h) => h.shown);
   const hidden = data.hits.length - hits.length;
   const status = $("status");
   status.textContent = !data.hits.length ? "No video indexed yet: run whenframe index <folder>, then reload."
@@ -142,6 +142,7 @@ function render(data) {
     meta.append(el("div", "name", h.name), el("div", "folder", h.folder),
                 el("div", "conf", `${Math.round(100 * h.confidence)} % sure the ${h.photo ? "photo" : "best frame"} matches`));
     if (h.said) meta.append(el("div", "said", `“${h.said}”`));
+    if (h.heard) meta.append(el("div", "said", "the sound matches"));
     card.append(shot, meta);
     card.addEventListener("click", () => play(h));
     box.append(card);

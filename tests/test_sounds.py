@@ -136,6 +136,11 @@ def test_a_library_searches_what_is_heard(tmp_path):
     frames = embs["toy"] @ grey + np.random.default_rng(0).uniform(-0.01, 0.01, len(embs["toy"]))
     top = search.search("a dog barking", k=3, scores={"toy": frames}, heard=heard)[0]
     assert top.path.endswith("b.mp4") and top.start <= 14.0 <= top.end
+    from whenframe.search import HEARD, Hit, worth_showing
+
+    assert top.heard >= HEARD  # the sound matches: worth showing even when no frame does
+    assert worth_showing(Hit("v.mp4", 0, 10, 0.0, 0.0, 1, heard=top.heard))
+    assert not worth_showing(Hit("v.mp4", 0, 10, 0.0, 0.0, 1))
     lib.remove(tmp_path / "b.mp4")
     assert lib.stats()["sound_windows"] == 7
 

@@ -27,7 +27,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from .library import Library
-from .search import SearchConfig, Searcher
+from .search import HEARD, SearchConfig, Searcher, worth_showing
 from .video import is_photo
 
 CHUNK = 1 << 20
@@ -64,7 +64,7 @@ class App:
             "ms": round(1000 * (time.perf_counter() - t0)),
             "hits": [{"video": h.video_id, "name": Path(h.path).name, "folder": str(Path(h.path).parent),
                       "start": h.start, "end": h.end, "at": h.at, "confidence": h.confidence, "said": h.said,
-                      "photo": h.photo,
+                      "photo": h.photo, "heard": h.heard >= HEARD, "shown": worth_showing(h),
                       "links": [{"name": s.name, "url": u} for s in self.links if (u := s.link(h.path))]}
                      for h in hits],
         }  # fmt: skip
