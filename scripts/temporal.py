@@ -514,7 +514,19 @@ def train(args) -> None:
         return params, adam_m, adam_v, value, parts
 
     base = tuning.score(None)
-    log = {"config": vars(args) | {"annotations": None}, "tuning_without": base, "checks": []}
+    where = (
+        "annotations",
+        "train_annotations",
+        "model_dir",
+        "test_annotations",
+        "charades_annotations",
+        "youcook2_annotations",
+        "unav_annotations",
+        "clap_dir",
+        "out",
+        "model",
+    )  # local paths: not logged
+    log = {"config": {k: v for k, v in vars(args).items() if k not in where}, "tuning_without": base, "checks": []}
     print(f"tuning videos without the model: R@5 {100 * base['R@5']:.1f}", flush=True)
     best, best_params = -1.0, None
     t0 = time.time()
