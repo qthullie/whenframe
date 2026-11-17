@@ -5,9 +5,10 @@ dance" must be read from a single image. This model reads the embeddings of a
 video's frames together, a window of WINDOW frames at a time, with their times
 in seconds, and adds to each frame's embedding what its neighbours say; the sum
 is normalised again and searched as before, in SigLIP 2's own space, against the
-same text embeddings and query bank. It is small (about 1.5 million weights, a
-thousandth of the image encoder's work per frame) and was trained on DiDeMo's
-training videos (scripts/temporal.py, docs/RESULTS.md, fifth round).
+same text embeddings and query bank. It is small (1.4 million weights, about
+half a millisecond of CPU per frame against some 80 for SigLIP 2's image tower)
+and was trained on DiDeMo's training videos (scripts/temporal.py,
+docs/PROTOCOL.md and docs/RESULTS.md, fifth round).
 
 Two transformer layers over the frames, as CLIP4Clip's temporal transformer
 (Luo et al., 2021), with its output projection initialised at zero so that the
@@ -84,73 +85,6 @@ def apply(p: dict, emb: np.ndarray, times: np.ndarray) -> np.ndarray:
         weight[s:e] += w[:, None]
     out = x + total / weight
     return out / np.maximum(np.linalg.norm(out, axis=1, keepdims=True), 1e-12)
-
-
-def head(p: dict, x: np.ndarray, t: np.ndarray, q: np.ndarray, off: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """At search time, for one description q and the adapted frames of one video (one window), with their
-    query-bank offsets: each frame's foreground logit (SigLIP 2's logit of the bank-corrected similarity, as the
-    search scores frames, plus the head's correction) and how far the moment reaches before and after the
-    frame's middle, in seconds."""
-    n = len(x)
-    fg, reach = head_batch(p, x[None], np.asarray(t, dtype=np.float64)[None], np.ones((1, n), bool), q, off[None])
-    return fg[0], reach[0]
-
-
-def frames_projection(p: dict, x: np.ndarray) -> np.ndarray:
-    """The part of the head that does not depend on the description: computed once for a library's frames."""
-    return layer_norm(x, p["h_f_ln_g"], p["h_f_ln_b"]) @ p["h_f_w"]
-
-
-def head_batch(p: dict, x: np.ndarray, t: np.ndarray, mask: np.ndarray, q: np.ndarray, off: np.ndarray,
-               u: np.ndarray | None = None) -> tuple[np.ndarray, np.ndarray]:  # fmt: skip
-    """head() for N windows of at most WINDOW frames at once: (N, L, D) frames, (N, L) times and which frames
-    are real, (D,) the description, (N, L) offsets; u: frames_projection(x), when already known."""
-    u = frames_projection(p, x) if u is None else u
-    c = q @ p["h_q_w"] + p["h_q_b"]
-    rel = (t - t[:, :1])[..., None] * (2 * np.pi / np.array(PERIODS))
-    tf = np.concatenate([np.sin(rel), np.cos(rel)], axis=-1).astype(np.float32)
-    e = gelu((u * c) @ p["h_m_w"] + p["h_m_b"]) + tf @ p["h_time_w"]
-    n, length, h = e.shape
-    heads = p["heads"]
-    k = layer_norm(e, p["h_ln1_g"], p["h_ln1_b"]) @ p["h_qkv_w"] + p["h_qkv_b"]
-    qs, ks, vs = (k[..., j * h : (j + 1) * h].reshape(n, length, heads, h // heads).transpose(0, 2, 1, 3)
-                  for j in range(3))  # fmt: skip
-    att = np.where(mask[:, None, None, :], qs @ ks.transpose(0, 1, 3, 2) / np.sqrt(h // heads), -np.inf)
-    att = np.exp(att - att.max(-1, keepdims=True))
-    att /= att.sum(-1, keepdims=True)
-    e = e + (att @ vs).transpose(0, 2, 1, 3).reshape(n, length, h) @ p["h_out_w"] + p["h_out_b"]
-    e = layer_norm(e, p["h_ln2_g"], p["h_ln2_b"])
-    fg = np.exp(p["scale"]) * (np.einsum("nld,d->nl", x, q) - p["lam"] * off) + p["bias"] + e @ p["h_s_w"] + p["h_s_b"]
-    reach = np.logaddexp(0.0, e @ p["h_d_w"] + p["h_d_b"]) * 5.0
-    return fg.astype(np.float32), reach.astype(np.float32)
-
-
-def head_video(p: dict, x: np.ndarray, t: np.ndarray, q: np.ndarray, off: np.ndarray):
-    """head() over a whole video, window by window as apply(), the windows' outputs blended."""
-    n = len(x)
-    fg, reach, weight = np.zeros(n, np.float32), np.zeros((n, 2), np.float32), np.zeros(n, np.float32)
-    for s, e, w in windows(n):
-        f, r = head(p, x[s:e], np.asarray(t[s:e], dtype=np.float64), q, off[s:e])
-        fg[s:e] += w * f
-        reach[s:e] += w[:, None] * r
-        weight[s:e] += w
-    return fg / weight, reach / weight[:, None]
-
-
-def moments(fg: np.ndarray, reach: np.ndarray, t: np.ndarray, duration: float, count: int = 3):
-    """Up to `count` moments (start, end, frame index), best foreground first; a frame inside a moment
-    already taken starts no other."""
-    out = []
-    mid = np.asarray(t, dtype=np.float64) + 0.5
-    for i in np.argsort(-fg):
-        if any(a <= mid[i] <= b for a, b, _ in out):
-            continue
-        a = max(0.0, mid[i] - float(reach[i, 0]))
-        b = min(float(duration), mid[i] + float(reach[i, 1])) if duration else mid[i] + float(reach[i, 1])
-        out.append((a, max(b, a + 0.5), int(i)))
-        if len(out) == count:
-            break
-    return out
 
 
 def load(path=None, name: str = "temporal-siglip2-base.npz") -> dict | None:

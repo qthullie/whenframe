@@ -52,6 +52,14 @@ def params(rng: np.random.Generator, out_scale: float = 0.1, dim: int = DIM) -> 
     return p
 
 
+def script():
+    """scripts/temporal.py, where the head tried in the fifth round lives."""
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    import temporal as script
+
+    return script
+
+
 def frames(rng: np.random.Generator, n: int) -> tuple[np.ndarray, np.ndarray]:
     x = rng.standard_normal((n, DIM)).astype(np.float32)
     return x / np.linalg.norm(x, axis=1, keepdims=True), np.arange(n, dtype=np.float64) * 1.5
@@ -108,7 +116,7 @@ def test_the_head_without_correction_is_the_search_score():
     x, t = frames(rng, 12)
     q = x[3] + 0.1
     off = rng.uniform(0, 0.1, 12).astype(np.float32)
-    fg, reach = temporal.head(p, x, t, q, off)
+    fg, reach = script().numpy_head(p, x, t, q, off)
     expected = np.exp(p["scale"]) * (x @ q - p["lam"] * off) + p["bias"] + p["h_s_b"]
     assert np.allclose(fg, expected, atol=1e-5)
     assert reach.shape == (12, 2) and (reach >= 0).all()
@@ -119,7 +127,7 @@ def test_moments_start_at_the_best_frames_and_do_not_overlap():
     fg = np.zeros(30, np.float32)
     fg[[5, 6, 20]] = [3.0, 2.0, 1.0]
     reach = np.full((30, 2), 2.0, np.float32)
-    found = temporal.moments(fg, reach, t, duration=30.0, count=3)
+    found = script().numpy_moments(fg, reach, t, duration=30.0, count=3)
     assert found[0] == (3.5, 7.5, 5)  # frame 6 is inside the first: it starts no moment
     assert found[1] == (18.5, 22.5, 20)
     assert len(found) == 3
@@ -131,7 +139,7 @@ def test_moments_stay_inside_the_video():
     t = np.arange(5, dtype=np.float64)
     fg = np.array([0, 0, 0, 0, 1], np.float32)
     reach = np.full((5, 2), 10.0, np.float32)
-    ((a, b, i),) = temporal.moments(fg, reach, t, duration=5.0, count=1)
+    ((a, b, i),) = script().numpy_moments(fg, reach, t, duration=5.0, count=1)
     assert (a, b, i) == (0.0, 5.0, 4)
 
 
@@ -139,9 +147,7 @@ def test_numpy_runs_the_model_as_the_training_does():
     pytest.importorskip("jax")
     import jax.numpy as jnp
 
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-    import temporal as training
-
+    training = script()
     rng = np.random.default_rng(5)
     p = params(rng)
     x, t = frames(rng, 24)
@@ -152,6 +158,6 @@ def test_numpy_runs_the_model_as_the_training_does():
     q = x[2] + 0.1
     off = rng.uniform(0, 0.1, 24).astype(np.float32)
     fg, reach = training.head(jp, new[None], t[None].astype(np.float32), mask, q[None], off[None], HEADS)
-    fg_np, reach_np = temporal.head(p, new, t, q, off)
+    fg_np, reach_np = training.numpy_head(p, new, t, q, off)
     assert np.allclose(np.asarray(fg)[0], fg_np, atol=1e-4)
     assert np.allclose(np.asarray(reach)[0], reach_np, atol=1e-4)
