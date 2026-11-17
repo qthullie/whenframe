@@ -72,8 +72,11 @@ CPU, `pip install 'whenframe[speech]'`), and a search then finds the words
 said as well as what is seen. `whenframe index --sounds` also listens to the
 sound tracks (CLAP), to find laughter, applause, a dog barking or a siren.
 In a library of long videos, a moment lasts as long as the frames match
-(`--moments`). `serve --jellyfin` and `serve --immich` link each moment to
-the video in a Jellyfin or Immich server.
+(`--moments`). `whenframe index --temporal` runs each video's frames through
+whenframe's own model, trained on DiDeMo: 1.6 points more of DiDeMo's test
+moments found, 1.1 points fewer of UnAV-100's sound events, so it is not the
+default (fifth round, below). `serve --jellyfin` and `serve --immich` link
+each moment to the video in a Jellyfin or Immich server.
 
 Nothing else goes over the network. ONNX Runtime 1.29 sends usage telemetry to
 Microsoft by default, and `import openvino` reports to Google Analytics;
@@ -87,7 +90,11 @@ logging every outbound connection of an indexing and search run). More in
    one kept are skipped.
 2. [SigLIP 2](https://arxiv.org/abs/2502.14786) embeds the frames and the
    description (ONNX Runtime, CPU). Its sigmoid gives each frame an absolute
-   match score, so frames from different videos compare directly.
+   match score, so frames from different videos compare directly. With
+   `--temporal`, a small transformer of whenframe's own, trained on DiDeMo's
+   training videos, rewrites each frame's embedding with what the frames
+   around it show (in the spirit of
+   [CLIP4Clip](https://arxiv.org/abs/2104.08860)'s temporal transformer).
 3. Frames that match almost any description are marked down, using a bank of
    4,096 unrelated descriptions: query-bank normalisation
    ([Bogolin et al., CVPR 2022](https://arxiv.org/abs/2112.12777)), applied to
@@ -177,6 +184,16 @@ before its test run):
 | 17. frames and sound together beat the frames alone by at least 4 points (UnAV-100, P@10) | +10.3 points | yes |
 <!-- /table -->
 
+Fifth round (whenframe's own model, trained on DiDeMo's training videos):
+
+<!-- table round5-criteria -->
+| criterion (fixed before its test run) | measured on test | met |
+|---|---|---|
+| 18. the adapted frames add at least 1 point on the DiDeMo test | +1.6 points | yes |
+| 19. they lose at most 1 point on each other benchmark | Charades-STA, R1 at IoU >= 0.5 +0.9; YouCook2, R@5, speech + spans +0.4; UnAV-100, P@10, frames + sound -1.1 | no |
+| 20. the adapter adds at most 1 CPU minute per hour of video | 0.04 min | yes |
+<!-- /table -->
+
 All tables, the costs and the figures: [docs/RESULTS.md](https://github.com/qthullie/whenframe/blob/main/docs/RESULTS.md).
 
 ## Limits
@@ -198,6 +215,9 @@ All tables, the costs and the figures: [docs/RESULTS.md](https://github.com/qthu
 - Indexing is slow on a small machine without OpenVINO (see the modes above,
   measured on 4 vCPUs); OpenVINO's speed-up was measured on one processor only.
 - Descriptions in French were measured through machine translation only.
+- whenframe's own model (`--temporal`) learnt from DiDeMo's sentences about
+  people; on UnAV-100's events, named by what is heard, it found fewer of them
+  (1.1 points of P@10).
 - Several criteria set in advance were not met; the results page says which and
   why.
 
