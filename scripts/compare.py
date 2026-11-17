@@ -254,16 +254,14 @@ class Candidate:
         return p
 
 
-def bank_params(model: str) -> tuple[float, float]:
-    """(beta, strength) of the query bank chosen for the encoder on DiDeMo's tuning videos."""
-    if model == "siglip2-so400m":
-        best = json.loads((ROOT / "results" / "didemo_tuned_so400m.json").read_text())["best"]
-        return best["beta"], best["lam"]
-    if model == "siglip2-b32":
-        p = json.loads((ROOT / "results" / "didemo_tuned_round2.json").read_text())["siglip32_bank"]["params"]
-        return p["beta"], p["lam"]
-    p = json.loads((ROOT / "results" / "didemo_tuned.json").read_text())["frame_window_bank"]["params"]
-    return p["beta"], p["lam"]
+def bank_params(model: str, spans: bool = False) -> tuple[float, float]:
+    """(beta, strength) of the query bank as the tool sets them for the encoder and the kind of moments (the values
+    chosen on DiDeMo's tuning videos, kept in whenframe.encoder.MODELS)."""
+    from whenframe.encoder import MODELS
+
+    spec = MODELS[model]
+    lam = spec.spans_lambda if spans and spec.spans_lambda is not None else spec.bank_lambda
+    return spec.bank_beta, lam
 
 
 def text_embeddings(model: str, key: str, texts: list[str]) -> np.ndarray:
@@ -333,7 +331,7 @@ class Benchmarks:
         return f, queries, text
 
     def search_params(self, model: str, method: str) -> dict:
-        beta, lam = bank_params(model)
+        beta, lam = bank_params(model, spans=method == "whenframe_bank")
         params = json.loads((ROOT / "results" / "didemo_tuned.json").read_text())[method]["params"]
         return {**params, "beta": beta, "lam": lam}
 
