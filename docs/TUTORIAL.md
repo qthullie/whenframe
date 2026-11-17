@@ -312,6 +312,14 @@ them is kept but the embeddings. UnAV-100 is licensed for non-commercial
 research (CC BY-NC-SA 4.0). `make benchmark-figure` draws
 [figures/benchmark.png](figures/benchmark.png) from the results.
 
+The fifth round (`make round5`, after the others; `pip install -e ".[train]"`
+for JAX) trains whenframe's own model. It reads DiDeMo's training archive
+(`DiDeMo_Videos_mp4_train.tar.part-000` to `-007`, 43 GB) as it downloads, one
+video at a time, keeps only the embeddings of their frames, and resumes where
+it stopped; then it embeds the training descriptions, trains the model with
+the settings chosen on the tuning videos (on four cores: about an hour),
+exports it to `whenframe/data/` and runs the test once.
+
 Charades-STA comes from the `lmms-eval/charades_sta` copy on the Hugging Face
 Hub: `data/test-00000-of-00001.parquet` as `data/charades/test.parquet`, and,
 from the four `Charades_v1_480_part_N.zip` archives (16 GB), the 1,334 videos

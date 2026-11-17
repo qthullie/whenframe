@@ -8,7 +8,7 @@ YOUCOOK2 ?= data/youcook2
 UNAV ?= data/unav
 
 .PHONY: install check lint test didemo-extract didemo-tune didemo-eval didemo-explore didemo-round2 tables figures \
-	didemo-rerank charades didemo-round3 youcook2 round4 benchmark-figure demo site
+	didemo-rerank charades didemo-round3 youcook2 round4 round5 benchmark-figure demo site
 
 install:
 	$(PY) -m pip install -e ".[dev]"
@@ -119,6 +119,19 @@ round4:
 		--train-annotations $(DIDEMO)/didemo_train.json
 	$(PY) scripts/thumbnail.py --split test --annotations $(DIDEMO)/didemo_test.json \
 		--train-annotations $(DIDEMO)/didemo_train.json
+
+# the fifth round, whenframe's own model (docs/PROTOCOL.md): the training videos streamed and embedded, the model
+# trained (pip install -e ".[train]") with the settings chosen on the tuning videos, exported, tested once
+ROUND5 = --annotations $(DIDEMO)/didemo_train.json
+round5:
+	$(PY) scripts/train_data.py $(ROUND5)
+	$(PY) scripts/temporal.py texts $(ROUND5)
+	$(PY) scripts/temporal.py train $(ROUND5) --name temporal-siglip2-base --steps 3000 --batch 128 --every 250 \
+		--lr 1e-4 --warmup 200 --bank-sample 1024 --head 0 --leash 100 --within 2
+	$(PY) scripts/temporal.py export $(ROUND5) --model results/temporal/temporal-siglip2-base.npz
+	$(PY) scripts/temporal.py evaluate $(ROUND5) --model whenframe/data/temporal-siglip2-base.npz \
+		--test-annotations $(DIDEMO)/didemo_test.json --charades-annotations $(CHARADES)/test.parquet \
+		--youcook2-annotations $(YOUCOOK2)/val.parquet --unav-annotations $(UNAV)/unav100_all.json
 
 # whenframe beside published numbers and home-tool approaches (docs/figures/benchmark.png)
 benchmark-figure:
