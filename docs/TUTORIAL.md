@@ -250,6 +250,16 @@ were there). `make youcook2` embeds and transcribes them, tunes the weight of
 speech on a third of the videos and evaluates on the others; it needs both
 extras (`pip install -e ".[dev,fast,speech]"`).
 
+The fourth round (`make round4`, after the third) adds speech to the adaptive
+spans on YouCook2, embeds the DiDeMo videos again with SigLIP 2 So400m
+(Immich's ONNX export, 4.3 GB, downloaded at the first run), and measures what
+is heard on UnAV-100: `unav100_all.json` of `nguyenminh04/unav100-videos` on
+the Hugging Face Hub, as `data/unav/unav100_all.json`; the 22 archives of
+videos (25 GB) are read as they download, one video at a time, and nothing of
+them is kept but the embeddings. UnAV-100 is licensed for non-commercial
+research (CC BY-NC-SA 4.0). `make benchmark-figure` draws
+[figures/benchmark.png](figures/benchmark.png) from the results.
+
 Charades-STA comes from the `lmms-eval/charades_sta` copy on the Hugging Face
 Hub: `data/test-00000-of-00001.parquet` as `data/charades/test.parquet`, and,
 from the four `Charades_v1_480_part_N.zip` archives (16 GB), the 1,334 videos

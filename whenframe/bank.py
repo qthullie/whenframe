@@ -20,7 +20,11 @@ from importlib import resources
 
 import numpy as np
 
-BANKS = {"siglip2-base": "bank-siglip2-base.npy", "siglip2-b32": "bank-siglip2-b32.npy"}
+BANKS = {
+    "siglip2-base": "bank-siglip2-base.npy",
+    "siglip2-b32": "bank-siglip2-b32.npy",
+    "siglip2-so400m": "bank-siglip2-so400m.npy",
+}
 
 
 def load(model: str) -> np.ndarray | None:

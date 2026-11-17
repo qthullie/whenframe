@@ -456,6 +456,8 @@ part, each before its test run.
 | criterion (fixed before its test run) | measured on test | met |
 |---|---|---|
 | 13. speech with adaptive spans beats speech with fixed windows by at least 2 points (YouCook2) | +7.0 points | yes |
+| 14. So400m beats the base model by at least 2 points (DiDeMo, both with OpenVINO) | +1.9 points | no |
+| 15. indexing with So400m takes at most 30 min of CPU time per hour of video | 25.8 min | yes |
 <!-- /table -->
 
 ### Speech with adaptive spans
@@ -484,3 +486,32 @@ the time. In a given video, the step is placed at IoU >= 0.5 30.0 % of the
 time. In the tool, `--moments spans` places spans instead of windows, with the
 query bank's strength they were tuned with on DiDeMo (0.5 instead of 1); the
 fixed windows stay the default, as they did better on DiDeMo's short moments.
+
+### SigLIP 2 So400m
+
+The same 979 test videos and 3,902 descriptions, the default search with
+repeats skipped, the frames embedded by OpenVINO in bfloat16 for both models;
+So400m's text cleaning and query bank were chosen on the tuning videos
+(lower case, beta 50, strength 1, as for the base model).
+
+<!-- table round4-so400m -->
+| image encoder (OpenVINO, bfloat16) | R@1 | R@5 | R@10 | right video in top 5 | CPU ms per frame | indexing, CPU min per hour of video | embedding a description (ms) |
+|---|---|---|---|---|---|---|---|
+| SigLIP 2 base (the default) | 13.4 | 27.6 | 34.3 | 46.3 | 79 | 6.5 | 45 |
+| SigLIP 2 So400m | 14.7 | 29.5 | 36.0 | 48.2 | 397 | 25.8 | 148 |
+<!-- /table -->
+
+<!-- table round4-so400m-wins -->
+So400m moves 347 test descriptions into the first five moments and 274 out of them (sign test p = 0.0038), with lower-case descriptions and the base model's query bank values (beta 50, strength 1), chosen on the tuning videos.
+<!-- /table -->
+
+The larger model finds more of the moments at every rank: 29.5 % among the
+first five against 27.6 %, 14.7 % first against 13.4 %, and the right video
+among the first five 48.2 % of the time against 46.3 %. The gain, 1.9 points,
+is significant (sign test) but short of the 2 points criterion 14 asked for:
+it is not met. Indexing takes 25.8 CPU minutes per hour of video, decoding
+included, close to what the base model took with ONNX Runtime in the first
+round (24.9), and four times what it takes with OpenVINO (6.5); embedding a
+description takes 148 ms instead of 45, and the model is a 4.3 GB download
+instead of 1.5. It is offered as `--mode large`, for those who would rather
+wait than miss a moment.

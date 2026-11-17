@@ -305,6 +305,34 @@ def round4_tables() -> dict[str, str]:
             f"the first five moments {pct(r['whenframe_bank']['corpus'][YC])} % of the time with adaptive spans "
             f"(`--moments spans`), and {pct(spans)} % when what is said is searched too (indexed with `--speech`)."
         )
+    f = RESULTS / "didemo_test_so400m.json"
+    if f.exists():
+        r = json.loads(f.read_text())
+        big, base, c = r["siglip2-so400m"], r["base"], r["cost"]
+        gain = big["corpus"][PRIMARY] - base["corpus"][PRIMARY]
+        cost = sum(c["cpu_min_per_hour"].values())
+        rows += [["14. So400m beats the base model by at least 2 points (DiDeMo, both with OpenVINO)",
+                  f"{100 * gain:+.1f} points", gain >= 0.02],
+                 ["15. indexing with So400m takes at most 30 min of CPU time per hour of video", f"{cost:.1f} min",
+                  cost <= 30]]  # fmt: skip
+        ov = json.loads((RESULTS / "didemo_test_backends.json").read_text())["openvino"]
+        base_cost = sum(ov["cpu_min_per_hour"].values())
+        text_ms = json.loads((RESULTS / "didemo_test.json").read_text())["cost"]["text_ms"]  # ONNX Runtime
+        out["round4-so400m"] = table(
+            ["image encoder (OpenVINO, bfloat16)", "R@1", "R@5", "R@10", "right video in top 5",
+             "CPU ms per frame", "indexing, CPU min per hour of video", "embedding a description (ms)"],
+            [["SigLIP 2 base (the default)", pct(base["corpus"]["R@1 IoU>=0.5"]), pct(base["corpus"][PRIMARY]),
+              pct(base["corpus"]["R@10 IoU>=0.5"]), pct(base["video"]["R@5"]), f"{ov['encode_ms_per_frame']:.0f}",
+              f"{base_cost:.1f}", f"{text_ms:.0f}"],
+             ["SigLIP 2 So400m", pct(big["corpus"]["R@1 IoU>=0.5"]), pct(big["corpus"][PRIMARY]),
+              pct(big["corpus"]["R@10 IoU>=0.5"]), pct(big["video"]["R@5"]), f"{c['encode_ms_per_frame']:.0f}",
+              f"{cost:.1f}", f"{c['query_ms']:.0f}"]],
+        )  # fmt: skip
+        out["round4-so400m-wins"] = (
+            f"So400m moves {r['wins']} test descriptions into the first five moments and {r['losses']} out of them "
+            f"(sign test p = {r['p']:.2g}), with lower-case descriptions and the base model's query bank values "
+            f"(beta {r['params']['beta']:g}, strength {r['params']['lam']:g}), chosen on the tuning videos."
+        )
     if rows:
         out["round4-criteria"] = table(["criterion (fixed before its test run)", "measured on test", "met"],
                                        [[n, m, "yes" if ok else "no"] for n, m, ok in rows])  # fmt: skip

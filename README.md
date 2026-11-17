@@ -151,6 +151,8 @@ Fourth round, under way (each part fixed before its test run):
 | criterion (fixed before its test run) | measured on test | met |
 |---|---|---|
 | 13. speech with adaptive spans beats speech with fixed windows by at least 2 points (YouCook2) | +7.0 points | yes |
+| 14. So400m beats the base model by at least 2 points (DiDeMo, both with OpenVINO) | +1.9 points | no |
+| 15. indexing with So400m takes at most 30 min of CPU time per hour of video | 25.8 min | yes |
 <!-- /table -->
 
 All tables, the costs and the figures: [docs/RESULTS.md](docs/RESULTS.md).

@@ -1,8 +1,9 @@
-bank-siglip2-base.npy, bank-siglip2-b32.npy
+bank-siglip2-base.npy, bank-siglip2-b32.npy, bank-siglip2-so400m.npy
 
-SigLIP 2 base (google/siglip2-base-patch16-224) and SigLIP 2 B/32
-(google/siglip2-base-patch32-256) text embeddings, rounded to float16, of the
-same 4,096 descriptions from the training split of DiDeMo:
+SigLIP 2 base (google/siglip2-base-patch16-224), B/32
+(google/siglip2-base-patch32-256) and So400m (google/siglip2-so400m-patch14-224,
+through Immich's ONNX export) text embeddings, rounded to float16, of the same
+4,096 descriptions from the training split of DiDeMo:
 
     Lisa Anne Hendricks, Oliver Wang, Eli Shechtman, Josef Sivic, Trevor Darrell
     and Bryan Russell. Localizing Moments in Video with Natural Language.

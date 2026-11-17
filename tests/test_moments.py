@@ -91,4 +91,4 @@ def test_every_mode_has_the_query_bank_it_was_measured_with():
     for models in MODES.values():
         for model in models.split("+"):
             b = bank.load(model)
-            assert b is not None and b.shape == (4096, 768), model
+            assert b is not None and b.shape[0] == 4096, model

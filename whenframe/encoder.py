@@ -10,9 +10,9 @@ economy and precision modes; its scale and bias are its own checkpoint's.
 
 SigLIP 2 So400m (400 million parameters in the image tower, 5 times the base
 model's) comes from Immich's ONNX export of the open_clip weights, which takes
-one image or one text at a time; its texts are cleaned as open_clip does
-("canonicalize": lower case, no punctuation), and its scale and bias are those
-of google/siglip2-so400m-patch14-224.
+one image or one text at a time; its descriptions are lower-cased as the base
+model's are, which did as well as open_clip's own cleaning on DiDeMo tuning
+videos, and its scale and bias are those of google/siglip2-so400m-patch14-224.
 
 MobileCLIP-S2 is measured in the benchmark but is not used by any mode: Apple
 licenses its weights for non-commercial research only. It was trained with a
@@ -86,12 +86,17 @@ MODELS = {
         "immich-app/ViT-SO400M-14-SigLIP2__webli", 224, 109.8812, -15.9324, vision_file="visual/model.onnx",
         text_file="textual/model.onnx", tokenizer_file="textual/tokenizer.json", image_input="image",
         text_input="text", text_dtype="int32", image_output="embedding", text_output="embedding",
-        clean="canonical", weights_folder="textual", text_openvino=True,
+        clean="lower", weights_folder="textual", text_openvino=True,
     ),
 }  # fmt: skip
 DEFAULT_MODEL = "siglip2-base"
 # what `whenframe index --mode` stores; several models are searched together and their scores combined
-MODES = {"standard": "siglip2-base", "economy": "siglip2-b32", "precision": "siglip2-base+siglip2-b32"}
+MODES = {
+    "standard": "siglip2-base",
+    "economy": "siglip2-b32",
+    "precision": "siglip2-base+siglip2-b32",
+    "large": "siglip2-so400m",
+}
 # weight of each model's scores in a combined search, as tuned on DiDeMo training videos
 FUSION = {"siglip2-base": 1.0, "siglip2-b32": 0.25, "mobileclip-s2": 1.0}
 

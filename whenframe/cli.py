@@ -149,7 +149,8 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--dedup", type=float, default=None, help="skip frames that barely changed (default 4, 0 = off)")
         p.add_argument("--mode", choices=list(MODES), default=None,
                        help="standard (default); economy: about 3 times less CPU, less accurate; precision: two "
-                            "models, no gain measured on DiDeMo. Fixed for a library (docs/RESULTS.md).")  # fmt: skip
+                            "models, no gain measured on DiDeMo; large: SigLIP 2 So400m, 4 times the CPU of "
+                            "standard, 1.9 points more on DiDeMo. Fixed for a library (docs/RESULTS.md).")  # fmt: skip
         p.add_argument("--backend", choices=BACKENDS, default=None,
                        help="runtime of the image encoder: OpenVINO if installed (auto, the default), else ONNX "
                             "Runtime; also $WHENFRAME_BACKEND")  # fmt: skip
