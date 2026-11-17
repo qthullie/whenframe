@@ -163,12 +163,14 @@ def assemble(ann: list, parts: Path) -> None:
     names = sorted(p.stem for p in parts.glob("*.npz") if not p.stem.endswith(".tmp"))
     z = [np.load(parts / f"{n}.npz") for n in names]
     counts = np.array([len(x["times"]) for x in z])
+    tmp = OUT.with_name(OUT.stem + ".tmp.npz")  # replaced in one step: a training run may have the old one open
     np.savez_compressed(
-        OUT, names=np.array(names), emb=np.concatenate([x["emb"] for x in z]),
+        tmp, names=np.array(names), emb=np.concatenate([x["emb"] for x in z]),
         times=np.concatenate([x["times"] for x in z]), keep=np.concatenate([x["keep"] for x in z]),
         counts=counts, starts=np.concatenate([[0], np.cumsum(counts)[:-1]]),
         durations=np.array([float(x["duration"]) for x in z], dtype=np.float32),
     )  # fmt: skip
+    tmp.replace(OUT)
     print(f"wrote {OUT}: {len(names)} videos, {counts.sum()} frames")
 
 

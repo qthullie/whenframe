@@ -247,7 +247,7 @@ def loss(p, batch, layers, heads, key, cfg):
     own = jnp.diagonal(z, axis1=0, axis2=1).T  # (n, L): each description against its own video
     within = jnp.mean(jax.nn.logsumexp(own, axis=-1) - jax.nn.logsumexp(jnp.where(inside, own, -1e9), axis=-1))
     leash = jnp.sum((1 - jnp.sum(new * x, -1)) * mask) / jnp.sum(mask)
-    total = between + cfg["within"] * within + cfg["leash"] * leash
+    total = cfg["between"] * between + cfg["within"] * within + cfg["leash"] * leash
     sg = jax.lax.stop_gradient  # the head learns from the adapter's output; its losses do not reshape it
     found, parts = head_loss(p, sg(new), t, mask, q, sg(off), inside, start, end, heads, cfg["negatives"], sub)
     return total + cfg["head"] * found, (between, within, leash, *parts)
@@ -457,8 +457,8 @@ def train(args) -> None:
     import jax
     import jax.numpy as jnp
 
-    cfg = {"within": args.within, "leash": args.leash, "dropout": args.dropout, "head": args.head,
-           "negatives": args.negatives}  # fmt: skip
+    cfg = {"between": args.between, "within": args.within, "leash": args.leash, "dropout": args.dropout,
+           "head": args.head, "negatives": args.negatives}  # fmt: skip
     tuning = DiDeMo(args)
     data = Videos(args.seed, tuning.kept.bank, args.bank_sample)
     key = jax.random.PRNGKey(args.seed)
@@ -642,6 +642,7 @@ def main() -> None:
     ap.add_argument("--width", type=int, default=256)
     ap.add_argument("--layers", type=int, default=2)
     ap.add_argument("--heads", type=int, default=4)
+    ap.add_argument("--between", type=float, default=1.0, help="weight of the loss between videos")
     ap.add_argument("--within", type=float, default=1.0, help="weight of the loss within a video")
     ap.add_argument("--leash", type=float, default=1.0, help="weight of the leash to SigLIP 2's embeddings")
     ap.add_argument("--dropout", type=float, default=0.1)
