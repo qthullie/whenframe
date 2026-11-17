@@ -218,7 +218,7 @@ def run(f: Frozen, queries: list, text, method: str, p: dict, scores: np.ndarray
             video_hits[k] += rank_v is not None and rank_v < k
     n = len(queries)
     single = np.array(single_iou)
-    extra = {"found": found} if per_query else {}
+    extra = {"found": found, "single_iou": single_iou} if per_query else {}
     return {**extra,
         "params": p,
         "single": {"R1 IoU>=0.5": float((single >= 0.5).mean()), "R1 IoU>=0.7": float((single >= 0.7).mean()),
