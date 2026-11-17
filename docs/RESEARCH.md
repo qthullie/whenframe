@@ -106,6 +106,13 @@ measured accuracy).
 - Offers a cheaper mode (SigLIP 2 B/32) and a more accurate one (B/16 and B/32
   combined), with their costs measured, and a search page that keeps the model
   loaded.
+- Trains a small model of its own (`--temporal`, 1.45 million weights): a
+  temporal adapter in the spirit of [CLIP4Clip](https://arxiv.org/abs/2104.08860)'s
+  temporal transformer, on DiDeMo's training videos, which rewrites each
+  frame's SigLIP 2 embedding with its neighbours', trained on the search's own
+  scores, query bank included, and leashed to SigLIP 2's embeddings. It adds
+  1.6 points on the DiDeMo test and loses 1.1 on UnAV-100's sound events, so it
+  is an option rather than the default ([RESULTS.md](RESULTS.md), fifth round).
 - Measures all of it on DiDeMo, personal Flickr videos, with the protocol fixed
   in advance ([PROTOCOL.md](PROTOCOL.md)), against a shot-based baseline in the
   spirit of current home tools, with the CPU cost of indexing and searching.

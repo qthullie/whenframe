@@ -637,7 +637,9 @@ image tower). But on UnAV-100 it loses 1.1 points of P@10 with the sound,
 more than the point allowed: criterion 19 is not met, by 0.1 point. As fixed
 before the test, it is therefore not the default. It is offered instead, for
 the standard mode: `whenframe index --temporal`, the first time a library is
-indexed.
+indexed. With OpenVINO, the standard mode and the model index an hour of
+video for 6.6 CPU minutes and find 29.3 % of the DiDeMo test's moments among
+the first five; the large mode finds 29.5 % for 25.8 minutes.
 
 ### The runs on the tuning videos
 
