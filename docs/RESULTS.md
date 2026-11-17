@@ -623,6 +623,11 @@ embedding with what the frames around it show (`whenframe/temporal.py`); the
 search is otherwise unchanged.
 
 <!-- table round5-criteria -->
+| criterion (fixed before its test run) | measured on test | met |
+|---|---|---|
+| 18. the adapted frames add at least 1 point on the DiDeMo test | +1.6 points | yes |
+| 19. they lose at most 1 point on each other benchmark | Charades-STA, R1 at IoU >= 0.5 +0.9; YouCook2, R@5, speech + spans +0.4; UnAV-100, P@10, frames + sound -1.1 | no |
+| 20. the adapter adds at most 1 CPU minute per hour of video | 0.04 min | yes |
 <!-- /table -->
 
 ### The runs on the tuning videos
@@ -646,9 +651,14 @@ model for the test, on all of them (`results/temporal/*.json`).
 ### DiDeMo test
 
 <!-- table round5-didemo -->
+| DiDeMo test (OpenVINO, repeats skipped) | R@1 | R@5 | R@10 | R@100 | R@5 (0.7) | right video in top 5 | single R1 | single R1 (0.7) | single mIoU |
+|---|---|---|---|---|---|---|---|---|---|
+| SigLIP 2's frames | 13.4 | 27.6 | 34.3 | 55.0 | 5.8 | 46.3 | 47.4 | 9.8 | 34.1 |
+| **whenframe's model** | 14.4 | 29.3 | 36.4 | 57.6 | 6.0 | 47.7 | 49.5 | 10.0 | 35.2 |
 <!-- /table -->
 
 <!-- table round5-wins -->
+On the DiDeMo test the model moves 151 descriptions into the first five moments and 87 out of them (sign test p = 4e-05). It took 0.82 ms of CPU per frame, 0.04 CPU minutes per hour of video.
 <!-- /table -->
 
 ### Elsewhere: Charades-STA, YouCook2, UnAV-100
@@ -656,4 +666,12 @@ model for the test, on all of them (`results/temporal/*.json`).
 Each searched as in its own round, with the model trained on DiDeMo only.
 
 <!-- table round5-transfer -->
+| benchmark, search | metric | SigLIP 2's frames | whenframe's model | descriptions moved |
+|---|---|---|---|---|
+| Charades-STA, the given video | R1 IoU>=0.5 | 45.7 | 46.6 |  |
+| Charades-STA, all 1,334 videos | R@5 | 4.1 | 4.0 | 32 in, 35 out (p = 0.81) |
+| YouCook2, fixed windows | R@5 | 12.3 | 13.1 | 29 in, 18 out (p = 0.14) |
+| YouCook2, speech + adaptive spans | R@5 | 25.8 | 26.1 | 28 in, 23 out (p = 0.58) |
+| UnAV-100, frames | P@10 | 42.9 | 41.7 | 9 labels up, 14 down (p = 0.4) |
+| UnAV-100, frames + sound | P@10 | 53.2 | 52.1 | 3 labels up, 9 down (p = 0.15) |
 <!-- /table -->
