@@ -82,3 +82,13 @@ def test_the_search_defaults_are_the_tuned_ones():
 
     assert Bare(SearchConfig())._tuned("siglip2-base") == (50.0, 1.0)
     assert Bare(SearchConfig(moments="spans"))._tuned("siglip2-base") == (50.0, 0.5)
+
+
+def test_every_mode_has_the_query_bank_it_was_measured_with():
+    from whenframe import bank
+    from whenframe.encoder import MODES
+
+    for models in MODES.values():
+        for model in models.split("+"):
+            b = bank.load(model)
+            assert b is not None and b.shape == (4096, 768), model

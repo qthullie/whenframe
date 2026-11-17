@@ -9,8 +9,8 @@ descriptions and takes it off the frame's scores:
     offset(frame)       = (1 / beta) * log mean_b exp(beta * cos(b, frame))
 
 The offset depends on the frame only, so it is computed once per frame. The
-bank shipped with the package holds the SigLIP 2 text embeddings of 4,096
-descriptions from the DiDeMo training split (see data/NOTICE).
+banks shipped with the package hold the text embeddings of 4,096 descriptions
+from the DiDeMo training split, one per model (see data/NOTICE).
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from importlib import resources
 
 import numpy as np
 
-BANKS = {"siglip2-base": "bank-siglip2-base.npy"}
+BANKS = {"siglip2-base": "bank-siglip2-base.npy", "siglip2-b32": "bank-siglip2-b32.npy"}
 
 
 def load(model: str) -> np.ndarray | None:
