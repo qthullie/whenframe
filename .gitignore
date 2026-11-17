@@ -6,6 +6,7 @@ __pycache__/
 results/cache/
 *.mp4
 *.onnx
+!whenframe/data/cast16.onnx
 /build/
 /dist/
 /site/videos/
