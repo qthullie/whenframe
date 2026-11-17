@@ -10,3 +10,4 @@ results/cache/
 /build/
 /dist/
 /site/videos/
+results/temporal/*.npz
