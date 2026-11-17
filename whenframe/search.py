@@ -26,6 +26,7 @@ import numpy as np
 from . import bank as qbank
 from . import sounds
 from .encoder import FUSION, MODELS
+from .half import BLOCK, to_float32
 from .library import Library, Video
 from .moments import Span, on_grid, smooth, spans, windows
 from .sounds import SoundConfig
@@ -75,6 +76,16 @@ def worth_showing(hit: Hit) -> bool:
     return hit.confidence >= HIDDEN_BELOW or bool(hit.said) or hit.heard >= HEARD
 
 
+def scores(emb: np.ndarray, q: np.ndarray, block: int = BLOCK) -> np.ndarray:
+    """emb @ q; float16 embeddings are converted a block of rows at a time, never all at once."""
+    if emb.dtype == np.float32:
+        return emb @ q
+    out = np.empty(len(emb), dtype=np.float32)
+    for i in range(0, len(emb), block):
+        out[i : i + block] = to_float32(emb[i : i + block]) @ q
+    return out
+
+
 def standardise(x: np.ndarray) -> np.ndarray:
     return (x - x.mean()) / max(float(x.std()), 1e-12)
 
@@ -113,7 +124,7 @@ class Searcher:
         out = {}
         for model in self.models:
             q = self.library.encoder_for(model).encode_texts([query])[0].astype(np.float32)
-            out[model] = embs[model] @ q
+            out[model] = scores(embs[model], q)
         return out
 
     def ranking_scores(self, raw: dict[str, np.ndarray]) -> np.ndarray:

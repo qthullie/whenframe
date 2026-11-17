@@ -25,7 +25,7 @@ whenframe = "whenframe.cli:main"
 include = ["whenframe*"]
 
 [tool.setuptools.package-data]
-"whenframe.data" = ["*.npy", "NOTICE"]
+"whenframe.data" = ["*.npy", "*.onnx", "NOTICE"]
 whenframe = ["web/*.html"]
 
 [tool.ruff]

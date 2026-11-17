@@ -27,6 +27,7 @@ import numpy as np
 from . import bank as qbank
 from . import sounds, speech
 from .encoder import DEFAULT_MODEL, Encoder
+from .half import float32_copy, memory_budget
 from .video import RepeatFilter, VideoError, is_photo, iter_frames, probe, read_photo, thumbnails
 
 
@@ -278,6 +279,10 @@ class Library:
             self.db.commit()
             self._cache = None
             vid = self.db.execute("select id from videos where path = ?", (str(path),)).fetchone()[0]
+            for model in s.models:  # the query bank's correction of the new frames, now rather than at a search
+                bank = qbank.load(model)
+                if bank is not None:
+                    self._offsets(model, bank, qbank.beta(model))
         return Video(vid, str(path), duration, start, len(times))
 
     def add_many(self, paths: Iterable[str | Path], on_done: Callable[[Path, Video | None, Exception | None], None]
@@ -322,15 +327,27 @@ class Library:
             return True
 
     def _compact(self) -> None:
+        """Each file is written anew beside the old one, then put in its place: a search still reading the
+        old one, mapped in memory, keeps reading it."""
         videos = self.videos()
         keep = np.concatenate([np.arange(v.start, v.start + v.count) for v in videos]) if videos else np.zeros(0, int)
+        times = np.fromfile(self.folder / "times.f32", dtype=np.float32)
+        new = {}
         for model in self.settings.models:
             emb, _ = self._arrays(model)
-            (self.folder / f"frames.{model}.f16").write_bytes(np.ascontiguousarray(emb[keep]).tobytes())
-        _, times = self._arrays(self.settings.models[0])
-        (self.folder / "times.f32").write_bytes(times[keep].tobytes())
-        for f in self.folder.glob("offsets.*"):  # rows moved: recomputed at the next search
-            f.unlink()
+            new[f"frames.{model}.f16"] = np.ascontiguousarray(emb[keep])
+            path = self.folder / f"offsets.{model}.f32"
+            if path.exists():  # the corrections move with their rows; an incomplete file is recomputed
+                done = np.fromfile(path, dtype=np.float32)
+                new[path.name] = done[keep] if len(done) == len(times) else None
+        new["times.f32"] = times[keep]  # last: its length is the number of rows
+        for name, rows in new.items():
+            if rows is None:
+                (self.folder / name).unlink()
+                continue
+            tmp = self.folder / f"{name}.tmp"
+            rows.tofile(tmp)
+            tmp.replace(self.folder / name)
         starts = np.concatenate([[0], np.cumsum([v.count for v in videos])[:-1]]) if videos else []
         self.db.executemany("update videos set start = ? where id = ?",
                             [(int(s), v.id) for s, v in zip(starts, videos, strict=True)])  # fmt: skip
@@ -354,13 +371,19 @@ class Library:
         return emb, times
 
     def snapshot(self):
-        """(videos, {model: embeddings}, times), loaded once and reused until the library changes."""
+        """(videos, {model: embeddings}, times), loaded once and reused until the library changes.
+
+        The embeddings are copied into memory as float32 when they fit in half.memory_budget(),
+        so a search is one product per model. A larger library stays float16 and mapped from its
+        files: the system keeps in memory what it can, and a search converts a block at a time
+        (search.scores), slower but within the memory.
+        """
         with self._lock:
             if self._cache is None:
-                embs, times = {}, np.zeros(0, np.float32)
-                for model in self.settings.models:
-                    emb, times = self._arrays(model)
-                    embs[model] = np.asarray(emb, dtype=np.float32)
+                arrays = {model: self._arrays(model)[0] for model in self.settings.models}
+                fits = sum(a.shape[0] * a.shape[1] * 4 for a in arrays.values()) <= memory_budget()
+                embs = {model: float32_copy(a) if fits else a for model, a in arrays.items()}
+                _, times = self._arrays(self.settings.models[0])
                 self._cache = (self.videos(), embs, times)
             return self._cache
 

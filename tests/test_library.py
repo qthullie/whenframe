@@ -149,3 +149,44 @@ def test_a_library_refuses_other_settings(tmp_path):
     Library(tmp_path / "lib", Settings(model="toy", fps=1.0), encoder=ToyEncoder())
     with pytest.raises(ValueError):
         Library(tmp_path / "lib", Settings(model="toy", fps=2.0), encoder=ToyEncoder())
+
+
+def test_the_correction_is_computed_when_indexing_and_moves_with_its_rows(videos, tmp_path, monkeypatch):
+    from whenframe import bank as qbank
+
+    bank = ToyEncoder().encode_texts(["grey", "red", "grey"]).astype(np.float32)
+    monkeypatch.setattr(qbank, "load", lambda model: bank if model == "toy" else None)
+    lib = Library(tmp_path / "lib", Settings(model="toy"), encoder=ToyEncoder())
+    for name in ("a", "b", "c"):
+        lib.add(videos / f"{name}.mp4")
+    path = tmp_path / "lib" / "offsets.toy.f32"
+    _, embs, _ = lib.snapshot()
+    assert embs["toy"].dtype == np.float32  # small enough to be copied into memory
+    want = qbank.offsets(embs["toy"], bank, qbank.beta("toy"))
+    np.testing.assert_allclose(np.fromfile(path, dtype=np.float32), want, atol=1e-6)  # before any search
+    lib.remove(videos / "a.mp4")
+    lib.compact()
+    _, embs, _ = lib.snapshot()
+    np.testing.assert_allclose(np.fromfile(path, dtype=np.float32), qbank.offsets(embs["toy"], bank, 50.0),
+                               atol=1e-6)  # fmt: skip
+    assert Searcher(lib).search("green", k=1)[0].path.endswith("b.mp4")
+
+
+def test_scores_by_blocks_equal_the_whole_product():
+    from whenframe.search import scores
+
+    emb = np.random.default_rng(0).normal(size=(1000, 8)).astype(np.float16)
+    q = np.random.default_rng(1).normal(size=8).astype(np.float32)
+    np.testing.assert_allclose(scores(emb, q, block=64), emb.astype(np.float32) @ q, rtol=1e-6)
+
+
+def test_a_library_larger_than_the_memory_budget_is_searched_from_its_files(videos, tmp_path, monkeypatch):
+    lib = Library(tmp_path / "lib", Settings(model="toy"), encoder=ToyEncoder())
+    for name in ("a", "b", "c"):
+        lib.add(videos / f"{name}.mp4")
+    found = [(h.path, h.start) for h in Searcher(lib, SearchConfig(window=4.0)).search("blue", k=3)]
+    monkeypatch.setenv("WHENFRAME_MEMORY", "0")
+    small = Library(tmp_path / "lib", encoder=ToyEncoder())
+    _, embs, _ = small.snapshot()
+    assert embs["toy"].dtype == np.float16  # mapped from the file, converted a block at a time
+    assert [(h.path, h.start) for h in Searcher(small, SearchConfig(window=4.0)).search("blue", k=3)] == found

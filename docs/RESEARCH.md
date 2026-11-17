@@ -95,7 +95,7 @@ measured accuracy).
   SigLIP 2's calibrated scores.
 - Marks down frames that match almost any description, with query-bank
   normalisation applied to video frames. The correction is computed once per
-  frame, when the library is first searched, so it adds nothing to a search.
+  frame, when the frame is indexed, so it adds nothing to a search.
   On DiDeMo it adds about two points of recall, by ranking the right video
   higher ([RESULTS.md](RESULTS.md)).
 - Places moments as fixed windows around the best frames of each video. Spans

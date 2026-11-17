@@ -66,8 +66,15 @@ measured numbers are in the README and in [RESULTS.md](RESULTS.md), "Second
 round" and "Fourth round".
 
 The index lives in `~/.local/share/whenframe/library` (or `$WHENFRAME_LIBRARY`,
-or `--library DIR`). It takes about 5 MB per hour of video, and a search holds
-it in memory as float32, about 11 MB per hour of video.
+or `--library DIR`). It takes about 5 MB per hour of video (7.5 in large mode).
+A search copies it into memory as float32, about 11 MB per hour of video, when
+that fits in a quarter of the computer's memory (`WHENFRAME_MEMORY=2`, in
+gigabytes, sets another limit); a larger library is read from its files a block
+at a time, which the system caches as it can. On a simulated library of 300
+hours, a search took 0.1 s with the copy and 0.3 s without it. The query bank's
+correction of each frame is computed when the frame is indexed (0.07 ms a frame
+here); a library indexed with an earlier version gets it at its next indexing
+run or search, once.
 
 ```bash
 whenframe stats      # what is indexed
