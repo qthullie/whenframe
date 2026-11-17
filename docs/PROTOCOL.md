@@ -392,3 +392,30 @@ spans alone and 24.1 % for speech with fixed windows.
 13. On the 1,331 YouCook2 test steps, speech added to the adaptive spans beats
     speech added to the fixed windows (18.8 % in the third round) by at least 2
     points on the primary metric.
+
+### SigLIP 2 So400m
+
+SigLIP 2 So400m (Google's google/siglip2-so400m-patch14-224, through Immich's
+ONNX export of the open_clip weights; about 400 million parameters in the image
+tower, against 86 million for the base model) embeds the same frames as the
+base model, at 224 pixels, with OpenVINO in bfloat16: one frame per request,
+four requests at once (`scripts/didemo.py extract --model siglip2-so400m
+--backend openvino`). The default search is unchanged but for the query bank's
+beta and strength and the cleaning of the descriptions, chosen among 24
+combinations on the 500 tuning videos (`scripts/so400m.py tune`): lower case
+as for the base model, or open_clip's "canonicalize" (punctuation removed too);
+beta 10, 20, 50 or 100; strength 0.25, 0.5 or 1. The best was lower case, beta
+50, strength 1, the base model's own values: the right moment among the first
+five for 35.1 % of the tuning descriptions, against 31.3 % for the base model
+embedded by OpenVINO, both with repeats skipped. The 24 combinations ranged
+from 33.6 to 35.1 %. On the tuning videos, encoding took 407 ms of CPU time per
+frame (80 for the base model with OpenVINO), and indexing 26.6 CPU minutes per
+hour of video, decoding included.
+
+14. On the DiDeMo test, the default search with So400m, as tuned, finds the
+    right moment among the first five at least 2 points more often than the
+    same search with the base model embedded by OpenVINO (`scripts/so400m.py
+    evaluate`, repeats skipped in both).
+15. Indexing with So400m on OpenVINO takes at most 30 CPU minutes per hour of
+    video, decoding included (the base model took 24.9 with ONNX Runtime in the
+    first round).

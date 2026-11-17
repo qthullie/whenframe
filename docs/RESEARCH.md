@@ -110,8 +110,29 @@ measured accuracy).
   in advance ([PROTOCOL.md](PROTOCOL.md)), against a shot-based baseline in the
   spirit of current home tools, with the CPU cost of indexing and searching.
 
+## Against published numbers
+
+[figures/benchmark.png](figures/benchmark.png) sets whenframe beside published
+methods only where the benchmark, the split and the metric are the same:
+placing a described moment in a given Charades-STA test video, R1 at IoU 0.5,
+with no training on Charades-STA's annotations. As their authors report them:
+["Your VLM Already Knows When"](https://arxiv.org/abs/2608.08315) 56.8 %, with
+a 7-billion-parameter vision-language model;
+[TFVTG](https://arxiv.org/abs/2408.16219) (Zheng et al., ECCV 2024) 49.97 %,
+with a language model and vision-language models;
+[VTG-GPT](https://arxiv.org/abs/2403.02076) (Xu et al., 2024) 43.68 %;
+[PSVL](https://arxiv.org/abs/2110.00428) (Nam et al., ICCV 2021) 31.29 %,
+trained on unannotated videos. whenframe places 45.7 % (fixed windows) and
+47.2 % (adaptive spans) with its DiDeMo parameters, on a CPU, from frames it
+embedded once for every search; the first three run language or
+vision-language models over the video for each sentence, and PSVL trains a
+model on Charades videos without their annotations. The home-tool approaches of the same figure (one image per video, one
+keyframe per shot, frames searched without the query bank) are run here, on
+the same videos and descriptions as whenframe.
+
 ## What is not claimed
 
-- No comparison is made with numbers from other benchmarks or settings.
+- No comparison is made with numbers from other benchmarks or settings than the
+  one above.
 - A frame-level encoder cannot see motion: descriptions like "the camera pans
   left" are out of its reach, and DiDeMo has many of them.
