@@ -112,7 +112,7 @@ logging every outbound connection of an indexing and search run). More in
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/qthullie/whenframe/main/docs/figures/benchmark-dark.png">
-    <img src="https://raw.githubusercontent.com/qthullie/whenframe/main/docs/figures/benchmark.png" alt="whenframe against what exists: on Charades-STA it places 45.7 to 47.2 % of the moments, between VTG-GPT (43.7 %) and TFVTG (50.0 %) and below a 7-billion-parameter vision-language model (56.8 %); on DiDeMo it finds the right video among the first five 46.4 % of the time against 28 to 31 % for one image per video, and the right moment 27.2 % against 2.3 % for one keyframe per shot; on YouCook2, adaptive spans and speech raise 12.3 % to 25.8 %; on UnAV-100, adding the sound raises 42.9 % to 53.2 %" width="800">
+    <img src="https://raw.githubusercontent.com/qthullie/whenframe/main/docs/figures/benchmark.png" alt="whenframe against what exists: on Charades-STA it places 45.7 to 47.2 % of the moments, between VTG-GPT (43.7 %) and TFVTG (50.0 %) and below a 7-billion-parameter vision-language model (56.8 %); on DiDeMo it finds the right video among the first five 46.4 % of the time against 28 to 31 % for one image per video, and the right moment 27.2 % against 2.3 % for one keyframe per shot; on YouCook2, adaptive spans and speech raise 12.3 % to 25.8 %; on UnAV-100, adding the sound raises 42.9 % to 53.2 %; whenframe's own model (--temporal) adds 1.6 points on DiDeMo at almost no cost, 0.9 on Charades-STA and 0.4 on YouCook2, and loses 1.1 on UnAV-100" width="800">
   </picture>
 </p>
 
