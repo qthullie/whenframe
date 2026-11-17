@@ -599,3 +599,13 @@ test over the descriptions (labels for UnAV-100).
 If 18 and 19 hold, a new library goes through the model by default
 (`--no-temporal` keeps SigLIP 2's embeddings); libraries already indexed keep
 theirs.
+
+**The model trained, before the test.** 7,745 training videos were in the
+archive and could be read (62.3 hours, 30,434 descriptions). The best check
+on the tuning videos came at step 1,750 of 3,000: R@5 34.1 % (31.3 % without
+the model), the right video among the first five 53.9 % (51.4 %), single-video
+R1 at IoU 0.5 49.9 % (46.4 %), the frames at a cosine of 0.998 from SigLIP 2's
+(`results/temporal/temporal-siglip2-base.json`). The checks were chosen among
+twelve on the same videos, so the gain on new ones is likely smaller.
+Training took 21 minutes on the four cores, checks included. Exported in
+float16 to `whenframe/data/temporal-siglip2-base.npz`, the file the test runs.

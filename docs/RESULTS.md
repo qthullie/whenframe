@@ -640,6 +640,7 @@ model for the test, on all of them (`results/temporal/*.json`).
 | e3: adapter | 600 x 64 | 0 | 1 | 10 | 200 | 30.8 | 49.5 | 49.1 | 0.985 |
 | e4: adapter | 600 x 64 | 1 | 1 | 100 | 600 | 33.0 | 52.8 | 48.3 | 0.998 |
 | e5: adapter | 600 x 64 | 1 | 2 | 100 | 400 | 33.1 | 52.7 | 49.1 | 0.997 |
+| temporal-siglip2-base: adapter | 3000 x 128 | 1 | 2 | 100 | 1750 | 34.1 | 53.9 | 49.9 | 0.998 |
 <!-- /table -->
 
 ### DiDeMo test
