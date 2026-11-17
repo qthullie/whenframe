@@ -34,8 +34,9 @@ def open_library(args) -> Library:
     if args.no_photos:
         overrides["photos"] = False
     if not (Path(args.library) / "config.json").exists() and not args.no_temporal:
-        # a new library goes through whenframe's temporal model when one is installed for its encoder
-        name = temporal.MODELS.get(overrides.get("model", DEFAULT_MODEL).split("+")[0])
+        # a new library goes through whenframe's temporal model when one is installed for its encoder (the
+        # standard mode: the others' frames, alone or combined, were not measured with it)
+        name = temporal.MODELS.get(overrides.get("model", DEFAULT_MODEL))
         if name and temporal.load(name=f"{name}.npz") is not None:
             overrides["temporal"] = name
     lib = Library(args.library, Settings(**overrides) if overrides else None, backend=args.backend)
