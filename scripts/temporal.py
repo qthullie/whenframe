@@ -440,8 +440,8 @@ def train(args) -> None:
     tuning = DiDeMo(args)
     data = Videos(args.seed, tuning.kept.bank, args.bank_sample)
     key = jax.random.PRNGKey(args.seed)
-    params = jax.tree.map(jnp.asarray, init(key, args.width, args.layers, args.heads, tuning.params["lam"],
-                                            tuning.params["beta"]))  # fmt: skip
+    params = jax.tree.map(jnp.asarray, init(key, args.width, args.layers, args.heads, lam=tuning.params["lam"],
+                                            beta=tuning.params["beta"]))  # fmt: skip
     adam_m = jax.tree.map(jnp.zeros_like, params)
     adam_v = jax.tree.map(jnp.zeros_like, params)
     decayed = {k: k.endswith("_w") for k in params}
