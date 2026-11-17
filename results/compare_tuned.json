@@ -1,0 +1,18 @@
+{
+ "base": {
+  "spec": "base",
+  "model": "siglip2-base",
+  "weights": null,
+  "alpha": 1.0,
+  "didemo": 0.31323454266734796,
+  "youcook2": 0.2940226171243942,
+  "unav": 0.41025641025641024,
+  "mean": 0.3391711900160508,
+  "speech": {
+   "weight": 0.005,
+   "pad": 0.0,
+   "normalise": "raw"
+  },
+  "sound_weight": 2.0
+ }
+}
