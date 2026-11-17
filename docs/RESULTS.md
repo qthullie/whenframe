@@ -614,3 +614,45 @@ side scaled by its own best scores. Neither did better than the fixed weight
 (40.8 % against 41.0 %), and neither was taken to the test videos. These videos are short clips cut around their events; in long
 home videos, where most of the sound is talk or nothing, the gain was not
 measured. `whenframe index --sounds` embeds the sound tracks this way.
+
+## Fifth round: whenframe's own model
+
+The fifth round of the protocol ([PROTOCOL.md](PROTOCOL.md)): a temporal
+adapter trained on DiDeMo's training videos rewrites each frame's SigLIP 2
+embedding with what the frames around it show (`whenframe/temporal.py`); the
+search is otherwise unchanged.
+
+<!-- table round5-criteria -->
+<!-- /table -->
+
+### The runs on the tuning videos
+
+Each run was checked on the 500 tuning videos as it trained; the best check is
+shown. e1 to e5 trained on the 1,454 training videos embedded at the time; the
+model for the test, on all of them (`results/temporal/*.json`).
+
+<!-- table round5-tuning -->
+| 500 tuning videos | steps x descriptions | between | within | leash | best check | R@5 | right video in top 5 | single R1 | cosine to SigLIP 2 |
+|---|---|---|---|---|---|---|---|---|---|
+| SigLIP 2 as it is |  |  |  |  |  | 31.3 | 51.4 | 46.4 | 1 |
+| e1: adapter and head | 600 x 64 | 1 | 1 | 10 | 600 | 32.9 | 51.7 | 50.1 | 0.961 |
+| e2: head alone | 600 x 64 | 1 | 1 | 10 | 200 | 31.3 | 51.4 | 46.4 | 1.000 |
+| e3: adapter | 600 x 64 | 0 | 1 | 10 | 200 | 30.8 | 49.5 | 49.1 | 0.985 |
+| e4: adapter | 600 x 64 | 1 | 1 | 100 | 600 | 33.0 | 52.8 | 48.3 | 0.998 |
+| e5: adapter | 600 x 64 | 1 | 2 | 100 | 400 | 33.1 | 52.7 | 49.1 | 0.997 |
+<!-- /table -->
+
+### DiDeMo test
+
+<!-- table round5-didemo -->
+<!-- /table -->
+
+<!-- table round5-wins -->
+<!-- /table -->
+
+### Elsewhere: Charades-STA, YouCook2, UnAV-100
+
+Each searched as in its own round, with the model trained on DiDeMo only.
+
+<!-- table round5-transfer -->
+<!-- /table -->
