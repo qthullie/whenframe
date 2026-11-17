@@ -111,6 +111,7 @@ def extract(args) -> None:
     parts = CACHE / f"{out.stem}_parts"
     parts.mkdir(parents=True, exist_ok=True)
     main = args.model == MAIN and args.backend == "onnxruntime"  # the run the other caches are compared with
+    enc.images  # noqa: B018 - loaded (and compiled) before the first video is timed
     t_all, n_new = time.time(), 0
     for n, name in enumerate(names, 1):
         part = parts / f"{Path(name).stem}.npz"

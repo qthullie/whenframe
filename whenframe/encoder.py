@@ -22,7 +22,9 @@ training pairs (`scripts/didemo.py calibrate`).
 The image tower runs with OpenVINO when it is installed (`pip install
 whenframe[fast]`), which computes in bfloat16 on processors that do so natively
 (AMX, AVX512-BF16) and in float32 elsewhere; otherwise with ONNX Runtime. The
-text tower always runs with ONNX Runtime in float32.
+text tower runs with ONNX Runtime in float32, but So400m's, which OpenVINO runs
+ten times faster on this machine (74 ms a text instead of 721) when it runs the
+image tower.
 """
 
 from __future__ import annotations
@@ -64,6 +66,7 @@ class ModelSpec:
     text_input: str = "input_ids"
     text_dtype: str = "int64"
     weights_folder: str | None = None  # a folder of weights stored next to the ONNX graphs, fetched whole
+    text_openvino: bool = False  # the text tower runs with OpenVINO too, when the image tower does
     bank_beta: float = 50.0  # query-bank correction, as tuned on DiDeMo training videos
     bank_lambda: float = 1.0
     spans_lambda: float | None = None  # its strength when moments are adaptive spans; None: as bank_lambda
@@ -83,7 +86,7 @@ MODELS = {
         "immich-app/ViT-SO400M-14-SigLIP2__webli", 224, 109.8812, -15.9324, vision_file="visual/model.onnx",
         text_file="textual/model.onnx", tokenizer_file="textual/tokenizer.json", image_input="image",
         text_input="text", text_dtype="int32", image_output="embedding", text_output="embedding",
-        clean="canonical", weights_folder="textual",
+        clean="canonical", weights_folder="textual", text_openvino=True,
     ),
 }  # fmt: skip
 DEFAULT_MODEL = "siglip2-base"
@@ -190,12 +193,12 @@ class _OnnxRuntime:
         return self._session.run([self._output], {self._input: x})[0]
 
 
-class _OpenVINOImages:
-    """The image tower compiled by OpenVINO, in the precision OpenVINO picks for this processor.
+class _OpenVINO:
+    """A tower compiled by OpenVINO, in the precision OpenVINO picks for this processor.
 
-    A graph that takes one image at a time runs several images at once, each in a
-    request of its own (OpenVINO's throughput mode): 321 ms of CPU time per frame
-    instead of 426 for SigLIP 2 So400m on 4 cores.
+    A graph that takes one input at a time runs several at once, each in a request
+    of its own (OpenVINO's throughput mode): 321 ms of CPU time per frame instead
+    of 426 for SigLIP 2 So400m on 4 cores.
     """
 
     def __init__(self, path: Path, input: str, output: str, threads: int | None):
@@ -275,10 +278,10 @@ class Encoder:
         return self.spec.image_size
 
     @property
-    def images(self) -> _OnnxRuntime | _OpenVINOImages:
+    def images(self) -> _OnnxRuntime | _OpenVINO:
         """The image tower, loaded on first use."""
         if self._vision is None:
-            runtime = _OpenVINOImages if self.backend == "openvino" else _OnnxRuntime
+            runtime = _OpenVINO if self.backend == "openvino" else _OnnxRuntime
             self._vision = runtime(self._vision_path, self.spec.image_input, self.spec.image_output, self._threads)
         return self._vision
 
@@ -299,7 +302,9 @@ class Encoder:
 
     def encode_texts(self, texts: list[str]) -> np.ndarray:
         if self._text is None:  # the text tower is only needed at query time
-            self._text = _OnnxRuntime(self._text_path, self.spec.text_input, self.spec.text_output, self._threads)
+            openvino = self.backend == "openvino" and self.spec.text_openvino
+            runtime = _OpenVINO if openvino else _OnnxRuntime
+            self._text = runtime(self._text_path, self.spec.text_input, self.spec.text_output, self._threads)
         return _normalize(self._text(self.tokenize(texts)))
 
     @property
