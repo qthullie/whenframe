@@ -326,6 +326,43 @@ def tune(args) -> None:
           f"P@{K} {100 * best['p_at_k']:.1f}")  # fmt: skip
 
 
+def peak_scaled(s: np.ndarray) -> np.ndarray:
+    """Per label: 0 at the median frame, 1 at the 99th percentile; 0 where nothing was heard."""
+    med, top = np.nanmedian(s, axis=0), np.nanpercentile(s, 99, axis=0)
+    return np.nan_to_num((s - med) / np.maximum(top - med, 1e-9), nan=0.0)
+
+
+def explore(args) -> None:
+    """On the tuning videos only: a weight of the sound that depends on the description, two ways, against the
+    fixed weight. (a) The fixed weight times how far the sound's 99th percentile stands above the frames' (both
+    standardised), within 1/4 and 4. (b) Each modality scaled by its own 99th percentile instead of its spread."""
+    z, labels, events, siglip, clap, bank = prepare(args)
+    names = z["names"].tolist()
+    lib = Library(z, tuning_videos(names))
+    best = json.loads((ROOT / "results" / "unav_tuned.json").read_text())["best"]
+    raw_f, raw_s = lib.frames(siglip, bank), lib.sound(clap, best["length"])
+    frames, heard = standardise(raw_f), standardise(raw_s)
+    rows = [
+        {"variant": f"fixed weight {best['weight']:g}", **score(lib, events, labels, frames + best["weight"] * heard)}
+    ]
+    lift = np.clip(np.percentile(heard, 99, axis=0) / np.maximum(np.percentile(frames, 99, axis=0), 1e-9), 0.25, 4)
+    pf, ps = peak_scaled(raw_f), peak_scaled(raw_s)
+    for w in (0.5, 1.0, 2.0, 3.0):
+        rows.append(
+            {"variant": f"(a) {w:g} x the sound's lift", **score(lib, events, labels, frames + w * lift * heard)}
+        )
+        rows.append({"variant": f"(b) peaks, sound weight {w:g}", **score(lib, events, labels, pf + w * ps)})
+    for r in rows:
+        print(f"{r['variant']:32s} P@{K} {100 * r['p_at_k']:.1f}  mAP {100 * r['map']:.1f}", flush=True)
+    (ROOT / "results" / "unav_tuned_explore.json").write_text(json.dumps({"videos": len(lib.names), "rows": rows},
+                                                                          indent=1))  # fmt: skip
+
+
+def score(lib, events, labels, s) -> dict:
+    r = evaluate_scores(lib, events, labels, s)
+    return {"p_at_k": r["p_at_k"], "map": r["map"]}
+
+
 def evaluate(args) -> None:
     z, labels, events, siglip, clap, bank = prepare(args)
     names = z["names"].tolist()
@@ -351,13 +388,13 @@ def evaluate(args) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("stage", choices=["extract", "tune", "evaluate"])
+    ap.add_argument("stage", choices=["extract", "tune", "explore", "evaluate"])
     ap.add_argument("--annotations", required=True, help="unav100_all.json, from the same dataset repository")
     ap.add_argument("--model-dir", help="folder of SigLIP 2 base's files (default: the usual download cache)")
     ap.add_argument("--clap-dir", help="folder of CLAP's files (default: the usual download cache)")
     ap.add_argument("--work", help="where each video is written while it is embedded (default: the system's)")
     args = ap.parse_args()
-    {"extract": extract, "tune": tune, "evaluate": evaluate}[args.stage](args)
+    {"extract": extract, "tune": tune, "explore": explore, "evaluate": evaluate}[args.stage](args)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,50 @@
+{
+ "videos": 130,
+ "rows": [
+  {
+   "variant": "fixed weight 2",
+   "p_at_k": 0.41025641025641024,
+   "map": 0.3110281532479468
+  },
+  {
+   "variant": "(a) 0.5 x the sound's lift",
+   "p_at_k": 0.3820512820512821,
+   "map": 0.31801399812852216
+  },
+  {
+   "variant": "(b) peaks, sound weight 0.5",
+   "p_at_k": 0.3974358974358974,
+   "map": 0.31643844711561503
+  },
+  {
+   "variant": "(a) 1 x the sound's lift",
+   "p_at_k": 0.4025641025641025,
+   "map": 0.3219125014044553
+  },
+  {
+   "variant": "(b) peaks, sound weight 1",
+   "p_at_k": 0.4076923076923077,
+   "map": 0.3161429715614427
+  },
+  {
+   "variant": "(a) 2 x the sound's lift",
+   "p_at_k": 0.4051282051282051,
+   "map": 0.30778093506913196
+  },
+  {
+   "variant": "(b) peaks, sound weight 2",
+   "p_at_k": 0.4025641025641025,
+   "map": 0.30582068340961854
+  },
+  {
+   "variant": "(a) 3 x the sound's lift",
+   "p_at_k": 0.40769230769230763,
+   "map": 0.30038366252905807
+  },
+  {
+   "variant": "(b) peaks, sound weight 3",
+   "p_at_k": 0.38717948717948714,
+   "map": 0.28492540170465996
+  }
+ ]
+}

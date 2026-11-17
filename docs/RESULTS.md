@@ -607,6 +607,10 @@ The kinds of events that gained the most, and the four that lost the most:
 Where CLAP does not recognise the description in the sound (a crowd, a
 volleyball match), adding it moves wrong moments up; where it says it all (a dog barking),
 the sound alone does better than the two together, and one weight serves all
-descriptions. These videos are short clips cut around their events; in long
+descriptions. A weight that depends on the description was tried on the tuning
+videos only (`scripts/unav.py explore`), two ways fixed beforehand: the fixed
+weight times how far the sound's best scores stand above the frames', or each
+side scaled by its own best scores. Neither did better than the fixed weight
+(40.8 % against 41.0 %), and neither was taken to the test videos. These videos are short clips cut around their events; in long
 home videos, where most of the sound is talk or nothing, the gain was not
 measured. `whenframe index --sounds` embeds the sound tracks this way.
