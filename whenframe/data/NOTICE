@@ -14,3 +14,14 @@ The descriptions were drawn at random (seed 0) among those of training videos
 outside the benchmark's tuning set; `bank()` in scripts/didemo.py rebuilds
 them from the annotations. The file holds embeddings only: no description
 text and no video.
+
+temporal-siglip2-base.npz
+
+whenframe's temporal model (whenframe/temporal.py; `whenframe index
+--temporal`), trained by scripts/temporal.py on the frames and descriptions of
+DiDeMo's training videos: Flickr videos from YFCC100M, each under its own
+Creative Commons licence (some of them non-commercial), with descriptions
+released under the BSD 2-Clause license. These videos were published for
+research. The weights are provided for research and non-commercial use only;
+the rest of whenframe stays under the MIT licence. The file holds weights
+only: no frame, description or video.

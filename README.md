@@ -249,6 +249,10 @@ All tables, the costs and the figures: [docs/RESULTS.md](https://github.com/qthu
   faster-whisper (SYSTRAN, MIT) on CTranslate2.
 - The query banks hold embeddings of DiDeMo training descriptions (BSD 2-Clause);
   see [whenframe/data/NOTICE](https://github.com/qthullie/whenframe/blob/main/whenframe/data/NOTICE).
+- whenframe's own model (`--temporal`) was trained on DiDeMo's training videos,
+  Flickr videos under Creative Commons licences (some non-commercial) published
+  for research; its weights are for research and non-commercial use (same
+  NOTICE).
 - The benchmark also measures MobileCLIP-S2 (Apple, research-only licence) and
   translates descriptions with Opus-MT (Helsinki-NLP, Apache 2.0); the tool uses
   neither.
@@ -257,4 +261,6 @@ All tables, the costs and the figures: [docs/RESULTS.md](https://github.com/qthu
 
 ## Licence
 
-MIT.
+MIT, except the weights of whenframe's own model
+(`whenframe/data/temporal-siglip2-base.npz`, used only with `--temporal`):
+research and non-commercial use, as the videos it was trained on.

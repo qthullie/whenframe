@@ -609,3 +609,100 @@ R1 at IoU 0.5 49.9 % (46.4 %), the frames at a cosine of 0.998 from SigLIP 2's
 twelve on the same videos, so the gain on new ones is likely smaller.
 Training took 21 minutes on the four cores, checks included. Exported in
 float16 to `whenframe/data/temporal-siglip2-base.npz`, the file the test runs.
+
+## Sixth round: the models compared the same way, and whenframe's model again
+
+Written before any of its numbers was computed. Two questions. Measured the
+same way on the four benchmarks, which of whenframe's ways of embedding frames
+finds the most moments? And does whenframe's model, trained again on more
+varied descriptions, keep its gain on DiDeMo without its loss on UnAV-100?
+
+### Candidates
+
+Five, searched the same way:
+
+1. SigLIP 2 B/32 (`--mode economy`);
+2. SigLIP 2 B/16 (the standard mode), the reference;
+3. SigLIP 2 So400m (`--mode large`);
+4. B/16 and whenframe's model of the fifth round (`--temporal`, v1);
+5. B/16 and whenframe's model v2 (below).
+
+**The same frames.** All five see the frames at the same instants: those of
+the standard mode's caches (DiDeMo's tuning and test videos with repeats
+skipped, every frame of Charades-STA and UnAV-100, YouCook2 with repeats
+skipped). The other encoders' frames are decoded again from the same videos,
+read again from the Hugging Face Hub one at a time and not kept; only the
+frames at the cached instants are embedded, and the instants are checked
+equal. Every encoder runs with OpenVINO, as the tool runs it (B/32 is embedded
+again on DiDeMo for this).
+
+**The same tuning.** Each encoder keeps the query bank's beta and strength
+chosen for it on DiDeMo's tuning videos (second and fourth rounds; the
+standard mode's for 4 and 5) and the standard mode's moment parameters. The
+weight of speech on YouCook2 and the weight of sound on UnAV-100 are chosen
+again for every candidate, on the grids, tuning steps and tuning videos of
+the third and fourth rounds.
+
+**Metrics.** Each benchmark's primary metric, as in its own round: DiDeMo
+test, R@5 at IoU >= 0.5 (default search); Charades-STA, R1 at IoU >= 0.5 in
+the given video (DiDeMo's parameters); YouCook2, R@5 at IoU >= 0.5 over the
+1,331 test steps, speech added to the adaptive spans; UnAV-100, P@10 over the
+262 test videos, frames and sound. The cost of indexing is reported beside
+them.
+
+**The rule.** The candidates are ranked by the mean of the four primary
+metrics. One is said to find more than another only when its mean is higher
+and a sign test over the paired items of the four tests gives p < 0.05: each
+description found or not among the first five (DiDeMo, YouCook2), placed or
+not in its given video (Charades-STA), and each kind of event whose P@10 rose
+or fell (UnAV-100).
+
+### whenframe's model v2
+
+Trained on DiDeMo's training videos, as v1, and on MSR-VTT's 9,000 training
+clips (Xu et al., CVPR 2016: YouTube clips of 10 to 30 seconds in 20
+categories, among them animals, music, vehicles, sports and cooking), read
+from the archive of friedrichor/MSR-VTT on the Hub without keeping any video:
+their frames embedded as DiDeMo's were, five of each clip's twenty
+descriptions (drawn once, seed 0), the whole clip as the described moment (so
+the loss within a video learns nothing from them). Clips cut from a YouTube
+video that is also a YouCook2 or UnAV-100 video are left out: two YouCook2
+videos, none of UnAV-100's (by YouTube identifier). VGGSound, from which
+UnAV-100 was built, is not used.
+
+Three changes to the fifth round's training, each after a published result,
+each kept only if it does better on the tuning sets:
+
+- the loss between videos as SigLIP's own pretraining loss, a sigmoid over
+  every pair of the batch on the raw best-frame logits with SigLIP 2's scale
+  and bias, instead of InfoNCE on bank-corrected scores (fine-tuning with the
+  pretraining loss: FLYP, Goyal et al., CVPR 2023);
+- a soup: the average of the weights of three runs from the same
+  initialisation with different orders of the data (Wortsman et al., ICML
+  2022);
+- the adapter's correction multiplied by alpha in {0.25, 0.5, 0.75, 1} (the
+  zero-shot and the fine-tuned models ensembled, as WiSE-FT, Wortsman et al.,
+  CVPR 2022; for a residual adapter whose correction starts at zero, the
+  ensemble of their outputs).
+
+Each choice is made by the rule's mean over the tuning sets: DiDeMo's 500
+tuning videos (R@5), YouCook2's tuning steps (R@5, speech and spans) and
+UnAV-100's 130 tuning videos (P@10, frames and sound); Charades-STA has none.
+The settings otherwise are the fifth round's.
+
+### Criteria
+
+21. v2's mean of the four primary metrics is higher than SigLIP 2 B/16's, with
+    a sign test p < 0.05.
+22. v2 loses at most 1 point on each of the four tests against SigLIP 2 B/16.
+23. v2's mean is higher than v1's.
+
+If 21 and 22 hold, v2 replaces v1 as `--temporal` and a new library in the
+standard mode goes through it by default; otherwise v2 replaces v1 only if 23
+holds, and stays an option. The test is run once, after the choices on the
+tuning sets are recorded here.
+
+**Licence of the weights.** whenframe's model is trained on videos published
+for research (DiDeMo: Flickr videos under Creative Commons licences, some of
+them non-commercial; MSR-VTT: YouTube clips); its weights are provided for
+research and non-commercial use. whenframe's code stays under the MIT licence.
