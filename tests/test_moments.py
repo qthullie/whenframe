@@ -80,8 +80,29 @@ def test_the_search_defaults_are_the_tuned_ones():
         def __init__(self, config):
             self.config = config
 
-    assert Bare(SearchConfig())._tuned("siglip2-base") == (50.0, 1.0)
+    assert Bare(SearchConfig(moments="windows"))._tuned("siglip2-base") == (50.0, 1.0)
     assert Bare(SearchConfig(moments="spans"))._tuned("siglip2-base") == (50.0, 0.5)
+
+
+def test_auto_places_spans_in_libraries_of_long_videos():
+    from whenframe import SearchConfig, Searcher
+    from whenframe.library import Video
+
+    class Shelf:  # only what the choice reads
+        def __init__(self, durations):
+            self.videos = [Video(i, f"v{i}", d, 0, 1) for i, d in enumerate(durations)]
+
+        def snapshot(self):
+            return self.videos, {}, np.zeros(0)
+
+    class Bare(Searcher):
+        def __init__(self, library):
+            self.config, self.library = SearchConfig(), library
+
+    assert Bare(Shelf([20.0, 30.0, 300.0])).moments == "windows"  # mostly short clips: DiDeMo's kind
+    assert Bare(Shelf([45.0, 289.0, 600.0])).moments == "spans"  # mostly long videos: YouCook2's kind
+    assert Bare(Shelf([0.0, 0.0, 0.0, 120.0])).moments == "spans"  # photos (no duration) do not count
+    assert Bare(Shelf([45.0, 289.0]))._tuned("siglip2-base") == (50.0, 0.5)  # with the spans' bank strength
 
 
 def test_every_mode_has_the_query_bank_it_was_measured_with():

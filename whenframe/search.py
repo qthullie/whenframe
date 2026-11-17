@@ -36,7 +36,9 @@ from .speech import frame_scores as frame_speech
 
 @dataclass
 class SearchConfig:
-    moments: str = "windows"  # "windows": a fixed length around the best frames; "spans": grown around peaks
+    # "windows": a fixed length around the best frames; "spans": grown around peaks; "auto": spans when the
+    # library's videos last more than AUTO_SPANS seconds (median), windows otherwise
+    moments: str = "auto"
     window: float = 10.0  # seconds, for "windows"
     per_video: int = 3
     bank: float = 1.0  # strength of the query-bank correction, times each model's tuned strength; 0 turns it off
@@ -51,6 +53,11 @@ class SearchConfig:
     min_length: float = 10.0
     speech: SpeechConfig = field(default_factory=SpeechConfig)  # used when the library is transcribed
     sound: SoundConfig = field(default_factory=SoundConfig)  # used when the library's sound tracks are embedded
+
+
+# Windows did better on DiDeMo's clips of at most 30 seconds, spans on YouCook2's videos of 289 seconds
+# (median): any threshold between the two gives each benchmark its best (docs/RESULTS.md, fourth round).
+AUTO_SPANS = 60.0
 
 
 @dataclass(frozen=True)
@@ -100,13 +107,22 @@ class Searcher:
         self.banks = {m: banks[m] if m in banks else qbank.load(m) for m in self.models}
         self._offsets = {}
 
+    @property
+    def moments(self) -> str:
+        """The kind of moments placed: as configured, or for "auto" as the library's videos suit."""
+        if self.config.moments != "auto":
+            return self.config.moments
+        videos, _, _ = self.library.snapshot()
+        lengths = [v.duration for v in videos if v.duration > 0]  # photos have none
+        return "spans" if lengths and float(np.median(lengths)) > AUTO_SPANS else "windows"
+
     def _tuned(self, model: str) -> tuple[float, float]:
         """The query bank's beta and strength for this model, as tuned for the kind of moments placed."""
         spec = MODELS.get(model)
         beta = self.config.beta or (spec.bank_beta if spec else 50.0)
         if spec is None:
             return beta, 1.0
-        if self.config.moments == "spans" and spec.spans_lambda is not None:
+        if self.moments == "spans" and spec.spans_lambda is not None:
             return beta, spec.spans_lambda
         return beta, spec.bank_lambda
 
@@ -146,13 +162,13 @@ class Searcher:
         t, v = times[sl].astype(np.float64), scores[sl].astype(np.float64)
         if video.duration == 0:  # a photo
             return [Span(0.0, 0.0, float(v.max()), float(v.max()), float(v.max()))]
-        if c.moments == "windows":
+        if self.moments == "windows":
             return windows(t, v, video.duration, c.window, c.per_video, 1.0 / self.library.settings.fps)
         grid, values = on_grid(t, v, video.duration, c.step)
         return spans(grid, smooth(values, c.sigma), c.step, c.alpha, c.per_video, c.min_length)
 
     def rank_score(self, span: Span) -> float:
-        if self.config.moments == "windows":
+        if self.moments == "windows":
             return span.peak
         return span.peak + self.config.contrast * (span.peak - span.floor)
 

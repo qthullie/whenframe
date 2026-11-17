@@ -21,7 +21,8 @@ and the criteria that were not met, are in [docs/RESULTS.md](https://github.com/
   (YouCook2: 12.3 % to 18.8 %, 25.8 % with `--moments spans`).
 - `--sounds`: CLAP, what is heard searched with the frames (UnAV-100: 42.9 % to
   53.2 % of right moments among the first ten).
-- `--moments spans`: moments as long as the frames match, for long videos.
+- `--moments auto` (the default): in a library whose videos last more than a
+  minute, moments as long as the frames match; 10-second windows otherwise.
 - `serve --jellyfin`, `serve --immich`: each moment linked to its video in
   Jellyfin, or to its video or photo in Immich.
 - Libraries larger than a quarter of the memory are searched from their files.

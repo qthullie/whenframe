@@ -71,8 +71,8 @@ them out). `whenframe index --speech base` also transcribes what is said (Whispe
 CPU, `pip install 'whenframe[speech]'`), and a search then finds the words
 said as well as what is seen. `whenframe index --sounds` also listens to the
 sound tracks (CLAP), to find laughter, applause, a dog barking or a siren.
-`search --moments spans` lets a moment last as long as the frames match, which
-suits long videos. `serve --jellyfin` and `serve --immich` link each moment to
+In a library of long videos, a moment lasts as long as the frames match
+(`--moments`). `serve --jellyfin` and `serve --immich` link each moment to
 the video in a Jellyfin or Immich server.
 
 Nothing else goes over the network. ONNX Runtime 1.29 sends usage telemetry to
@@ -150,7 +150,7 @@ places the moment in a given video 45.7 % of the time at IoU >= 0.5; a
 sentence, is reported at 56.8 %.
 
 <!-- table readme-youcook2 -->
-On 252 YouCook2 cooking videos (5 minutes on average, searched all at once), the right step is among the first five moments 19.4 % of the time with adaptive spans (`--moments spans`), and 25.8 % when what is said is searched too (indexed with `--speech`).
+On 252 YouCook2 cooking videos (5 minutes on average, searched all at once), the right step is among the first five moments 19.4 % of the time with adaptive spans (placed by default in a library of long videos), and 25.8 % when what is said is searched too (indexed with `--speech`).
 <!-- /table -->
 
 Third round (OpenVINO, long videos, what is said):
@@ -189,9 +189,9 @@ All tables, the costs and the figures: [docs/RESULTS.md](https://github.com/qthu
 - It was measured on short personal videos (DiDeMo, their first 30 seconds) and
   on cooking videos of about 5 minutes (YouCook2); recordings of an hour or more
   were not measured.
-- On YouCook2's long recipe steps, adaptive spans (`--moments spans`) did
-  better than the default fixed windows, which were chosen on DiDeMo and stay
-  the default.
+- Windows did better on DiDeMo's short clips and spans on YouCook2's long
+  videos; the tool picks one for a whole library from its median video
+  (`--moments auto`), so a library mixing both kinds gets one of them.
 - It cannot tell apart videos that show the same thing: among Charades'
   1,334 look-alike videos of people at home, the right one is in the first five
   results 4 % of the time.

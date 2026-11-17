@@ -180,9 +180,10 @@ def main(argv: list[str] | None = None) -> int:
                             "music; kept for the library from then on")  # fmt: skip
 
     def moment_options(p: argparse.ArgumentParser) -> None:
-        p.add_argument("--moments", choices=["windows", "spans"], default="windows",
-                       help="windows: 10 seconds around the best frames (default, best on short clips); spans: "
-                            "as long as the frames match, better on long videos and with --speech")  # fmt: skip
+        p.add_argument("--moments", choices=["auto", "windows", "spans"], default="auto",
+                       help="windows: 10 seconds around the best frames, best on short clips; spans: as long as "
+                            "the frames match, better on long videos; auto (default): spans when the videos last "
+                            "more than a minute (median), windows otherwise")  # fmt: skip
 
     def watching_options(p: argparse.ArgumentParser) -> None:
         p.add_argument("--every", type=float, default=300.0, help="seconds between two passes (default 300)")

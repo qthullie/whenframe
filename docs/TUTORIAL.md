@@ -121,16 +121,18 @@ long home videos.
 ### Long moments
 
 ```bash
-whenframe search --moments spans "add the onions to the pan"
+whenframe search --moments spans "add the onions to the pan"     # or windows; auto by default
 whenframe serve --moments spans
 ```
 
-By default a moment lasts 10 seconds, around the frames that match best. With
-`--moments spans` it lasts as long as the frames keep matching, which suits
-long videos whose moments last longer: on the YouCook2 cooking videos the right
-step was among the first five moments 19.4 % of the time instead of 12.3 %, and
-25.8 % with speech ([RESULTS.md](RESULTS.md), fourth round). On DiDeMo's short
-home videos, the fixed windows did better.
+A moment lasts 10 seconds around the frames that match best (windows), or as
+long as the frames keep matching (spans). By default (`--moments auto`), a
+library whose videos last more than a minute (its median video) gets spans, and
+one of shorter clips gets windows: on DiDeMo's clips of at most 30 seconds,
+windows did better; on the YouCook2 cooking videos of about 5 minutes, spans
+put the right step among the first five moments 19.4 % of the time instead of
+12.3 %, and 25.8 % with speech ([RESULTS.md](RESULTS.md), fourth round). A
+library holding both kinds gets the kind of most of its videos.
 
 ## Keep the library up to date
 

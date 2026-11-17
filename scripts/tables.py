@@ -308,7 +308,8 @@ def round4_tables() -> dict[str, str]:
         out["readme-youcook2"] = (
             f"On 252 YouCook2 cooking videos (5 minutes on average, searched all at once), the right step is among "
             f"the first five moments {pct(r['whenframe_bank']['corpus'][YC])} % of the time with adaptive spans "
-            f"(`--moments spans`), and {pct(spans)} % when what is said is searched too (indexed with `--speech`)."
+            f"(placed by default in a library of long videos), and {pct(spans)} % when what is said is searched "
+            f"too (indexed with `--speech`)."
         )
     f = RESULTS / "didemo_test_so400m.json"
     if f.exists():

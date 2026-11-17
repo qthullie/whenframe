@@ -497,8 +497,13 @@ first five moments 25.8 % of the time, against 18.8 % for speech with fixed
 windows and 19.4 % for the spans alone, and the first moment is right 14.4 % of
 the time. In a given video, the step is placed at IoU >= 0.5 30.0 % of the
 time. In the tool, `--moments spans` places spans instead of windows, with the
-query bank's strength they were tuned with on DiDeMo (0.5 instead of 1); the
-fixed windows stay the default, as they did better on DiDeMo's short moments.
+query bank's strength they were tuned with on DiDeMo (0.5 instead of 1), and
+`--moments auto`, the default, places them in a library whose median video
+lasts more than a minute: windows on DiDeMo's clips, spans on YouCook2's
+videos, the better kind for each. One strength for both kinds, so that one
+library could mix them, was tried on the YouCook2 tuning steps and dropped:
+with the windows' strength (1), the spans found 16.6 % of the steps instead of
+19.5 % (29.2 % instead of 29.4 % with speech).
 
 ### SigLIP 2 So400m
 
