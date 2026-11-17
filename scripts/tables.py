@@ -396,6 +396,87 @@ def round4_tables() -> dict[str, str]:
     return out
 
 
+def round5_tables() -> dict[str, str]:
+    """The fifth round: whenframe's own model, the runs on the tuning videos and, once run, the test."""
+    out = {}
+    runs = sorted((RESULTS / "temporal").glob("*.json"))
+    if runs:
+        rows = []
+        for f in runs:
+            r = json.loads(f.read_text())
+            c = r["config"]
+            if not r["checks"]:
+                continue
+            best = max(r["checks"], key=lambda k: k["R@5"])
+            what = ("adapter and head" if c["head"] else "adapter") if c["lr"] else "head alone"
+            rows.append([f"{c['name']}: {what}", f"{c['steps']} x {c['batch']}", f"{c.get('between', 1.0):g}",
+                         f"{c['within']:g}", f"{c['leash']:g}", f"{best['step']}", pct(best["R@5"]),
+                         pct(best["video_R@5"]), pct(best["single_R1@0.5"]), f"{1 - best['leash']:.3f}"])  # fmt: skip
+        without = json.loads(runs[0].read_text())["tuning_without"]
+        rows.insert(0, ["SigLIP 2 as it is", "", "", "", "", "", pct(without["R@5"]), pct(without["video_R@5"]),
+                        pct(without["single_R1@0.5"]), "1"])  # fmt: skip
+        out["round5-tuning"] = table(
+            ["500 tuning videos", "steps x descriptions", "between", "within", "leash", "best check", "R@5",
+             "right video in top 5", "single R1", "cosine to SigLIP 2"], rows)  # fmt: skip
+    f = RESULTS / "temporal_test.json"
+    if not f.exists():
+        return out
+    r = json.loads(f.read_text())
+    d, ch, yc, ua = r["didemo"], r["charades"], r["youcook2"], r["unav"]
+    gain = d["adapter"]["corpus"][PRIMARY] - d["without"]["corpus"][PRIMARY]
+    single, spans = "R1 IoU>=0.5", "speech_spans"
+    losses = {
+        "Charades-STA, R1 at IoU >= 0.5": ch["adapter"]["single"][single] - ch["without"]["single"][single],
+        "YouCook2, R@5, speech + spans": yc[f"adapter_{spans}"]["corpus"][YC] - yc[f"without_{spans}"]["corpus"][YC],
+        "UnAV-100, P@10, frames + sound": ua["adapter_both"]["p_at_k"] - ua["without_both"]["p_at_k"],
+    }
+    cost = d["adapter_cost"]["cpu_min_per_hour"]
+    rows = [["18. the adapted frames add at least 1 point on the DiDeMo test", f"{100 * gain:+.1f} points",
+             gain >= 0.01],
+            ["19. they lose at most 1 point on each other benchmark",
+             "; ".join(f"{k} {100 * v:+.1f}" for k, v in losses.items()), min(losses.values()) >= -0.01],
+            ["20. the adapter adds at most 1 CPU minute per hour of video", f"{cost:.2f} min",
+             cost <= 1.0]]  # fmt: skip
+    out["round5-criteria"] = table(["criterion (fixed before its test run)", "measured on test", "met"],
+                                   [[n, m, "yes" if ok else "no"] for n, m, ok in rows])  # fmt: skip
+    out["round5-didemo"] = table(
+        ["DiDeMo test (OpenVINO, repeats skipped)", "R@1", "R@5", "R@10", "R@100", "R@5 (0.7)", "right video in top 5",
+         "single R1", "single R1 (0.7)", "single mIoU"],
+        [[label, pct(x["corpus"]["R@1 IoU>=0.5"]), pct(x["corpus"][PRIMARY]), pct(x["corpus"]["R@10 IoU>=0.5"]),
+          pct(x["corpus"]["R@100 IoU>=0.5"]), pct(x["corpus"]["R@5 IoU>=0.7"]), pct(x["video"]["R@5"]),
+          pct(x["single"]["R1 IoU>=0.5"]), pct(x["single"]["R1 IoU>=0.7"]), pct(x["single"]["mIoU"])]
+         for label, x in (("SigLIP 2's frames", d["without"]), ("**whenframe's model**", d["adapter"]))],
+    )  # fmt: skip
+    w = d["adapter_vs_without"]
+
+    def wins(v, unit="descriptions"):
+        up, down = (v["wins"], v["losses"]) if "wins" in v else (v["up"], v["down"])
+        words = ("in", "out") if unit == "descriptions" else ("labels up", "down")
+        return f"{up} {words[0]}, {down} {words[1]} (p = {v['p']:.2g})"
+
+    out["round5-transfer"] = table(
+        ["benchmark, search", "metric", "SigLIP 2's frames", "whenframe's model", "descriptions moved"],
+        [["Charades-STA, the given video", "R1 IoU>=0.5", pct(ch["without"]["single"]["R1 IoU>=0.5"]),
+          pct(ch["adapter"]["single"]["R1 IoU>=0.5"]), ""],
+         ["Charades-STA, all 1,334 videos", "R@5", pct(ch["without"]["corpus"][PRIMARY]),
+          pct(ch["adapter"]["corpus"][PRIMARY]), wins(ch["adapter_vs_without"])],
+         ["YouCook2, fixed windows", "R@5", pct(yc["without_windows"]["corpus"][YC]),
+          pct(yc["adapter_windows"]["corpus"][YC]), wins(yc["adapter_vs_without_windows"])],
+         ["YouCook2, speech + adaptive spans", "R@5", pct(yc["without_speech_spans"]["corpus"][YC]),
+          pct(yc["adapter_speech_spans"]["corpus"][YC]), wins(yc["adapter_vs_without_speech_spans"])],
+         ["UnAV-100, frames", "P@10", pct(ua["without_frames"]["p_at_k"]), pct(ua["adapter_frames"]["p_at_k"]),
+          wins(ua["adapter_vs_without_frames"], "labels")],
+         ["UnAV-100, frames + sound", "P@10", pct(ua["without_both"]["p_at_k"]), pct(ua["adapter_both"]["p_at_k"]),
+          wins(ua["adapter_vs_without_both"], "labels")]],
+    )  # fmt: skip
+    out["round5-wins"] = (
+        f"On the DiDeMo test the model moves {w['wins']} descriptions into the first five moments and "
+        f"{w['losses']} out of them (sign test p = {w['p']:.2g}). It took "
+        f"{d['adapter_cost']['cpu_ms_per_frame']:.2f} ms of CPU per frame, {cost:.2f} CPU minutes per hour of video."
+    )
+    return out
+
+
 def charades_table() -> str | None:
     f = RESULTS / "charades_test.json"
     if not f.exists():
@@ -464,6 +545,7 @@ def main() -> int:
         tables["didemo-rerank"] = rerank
     tables.update(round3_tables())
     tables.update(round4_tables())  # after the third round's: replaces its README sentence on YouCook2
+    tables.update(round5_tables())
     f2 = RESULTS / "didemo_test_round2.json"
     if f2.exists():
         tables.update(round2_tables(json.loads(f2.read_text()), json.loads(f.read_text()) if f.exists() else None))

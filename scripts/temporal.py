@@ -646,31 +646,28 @@ def evaluate(args) -> None:
     p = temporal.load(Path(args.model))
     res = {"model": str(Path(args.model).relative_to(ROOT)) if Path(args.model).is_relative_to(ROOT) else args.model}
 
-    variants = ("without", "adapter", "head", "rescored")
-
-    def three(f, queries, text, method, params):
-        """SigLIP 2 as it is, the adapter, the adapter and the head (its moments, and its scores in the default
-        search's windows); R@5 found or not for each description."""
+    def two(f, queries, text, method, params):
+        """The default search on SigLIP 2's frames and on the adapter's, and which descriptions each finds (R@5)."""
         emb = adapt(p, f.emb, f.times, f.starts, f.counts)
-        out = {"without": run(f, queries, text, method, params, per_query=True),
-               "adapter": run(replace(f, emb=emb, _offsets={}), queries, text, method, params, per_query=True),
-               "head": search_with_head(p, f, queries, text, f.bank, emb=emb, per_query=True),
-               "rescored": search_with_head(p, f, queries, text, f.bank, emb=emb, per_query=True,
-                                            place="windows")}  # fmt: skip
+        out = {
+            "without": run(f, queries, text, method, params, per_query=True),
+            "adapter": run(replace(f, emb=emb, _offsets={}), queries, text, method, params, per_query=True),
+        }
         found = {k: v.pop("found") for k, v in out.items()}
-        for k in variants[1:]:
-            out[f"{k}_vs_without"] = versus(found[k], found["without"])
-            out[k].pop("params", None)
-        out["without"].pop("params", None)
+        for v in out.values():
+            v.pop("params", None)
+        out["adapter_vs_without"] = versus(found["adapter"], found["without"])
         return out
 
     def show(name, r):
-        print(f"{name}: R@5 " + ", ".join(f"{k} {100 * r[k]['corpus']['R@5 IoU>=0.5']:.1f}" for k in variants),
+        print(f"{name}: R@5 {100 * r['without']['corpus']['R@5 IoU>=0.5']:.1f} without the model, "
+              f"{100 * r['adapter']['corpus']['R@5 IoU>=0.5']:.1f} with it; single R1 "
+              f"{100 * r['without']['single']['R1 IoU>=0.5']:.1f} / {100 * r['adapter']['single']['R1 IoU>=0.5']:.1f}",
               flush=True)  # fmt: skip
 
     test = DiDeMo(args, "test")
     res["didemo"] = {"videos": len(test.kept.starts), "queries": len(test.queries), "method": test.method,
-                     **three(test.kept, test.queries, test.text, test.method, test.params)}  # fmt: skip
+                     **two(test.kept, test.queries, test.text, test.method, test.params)}  # fmt: skip
     show("DiDeMo test", res["didemo"])
     t0, video = time.process_time(), test.kept
     adapt(p, video.emb, video.times, video.starts, video.counts)
@@ -683,7 +680,7 @@ def evaluate(args) -> None:
     shared = {"model_dir": args.model_dir, "train_annotations": args.annotations}
     f, queries, text = charades.load(Namespace(annotations=args.charades_annotations, **shared))
     res["charades"] = {"videos": len(f.names), "queries": len(queries),
-                       **three(f, queries, text, test.method, test.params)}  # fmt: skip
+                       **two(f, queries, text, test.method, test.params)}  # fmt: skip
     show("Charades-STA", res["charades"])
 
     f, queries, text, db, params, _ = youcook2.load(Namespace(annotations=args.youcook2_annotations, **shared))
