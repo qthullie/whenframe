@@ -630,6 +630,15 @@ search is otherwise unchanged.
 | 20. the adapter adds at most 1 CPU minute per hour of video | 0.04 min | yes |
 <!-- /table -->
 
+Two of the three criteria are met. The model finds 1.6 points more of the
+DiDeMo test's moments among the first five, and costs next to nothing when a
+video is indexed (0.8 ms of CPU per frame, against about 80 for SigLIP 2's
+image tower). But on UnAV-100 it loses 1.1 points of P@10 with the sound,
+more than the point allowed: criterion 19 is not met, by 0.1 point. As fixed
+before the test, it is therefore not the default. It is offered instead, for
+the standard mode: `whenframe index --temporal`, the first time a library is
+indexed.
+
 ### The runs on the tuning videos
 
 Each run was checked on the 500 tuning videos as it trained; the best check is
@@ -661,6 +670,13 @@ model for the test, on all of them (`results/temporal/*.json`).
 On the DiDeMo test the model moves 151 descriptions into the first five moments and 87 out of them (sign test p = 4e-05). It took 0.82 ms of CPU per frame, 0.04 CPU minutes per hour of video.
 <!-- /table -->
 
+The gain holds at every depth of the list (R@1 13.4 to 14.4 %, R@100 55.0 to
+57.6 %) and comes from both halves of the task: the right video is more often
+among the first five (46.3 to 47.7 %), and the moment is better placed inside
+it (single-video R1 47.4 to 49.5 %). On the tuning videos the gain was 2.8
+points; on the test, 1.6: the best of twelve checks was kept, on the same
+tuning videos, so part of it was chosen there.
+
 ### Elsewhere: Charades-STA, YouCook2, UnAV-100
 
 Each searched as in its own round, with the model trained on DiDeMo only.
@@ -675,3 +691,20 @@ Each searched as in its own round, with the model trained on DiDeMo only.
 | UnAV-100, frames | P@10 | 42.9 | 41.7 | 9 labels up, 14 down (p = 0.4) |
 | UnAV-100, frames + sound | P@10 | 53.2 | 52.1 | 3 labels up, 9 down (p = 0.15) |
 <!-- /table -->
+
+Trained on DiDeMo alone, the model helps a little where the descriptions are
+about people and what they do: Charades-STA (+0.9 points in the given video)
+and YouCook2 (+0.8 with fixed windows, +0.4 with speech and adaptive spans),
+none of it significant. On UnAV-100, whose descriptions are the names of
+events seen and heard (a dog barking, a guitar, a crowd), it does worse, with
+the sound and without: 9 kinds of events up and 14 down on the frames alone,
+3 up and 9 down with the sound. That is not significant either (p = 0.15),
+but it is larger than the criterion allowed, and it is the setting the
+model's training resembles least: DiDeMo's descriptions are sentences about
+people in personal videos, almost never the name of a sound or a thing.
+
+The frames stay at a cosine of 0.998 from SigLIP 2's: the model moves them
+little, and what it learnt from DiDeMo's sentences moves the rest of the
+search with it. Training on descriptions of other kinds (objects, animals,
+sounds, from other collections) might keep the gain without the loss; it was
+not tried.
