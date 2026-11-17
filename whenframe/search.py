@@ -6,7 +6,8 @@
 3. When several models were indexed, their scores are standardised over the
    library and added, with weights tuned on DiDeMo training videos.
 4. When the videos were transcribed, the words of the query that are said
-   around a frame add to its score (speech.py).
+   around a frame add to its score (speech.py); when their sound tracks were
+   embedded, so does CLAP's score of what is heard around it (sounds.py).
 5. Each video's best frame shortlists the videos worth a closer look.
 6. In each shortlisted video, moments are placed around its best frames: fixed
    windows by default, or spans grown around the peaks of its curve.
@@ -23,9 +24,11 @@ from dataclasses import dataclass, field, replace
 import numpy as np
 
 from . import bank as qbank
+from . import sounds
 from .encoder import FUSION, MODELS
 from .library import Library, Video
 from .moments import Span, on_grid, smooth, spans, windows
+from .sounds import SoundConfig
 from .speech import SpeechConfig
 from .speech import frame_scores as frame_speech
 
@@ -46,6 +49,7 @@ class SearchConfig:
     contrast: float = 0.0  # weight of (peak - floor) in the ranking score
     min_length: float = 10.0
     speech: SpeechConfig = field(default_factory=SpeechConfig)  # used when the library is transcribed
+    sound: SoundConfig = field(default_factory=SoundConfig)  # used when the library's sound tracks are embedded
 
 
 @dataclass(frozen=True)
@@ -142,14 +146,28 @@ class Searcher:
         scale = 1.0 if len(self.models) == 1 else 1.0 / max(float(self._first_corrected.std()), 1e-9)
         return cfg.weight * scale * said, hits
 
-    def search(self, query: str, k: int = 10, scores: dict[str, np.ndarray] | None = None) -> list[Hit]:
+    def sound_scores(self, query: str, ranking: np.ndarray, videos, times, heard: np.ndarray | None = None):
+        """What the sound adds to each frame's ranking score: CLAP's standardised score of the window around it,
+        times the weight and the spread of the frames' own scores, so the two are added as standardised scores.
+        `heard` gives CLAP's cosine of every window instead of embedding the query (tests)."""
+        if not self.library.has_sounds():
+            return np.zeros_like(ranking)
+        ids, starts, emb = self.library.sound_windows()
+        if heard is None:
+            heard = emb @ self.library.listener.clap.encode_texts([query])[0]
+        cfg = self.config.sound
+        cos = sounds.frame_scores(times, {v.id: (v.start, v.count) for v in videos}, ids, starts, heard, cfg.length)
+        return cfg.weight * float(ranking.std()) * sounds.standardised(cos)
+
+    def search(self, query: str, k: int = 10, scores: dict[str, np.ndarray] | None = None,
+               heard: np.ndarray | None = None) -> list[Hit]:  # fmt: skip
         videos, _, times = self.library.snapshot()
         if not videos:
             return []
         raw = self.frame_scores(query) if scores is None else scores
         ranking = self.ranking_scores(raw)
         extra, segments = self.speech_scores(query, ranking, videos, times)
-        ranking = ranking + extra
+        ranking = ranking + extra + self.sound_scores(query, ranking, videos, times, heard)
         first = raw[self.models[0]]
         prob = self.library.encoder.probability
         best = np.array([ranking[v.start : v.start + v.count].max() for v in videos])

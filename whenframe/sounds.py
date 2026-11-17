@@ -9,11 +9,17 @@ The audio tower reads 10 seconds of 48 kHz sound as a log-mel spectrogram (64
 bands from 50 Hz to 14 kHz, 1,001 frames); a shorter window is repeated until it
 fills them, as CLAP's own feature extractor does ("repeatpad"). The features are
 computed here with numpy, as transformers' ClapFeatureExtractor computes them.
+
+Optional: `whenframe index --sounds`. A search then adds CLAP's score of the
+window around each frame, standardised over the library, to the frame's own
+standardised score, with the weight and window length chosen on UnAV-100 tuning
+videos (docs/PROTOCOL.md, fourth round).
 """
 
 from __future__ import annotations
 
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -25,6 +31,25 @@ FILES = ("tokenizer.json", "onnx/audio_model.onnx", "onnx/text_model.onnx")
 RATE = 48000
 SAMPLES = 10 * RATE  # what the audio tower reads at once
 N_FFT, HOP, BANDS, LOW, HIGH = 1024, 480, 64, 50.0, 14000.0
+CHUNK = 600.0  # seconds of sound read at a time: an hour at 48 kHz would take 700 MB
+
+SCHEMA = """
+create table if not exists sound (
+    id integer primary key,
+    video_id integer not null,
+    start real not null,
+    emb blob not null
+);
+create index if not exists sound_video on sound(video_id);
+create table if not exists heard (video_id integer primary key, length real not null, at real not null);
+"""
+
+
+@dataclass(frozen=True)
+class SoundConfig:
+    # chosen on UnAV-100 tuning videos among 14 combinations (results/unav_tuned.json)
+    length: float = 5.0  # seconds per window; windows overlap by half
+    weight: float = 2.0  # of the standardised sound score, added to the frames' standardised score
 
 
 def _hz_to_mel(f: np.ndarray) -> np.ndarray:
@@ -95,6 +120,77 @@ def windows(wave: np.ndarray, length: float, hop: float) -> tuple[np.ndarray, li
     if starts[-1] != last:
         starts.append(last)
     return np.array(starts) / RATE, [wave[s : s + n] for s in starts]
+
+
+def grid(seconds: float, length: float, offset: float = 0.0, last: bool = True) -> np.ndarray:
+    """Window starts every length / 2 seconds from `offset`, each window inside the sound; with `last`, one more
+    that ends with the sound when the grid stops short of it."""
+    hop = length / 2
+    n = int(np.floor(max(0.0, seconds - length) / hop + 1e-9)) + 1
+    starts = offset + hop * np.arange(n)
+    if last and seconds > length and starts[-1] + length < offset + seconds - 1e-6:
+        starts = np.append(starts, offset + seconds - length)
+    return starts
+
+
+class Listener:
+    """A video's sound track as (start, embedding) windows, read CHUNK seconds at a time."""
+
+    def __init__(self, clap: Clap | None = None, config: SoundConfig | None = None):
+        self.clap = clap or Clap()
+        self.config = config or SoundConfig()
+
+    def __call__(self, path: str, duration: float) -> list[tuple[float, np.ndarray]]:
+        length, out, t = self.config.length, [], 0.0
+        while True:
+            wave = sound(path, t, CHUNK + length)
+            seconds = len(wave) / RATE
+            if seconds < 0.1:
+                break
+            final = seconds < CHUNK + length - 1e-3  # the sound ends in this read
+            starts = grid(seconds if final else CHUNK + length / 2, length, last=final)
+            if not final:
+                starts = starts[starts < CHUNK - 1e-6]
+            clips = [wave[int(round(s * RATE)) : int(round(s * RATE)) + int(length * RATE)] for s in starts]
+            out += list(zip((t + starts).tolist(), self.clap.encode_audio(clips), strict=True))
+            if final:
+                break
+            t += CHUNK
+        return out
+
+
+def frame_scores(times: np.ndarray, ranges: dict[int, tuple[int, int]], video_ids: np.ndarray,
+                 starts: np.ndarray, cos: np.ndarray, length: float) -> np.ndarray:  # fmt: skip
+    """For every row (frame), the best cosine of the windows around its middle; NaN where nothing was heard.
+
+    A frame stands for the second after it; a window counts for it when the frame's
+    middle falls inside the window, or, past the last window, the nearest window.
+    """
+    out = np.full(len(times), np.nan, dtype=np.float32)
+    order = np.argsort(video_ids, kind="stable")
+    ids, first = np.unique(video_ids[order], return_index=True)
+    bounds = dict(zip(ids.tolist(), zip(first, np.r_[first[1:], len(order)], strict=True), strict=True))
+    for video, (row, count) in ranges.items():
+        if video not in bounds or count == 0:
+            continue
+        a, b = bounds[video]
+        w = order[a:b]
+        s, c = starts[w], cos[w]
+        mid = times[row : row + count].astype(np.float64) + 0.5
+        inside = (s[None, :] <= mid[:, None]) & (mid[:, None] < s[None, :] + length)
+        nearest = np.abs(s[None, :] + length / 2 - mid[:, None]).argmin(axis=1)
+        inside[np.arange(count), nearest] |= ~inside.any(axis=1)
+        out[row : row + count] = np.where(inside, c[None, :], -np.inf).max(axis=1)
+    return out
+
+
+def standardised(scores: np.ndarray) -> np.ndarray:
+    """Centred and scaled over the frames that were heard; 0 for the others."""
+    heard = ~np.isnan(scores)
+    if heard.sum() < 2:
+        return np.zeros_like(scores)
+    mean, std = scores[heard].mean(), scores[heard].std()
+    return np.where(heard, (scores - mean) / max(float(std), 1e-9), 0.0).astype(np.float32)
 
 
 class Clap:

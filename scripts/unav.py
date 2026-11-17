@@ -13,6 +13,12 @@ A moment counts as right when its best instant, where it is played from, falls
 inside an event of the label in that video: half of the events last less than 7
 seconds, which a 10-second moment cannot match at IoU 0.5.
 
+Many files of the copy last longer than UnAV-100 says their video does (440
+seconds for one of 20.7): the whole YouTube video, it seems, from which
+UnAV-100 cut its clip at an offset the annotations do not give. Only the files
+that last as long as the annotations say, within ALIGNED seconds, are used;
+the others are not embedded.
+
     python scripts/unav.py extract --annotations unav100_all.json   # streams the 22 archives, keeps no video
     python scripts/unav.py tune --annotations unav100_all.json      # a third of the videos: CLAP's window, weight
     python scripts/unav.py evaluate --annotations unav100_all.json  # the other two thirds, once
@@ -59,6 +65,8 @@ LENGTHS = (5.0, 10.0)  # seconds of sound per CLAP window; consecutive windows o
 WEIGHTS = (0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0)  # of CLAP's standardised scores, added to the frames'
 SHORTLIST, WINDOW, PER_VIDEO = 64, 10.0, 3  # the tool's default search
 K = 10  # moments looked at per label: the primary metric is the share of them that are right
+ALIGNED = 1.0  # seconds: a file whose length differs more from the annotations' is not UnAV-100's clip
+MIN_EVENTS = 3  # a label is searched for in a part of the videos only if it happens there this often
 LIST = 100  # moments ranked per label for the average precision
 
 
@@ -116,12 +124,16 @@ def extract(args) -> None:
                         if not member.isfile() or not member.name.endswith(".mp4") or name not in ann:
                             continue
                         part = PARTS / f"{name}.npz"
-                        if part.exists():
+                        if part.exists() or (PARTS / f"{name}.other").exists():
                             continue
                         video = work / "video.mp4"  # never the archive's own path
                         with tar.extractfile(member) as src, open(video, "wb") as dst:
                             shutil.copyfileobj(src, dst)
                         try:
+                            seconds = probe(video).duration or 0.0
+                            if abs(seconds - ann[name]["duration"]) > ALIGNED:
+                                (PARTS / f"{name}.other").write_text(f"{seconds:.3f}\n")  # not the annotated clip
+                                continue
                             process(video, part, enc, clap)
                         except Exception as ex:  # noqa: BLE001 - a broken file is skipped, not fatal
                             print(f"skip {name}: {ex}", file=sys.stderr)
@@ -139,12 +151,20 @@ def extract(args) -> None:
 
 
 def assemble(ann: dict) -> None:
-    names = sorted(p.stem for p in PARTS.glob("*.npz") if p.stem in ann)
-    z = [np.load(PARTS / f"{n}.npz") for n in names]
+    names, z = [], []
+    for path in sorted(PARTS.glob("*.npz")):
+        if path.stem in ann and not path.stem.endswith(".tmp"):
+            x = np.load(path)
+            if abs(float(x["duration"]) - ann[path.stem]["duration"]) <= ALIGNED:  # embedded before the check
+                names.append(path.stem)
+                z.append(x)
+    other = len(list(PARTS.glob("*.other"))) + sum(1 for p in PARTS.glob("*.npz") if p.stem in ann) - len(names)
+    print(f"{len(names)} files last as long as their annotations say; {other} others left out")
     counts = np.array([len(x["times"]) for x in z])
     out = {"names": np.array(names), "emb": np.concatenate([x["emb"] for x in z]),
            "times": np.concatenate([x["times"] for x in z]), "keep": np.concatenate([x["keep"] for x in z]),
-           "counts": counts, "starts": np.concatenate([[0], np.cumsum(counts)[:-1]])}  # fmt: skip
+           "counts": counts, "starts": np.concatenate([[0], np.cumsum(counts)[:-1]]),
+           "left_out": np.array(other)}  # fmt: skip
     for k in ("duration", "decode_cpu", "encode_cpu", "sound_cpu", "sound_seconds",
               *(f"clap_cpu_{length:g}" for length in LENGTHS)):  # fmt: skip
         out[k] = np.array([float(x[k]) for x in z])
@@ -186,29 +206,24 @@ class Library:
         return self.emb @ text.T - lam * bank_offsets(self.emb, bank, beta)[:, None]
 
     def sound(self, text: np.ndarray, length: float) -> np.ndarray:
-        """(frames, labels): CLAP's cosine of the window around each frame's middle (the best one if several)."""
+        """(frames, labels): CLAP's best cosine of the windows around each frame's middle, as the tool scores
+        them (sounds.frame_scores); NaN for frames of videos without sound."""
         z, key = self.z, f"{length:g}"
         counts = z[f"wcounts_{key}"]
         first = np.concatenate([[0], np.cumsum(counts)[:-1]])
-        out = np.full((len(self.times), len(text)), np.nan, dtype=np.float32)
-        for (row, count), v in zip(self.ranges, self.videos, strict=True):
-            a, n = int(first[v]), int(counts[v])
-            if n == 0:
-                continue  # no sound track
-            cos = z[f"audio_{key}"][a : a + n].astype(np.float32) @ text.T
-            mid = self.times[row : row + count] + 0.5
-            starts = z[f"wstarts_{key}"][a : a + n]
-            inside = (starts[None, :] <= mid[:, None]) & (mid[:, None] < starts[None, :] + length)
-            nearest = np.abs(starts[None, :] + length / 2 - mid[:, None]).argmin(axis=1)
-            inside[np.arange(count), nearest] |= ~inside.any(axis=1)  # past the last window's end
-            out[row : row + count] = np.where(inside[:, :, None], cos[None], -np.inf).max(axis=1)
-        return out
+        rows = np.concatenate([np.arange(first[v], first[v] + counts[v]) for v in self.videos])
+        ids = np.repeat(np.arange(len(self.videos)), counts[self.videos])
+        starts = z[f"wstarts_{key}"][rows].astype(np.float64)
+        cos = z[f"audio_{key}"][rows].astype(np.float32) @ text.T
+        ranges = dict(enumerate(self.ranges))
+        return np.stack([sounds.frame_scores(self.times, ranges, ids, starts, cos[:, j], length)
+                         for j in range(len(text))], axis=1)  # fmt: skip
 
 
 def standardise(s: np.ndarray) -> np.ndarray:
-    """Per label: centred and scaled over the library's frames; frames without sound get 0."""
-    mean, std = np.nanmean(s, axis=0), np.nanstd(s, axis=0)
-    return np.nan_to_num((s - mean) / np.maximum(std, 1e-9), nan=0.0)
+    """Per label, as the tool does for one query: centred and scaled over the library's frames, 0 where nothing
+    was heard (sounds.standardised)."""
+    return np.stack([sounds.standardised(s[:, j]) for j in range(s.shape[1])], axis=1)
 
 
 def moments(lib: Library, col: np.ndarray, count: int = LIST) -> list[tuple[int, float, float, float, float]]:
@@ -248,7 +263,10 @@ def judge(lib: Library, events: dict, label: str, found: list) -> dict:
 
 
 def evaluate_scores(lib: Library, events: dict, labels: list[str], scores: np.ndarray) -> dict:
-    per = {lab: judge(lib, events, lab, moments(lib, scores[:, j])) for j, lab in enumerate(labels)}
+    """Over the labels that happen at least MIN_EVENTS times in these videos."""
+    count = {lab: sum(len(events.get((n, lab), ())) for n in lib.names) for lab in labels}
+    per = {lab: judge(lib, events, lab, moments(lib, scores[:, j])) for j, lab in enumerate(labels)
+           if count[lab] >= MIN_EVENTS}  # fmt: skip
     return {"p_at_k": float(np.mean([x["p_at_k"] for x in per.values()])),
             "map": float(np.mean([x["ap"] for x in per.values()])), "labels": per}  # fmt: skip
 
@@ -286,7 +304,8 @@ def tune(args) -> None:
     names = z["names"].tolist()
     lib = Library(z, tuning_videos(names))
     frames = standardise(lib.frames(siglip, bank))
-    res = {"videos": len(lib.names), "labels": len(labels), "frames": evaluate_scores(lib, events, labels, frames)}
+    res = {"videos": len(lib.names), "frames": evaluate_scores(lib, events, labels, frames)}
+    res["labels"] = len(res["frames"]["labels"])
     print(f"frames: P@{K} {100 * res['frames']['p_at_k']:.1f}  mAP {100 * res['frames']['map']:.1f}", flush=True)
     grid = []
     for length in LENGTHS:
@@ -314,10 +333,11 @@ def evaluate(args) -> None:
     best = json.loads((ROOT / "results" / "unav_tuned.json").read_text())["best"]
     frames = standardise(lib.frames(siglip, bank))
     heard = standardise(lib.sound(clap, best["length"]))
-    res = {"videos": len(lib.names), "labels": len(labels), "length": best["length"], "weight": best["weight"]}
+    res = {"videos": len(lib.names), "length": best["length"], "weight": best["weight"]}
     for name, s in (("frames", frames), ("sound", heard), ("both", frames + best["weight"] * heard)):
         res[name] = evaluate_scores(lib, events, labels, s)
         print(f"{name}: P@{K} {100 * res[name]['p_at_k']:.1f}  mAP {100 * res[name]['map']:.1f}", flush=True)
+    res["labels"] = len(res["frames"]["labels"])
     res["both_vs_frames"] = compare(res["both"], res["frames"])
     hours = float(z["duration"].sum() / 3600)
     res["cost"] = {"hours": hours, **{f"{k}_min_per_hour": float(z[k].sum()) / 60 / hours

@@ -439,3 +439,38 @@ the frames.
 16. On the DiDeMo test, adding the grids' score with weight 0.25 to the
     frames' raises the primary metric by at least 1 point (both embedded by
     OpenVINO, repeats skipped; `scripts/motion.py evaluate`).
+
+### What is heard: CLAP on UnAV-100
+
+UnAV-100 (Geng et al., CVPR 2023) marks where 100 kinds of events, each both
+seen and heard, happen in untrimmed videos: people laughing, clapping, a dog
+barking, a guitar... Its test videos are the ones found in full, in the copy at
+huggingface.co/datasets/nguyenminh04/unav100-videos: 2,008 of the 2,167 are
+there, but 1,616 of them last longer than UnAV-100 says, apparently the whole
+YouTube video from which it cut its clip at an offset the annotations do not
+give (on six of them, the sound and the frames matched the annotations best
+at shifts of 20 to 165 seconds, not at 0). Only the 392 files that last as
+long as the annotations say, within a second, are used: 3.8 hours, 937
+events. A third of them, drawn once (seed 0), are for tuning; the other 262
+for the test.
+
+Each label is a description ("dog barking"), searched for among the videos of
+the part at once with the default search; it counts where it happens at least
+3 times. A moment is right when its best instant falls inside an event of the
+label in that video (half of the events last under 7 seconds, which a
+10-second moment cannot match at IoU 0.5). Primary metric: the share of the
+first 10 moments that are right, averaged over the labels (P@10); also the
+average precision of the first 100 moments, each event found once (mAP).
+
+The sound track is cut into windows that overlap by half, embedded by LAION's
+CLAP (larger_clap_general, Apache 2.0) with OpenVINO; a frame takes the best
+score of the windows around its middle. Frames and sound are standardised over
+the videos, per label, and added with a weight. Tuned on the 130 tuning videos
+(39 labels, `scripts/unav.py tune`), among windows of 5 or 10 seconds and
+weights 0.25 to 3: 5-second windows and weight 2 gave a P@10 of 41.0 %
+against 32.8 % for the frames alone and 30.5 % for the sound alone. Decoding
+the sound and embedding its 5-second windows took 4.7 CPU minutes per hour of
+video.
+
+17. On the 262 test videos, frames and sound together raise P@10 over the
+    frames alone by at least 4 points.

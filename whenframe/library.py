@@ -25,7 +25,7 @@ from pathlib import Path
 import numpy as np
 
 from . import bank as qbank
-from . import speech
+from . import sounds, speech
 from .encoder import DEFAULT_MODEL, Encoder
 from .video import RepeatFilter, VideoError, is_photo, iter_frames, probe, read_photo, thumbnails
 
@@ -38,6 +38,7 @@ class Settings:
     max_gap: int = 4
     speech: str = ""  # Whisper model transcribing the videos ("base", "small"), or "" for none
     photos: bool = True  # photos are indexed with the videos, each as a single frame
+    sounds: bool = False  # CLAP embeds windows of the sound tracks, to search what is heard
 
     @property
     def models(self) -> tuple[str, ...]:
@@ -70,7 +71,7 @@ create table if not exists videos (
 class Library:
     def __init__(self, folder: str | Path, settings: Settings | None = None, encoder: Encoder | None = None,
                  encoders: dict[str, Encoder] | None = None, backend: str | None = None,
-                 transcriber=None):  # fmt: skip
+                 transcriber=None, listener=None):  # fmt: skip
         self.folder = Path(folder)
         self.folder.mkdir(parents=True, exist_ok=True)
         cfg = self.folder / "config.json"
@@ -84,8 +85,10 @@ class Library:
             cfg.write_text(json.dumps(asdict(self.settings), indent=1))
         # `whenframe serve` reads the library from several threads; writes come from one indexer
         self.db = sqlite3.connect(self.folder / "library.sqlite", check_same_thread=False)
-        self.db.executescript(SCHEMA + speech.SCHEMA)
+        self.db.executescript(SCHEMA + speech.SCHEMA + sounds.SCHEMA)
         self._transcriber = transcriber  # speech.Transcriber, made when first needed
+        self._listener = listener  # sounds.Listener, made when first needed
+        self._heard = None  # (video ids, window starts, embeddings) of every window, loaded at the first search
         self._lock = threading.RLock()
         self.backend = backend  # runtime of the image tower (encoder.BACKENDS); None: the default
         self._encoders = dict(encoders or {})
@@ -100,6 +103,18 @@ class Library:
         if self.settings.speech != size:
             self.settings = Settings(**{**asdict(self.settings), "speech": size})
             (self.folder / "config.json").write_text(json.dumps(asdict(self.settings), indent=1))
+
+    def enable_sounds(self) -> None:
+        """Embed the sound tracks of this library's videos with CLAP from now on (and of those not done yet)."""
+        if not self.settings.sounds:
+            self.settings = Settings(**{**asdict(self.settings), "sounds": True})
+            (self.folder / "config.json").write_text(json.dumps(asdict(self.settings), indent=1))
+
+    @property
+    def listener(self):
+        if self._listener is None:
+            self._listener = sounds.Listener()
+        return self._listener
 
     @property
     def transcriber(self):
@@ -134,10 +149,41 @@ class Library:
                               " where v.path = ?", (str(path),)).fetchone()  # fmt: skip
         return row is None or row[0] != self.settings.speech
 
+    @property
+    def sound_config(self) -> sounds.SoundConfig:
+        return self._listener.config if self._listener is not None else sounds.SoundConfig()
+
+    def needs_sounds(self, path: Path) -> bool:
+        if not self.settings.sounds or is_photo(path):
+            return False
+        row = self.db.execute("select h.length from videos v left join heard h on h.video_id = v.id"
+                              " where v.path = ?", (str(path),)).fetchone()  # fmt: skip
+        return row is None or row[0] != self.sound_config.length
+
     def add(self, path: str | Path) -> Video | None:
-        """Index one video, unless it is already indexed and unchanged; transcribe it too if the library does."""
+        """Index one video, unless it is already indexed and unchanged; transcribe it and embed its sound track
+        too if the library does."""
         path = Path(path).resolve()
-        video = self._add_frames(path) if self.needs_indexing(path) else None
+        video = None
+        if self.needs_indexing(path):
+            before = self.db.execute("select id from videos where path = ?", (str(path),)).fetchone()
+            video = self._add_frames(path)
+            if before:  # a changed file: what was heard and said in the old one goes
+                with self._lock:
+                    for table in ("heard", "transcribed"):
+                        self.db.execute(f"delete from {table} where video_id = ?", before)  # noqa: S608
+                    self.db.commit()
+        if self.needs_sounds(path):
+            video = video or next(v for v in self.videos() if v.path == str(path))
+            heard = self.listener(str(path), video.duration)
+            with self._lock:
+                self.db.execute("delete from sound where video_id = ?", (video.id,))
+                self.db.executemany("insert into sound (video_id, start, emb) values (?, ?, ?)",
+                                    [(video.id, s, e.astype(np.float16).tobytes()) for s, e in heard])  # fmt: skip
+                self.db.execute("insert or replace into heard (video_id, length, at) values (?, ?, ?)",
+                                (video.id, self.sound_config.length, time.time()))  # fmt: skip
+                self.db.commit()
+                self._heard = None
         if self.needs_transcript(path):
             video = video or next(v for v in self.videos() if v.path == str(path))
             said = self.transcriber(str(path), video.duration)
@@ -158,6 +204,20 @@ class Library:
     def has_speech(self) -> bool:
         with self._lock:
             return self.db.execute("select 1 from speech limit 1").fetchone() is not None
+
+    def sound_windows(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """(video ids, starts, CLAP embeddings) of every window heard, loaded once until the library changes."""
+        with self._lock:
+            if self._heard is None:
+                rows = self.db.execute("select video_id, start, emb from sound order by id").fetchall()
+                emb = np.frombuffer(b"".join(r[2] for r in rows), dtype=np.float16).reshape(len(rows), -1)
+                self._heard = (np.array([r[0] for r in rows], dtype=np.int64),
+                               np.array([r[1] for r in rows], dtype=np.float64), emb.astype(np.float32))  # fmt: skip
+            return self._heard
+
+    def has_sounds(self) -> bool:
+        with self._lock:
+            return self.db.execute("select 1 from sound limit 1").fetchone() is not None
 
     def _add_frames(self, path: Path) -> Video:
         if is_photo(path):
@@ -235,11 +295,12 @@ class Library:
         with self._lock:
             row = self.db.execute("select id from videos where path = ?", (str(Path(path).resolve()),)).fetchone()
             if row:
-                for table in ("speech", "transcribed"):
+                for table in ("speech", "transcribed", "sound", "heard"):
                     self.db.execute(f"delete from {table} where video_id = ?", row)  # noqa: S608 (fixed names)
                 self.db.execute("delete from videos where id = ?", row)
             self.db.commit()
             self._cache = None
+            self._heard = None
 
     def dead_rows(self) -> int:
         """Rows left behind by re-indexed or removed videos."""
@@ -333,5 +394,6 @@ class Library:
             "embeddings": sum(v.count for v in videos),
             "index_bytes": sum(f.stat().st_size for f in files if f.exists()),
             "speech_segments": self.db.execute("select count(*) from speech").fetchone()[0],
+            "sound_windows": self.db.execute("select count(*) from sound").fetchone()[0],
             "settings": asdict(self.settings),
         }

@@ -35,13 +35,16 @@ def open_library(args) -> Library:
     lib = Library(args.library, Settings(**overrides) if overrides else None, backend=args.backend)
     if args.speech:
         lib.enable_speech(args.speech)
+    if args.sounds:
+        lib.enable_sounds()
     return lib
 
 
 def cmd_index(args) -> int:
     lib = open_library(args)
     paths = find_media(args.paths, photos=lib.settings.photos)
-    todo = [p for p in paths if lib.needs_indexing(p.resolve()) or lib.needs_transcript(p.resolve())]
+    todo = [p for p in paths if lib.needs_indexing(p.resolve()) or lib.needs_transcript(p.resolve())
+            or lib.needs_sounds(p.resolve())]  # fmt: skip
     print(f"{len(paths)} videos and photos found, {len(todo)} to index")
     if todo:
         enc = lib.encoder
@@ -159,6 +162,9 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--speech", choices=["base", "small"], default=None,
                        help="also transcribe what is said, with this Whisper model (pip install whenframe[speech]); "
                             "kept for the library from then on")  # fmt: skip
+        p.add_argument("--sounds", action="store_true",
+                       help="also embed the sound tracks with CLAP, to find laughter, applause, a dog barking, "
+                            "music; kept for the library from then on")  # fmt: skip
 
     def moment_options(p: argparse.ArgumentParser) -> None:
         p.add_argument("--moments", choices=["windows", "spans"], default="windows",

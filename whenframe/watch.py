@@ -66,7 +66,8 @@ class Watcher:
             for p in find_media([root], photos=self.library.settings.photos):
                 p = p.resolve()
                 try:
-                    if not self.library.needs_indexing(p):
+                    lib = self.library
+                    if not (lib.needs_indexing(p) or lib.needs_transcript(p) or lib.needs_sounds(p)):
                         continue
                     st = p.stat()
                 except OSError:  # gone since the folder was listed
