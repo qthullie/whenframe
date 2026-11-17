@@ -35,6 +35,8 @@ Changelog = "https://github.com/qthullie/whenframe/blob/main/CHANGELOG.md"
 fast = ["openvino>=2025.0"]
 # Whisper on the CPU, to search what is said (whenframe index --speech base)
 speech = ["faster-whisper>=1.1"]
+# trains the temporal model (scripts/temporal.py); the tool runs it with numpy
+train = ["jax>=0.4.30"]
 dev = ["pytest>=7", "ruff>=0.5", "matplotlib>=3.7", "pyarrow>=14", "onnx>=1.15"]
 
 [project.scripts]
@@ -47,7 +49,7 @@ version = { attr = "whenframe.__version__" }
 include = ["whenframe*"]
 
 [tool.setuptools.package-data]
-"whenframe.data" = ["*.npy", "*.onnx", "NOTICE"]
+"whenframe.data" = ["*.npy", "*.npz", "*.onnx", "NOTICE"]
 whenframe = ["web/*.html"]
 
 [tool.ruff]

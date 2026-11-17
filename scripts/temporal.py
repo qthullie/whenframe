@@ -672,9 +672,13 @@ def evaluate(args) -> None:
     res["didemo"] = {"videos": len(test.kept.starts), "queries": len(test.queries), "method": test.method,
                      **three(test.kept, test.queries, test.text, test.method, test.params)}  # fmt: skip
     show("DiDeMo test", res["didemo"])
-    t0, video = time.perf_counter(), test.kept
+    t0, video = time.process_time(), test.kept
     adapt(p, video.emb, video.times, video.starts, video.counts)
-    res["didemo"]["adapter_ms_per_frame"] = 1000 * (time.perf_counter() - t0) / len(video.times)
+    cpu = time.process_time() - t0  # every thread's CPU time
+    hours = float(video.durations.sum() / 3600)
+    res["didemo"]["adapter_cost"] = {"cpu_ms_per_frame": 1000 * cpu / len(video.times),
+                                     "cpu_min_per_hour": cpu / 60 / hours, "frames": len(video.times),
+                                     "hours": hours}  # fmt: skip
 
     shared = {"model_dir": args.model_dir, "train_annotations": args.annotations}
     f, queries, text = charades.load(Namespace(annotations=args.charades_annotations, **shared))
@@ -730,9 +734,18 @@ def evaluate(args) -> None:
     print(f"wrote {out}")
 
 
+def export(args) -> None:
+    """The adapter's weights, as the package ships them (float16; the head's, never trained here, left out)."""
+    z = np.load(args.model)
+    keep = [k for k in z.files if not k.startswith("h_") and k not in FIXED]
+    out = Path(args.out or ROOT / "whenframe" / "data" / f"{temporal.MODELS['siglip2-base']}.npz")
+    np.savez(out, **{k: z[k].astype(np.float16) if z[k].ndim else z[k] for k in keep})
+    print(f"wrote {out}: {sum(z[k].size for k in keep if z[k].ndim)} weights")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("stage", choices=["texts", "train", "evaluate"])
+    ap.add_argument("stage", choices=["texts", "train", "export", "evaluate"])
     ap.add_argument("--annotations", required=True, help="DiDeMo's didemo_train.json")
     ap.add_argument("--train-annotations", help="the same, for the query bank (default: --annotations)")
     ap.add_argument("--model-dir", help="folder of SigLIP 2 base's files (default: the usual download cache)")
@@ -755,17 +768,21 @@ def main() -> None:
     ap.add_argument("--negatives", type=int, default=4, help="other videos per description, for the head")
     ap.add_argument("--every", type=int, default=500, help="steps between two checks on the tuning videos")
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--model", help="evaluate: the trained weights (results/temporal/NAME.npz)")
+    ap.add_argument("--model", help="export, evaluate: the trained weights (results/temporal/NAME.npz)")
     ap.add_argument("--test-annotations", help="evaluate: DiDeMo's didemo_test.json")
     ap.add_argument("--charades-annotations", help="evaluate: Charades-STA's test parquet")
     ap.add_argument("--youcook2-annotations", help="evaluate: YouCook2's validation parquet")
     ap.add_argument("--unav-annotations", help="evaluate: UnAV-100's unav100_all.json")
     ap.add_argument("--clap-dir", help="evaluate: folder of CLAP's files")
-    ap.add_argument("--out", help="evaluate: where to write the results (default: results/temporal_test.json)")
+    ap.add_argument(
+        "--out",
+        help="export: where to write the weights (default: the package's); evaluate: the "
+        "results (default: results/temporal_test.json)",
+    )
     args = ap.parse_args()
     args.train_annotations = args.train_annotations or args.annotations
     args.split = "train"
-    {"texts": texts, "train": train, "evaluate": evaluate}[args.stage](args)
+    {"texts": texts, "train": train, "export": export, "evaluate": evaluate}[args.stage](args)
 
 
 if __name__ == "__main__":
