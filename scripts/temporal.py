@@ -440,6 +440,19 @@ def numpy_params(p: dict, layers: int, heads: int) -> dict:
     return out
 
 
+def calibrated_bias(p: dict, batch) -> float:
+    """The head's bias before training: halfway between the logits of the frames inside the described moments
+    and those of other videos' frames, rather than SigLIP 2's own bias, far below both."""
+    from whenframe.bank import offsets
+
+    x, _, mask, q, inside, _, _, bank = batch
+    a, lam, beta = float(np.exp(p["scale"])), float(p["lam"]), float(p["beta"])
+    off = offsets(x.reshape(-1, x.shape[-1]), bank, beta).reshape(mask.shape)
+    own = a * (np.einsum("nld,nd->nl", x, q) - lam * off) + float(p["bias"])
+    other = a * (np.einsum("nld,nd->nl", np.roll(x, 1, 0), q) - lam * np.roll(off, 1, 0)) + float(p["bias"])
+    return -0.5 * (float(own[inside].mean()) + float(other[np.roll(mask, 1, 0)].mean()))
+
+
 def train(args) -> None:
     import jax
     import jax.numpy as jnp
@@ -451,6 +464,7 @@ def train(args) -> None:
     key = jax.random.PRNGKey(args.seed)
     params = jax.tree.map(jnp.asarray, init(key, args.width, args.layers, args.heads, lam=tuning.params["lam"],
                                             beta=tuning.params["beta"]))  # fmt: skip
+    params["h_s_b"] = jnp.float32(calibrated_bias(params, data.batch(args.batch)))
     adam_m = jax.tree.map(jnp.zeros_like, params)
     adam_v = jax.tree.map(jnp.zeros_like, params)
     decayed = {k: k.endswith("_w") for k in params}
