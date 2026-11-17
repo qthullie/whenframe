@@ -91,19 +91,36 @@ def head(p: dict, x: np.ndarray, t: np.ndarray, q: np.ndarray, off: np.ndarray) 
     query-bank offsets: each frame's foreground logit (SigLIP 2's logit of the bank-corrected similarity, as the
     search scores frames, plus the head's correction) and how far the moment reaches before and after the
     frame's middle, in seconds."""
-    u = layer_norm(x, p["h_f_ln_g"], p["h_f_ln_b"]) @ p["h_f_w"]
+    n = len(x)
+    fg, reach = head_batch(p, x[None], np.asarray(t, dtype=np.float64)[None], np.ones((1, n), bool), q, off[None])
+    return fg[0], reach[0]
+
+
+def frames_projection(p: dict, x: np.ndarray) -> np.ndarray:
+    """The part of the head that does not depend on the description: computed once for a library's frames."""
+    return layer_norm(x, p["h_f_ln_g"], p["h_f_ln_b"]) @ p["h_f_w"]
+
+
+def head_batch(p: dict, x: np.ndarray, t: np.ndarray, mask: np.ndarray, q: np.ndarray, off: np.ndarray,
+               u: np.ndarray | None = None) -> tuple[np.ndarray, np.ndarray]:  # fmt: skip
+    """head() for N windows of at most WINDOW frames at once: (N, L, D) frames, (N, L) times and which frames
+    are real, (D,) the description, (N, L) offsets; u: frames_projection(x), when already known."""
+    u = frames_projection(p, x) if u is None else u
     c = q @ p["h_q_w"] + p["h_q_b"]
-    e = gelu((u * c) @ p["h_m_w"] + p["h_m_b"]) + time_features(t) @ p["h_time_w"]
-    n, h = e.shape
+    rel = (t - t[:, :1])[..., None] * (2 * np.pi / np.array(PERIODS))
+    tf = np.concatenate([np.sin(rel), np.cos(rel)], axis=-1).astype(np.float32)
+    e = gelu((u * c) @ p["h_m_w"] + p["h_m_b"]) + tf @ p["h_time_w"]
+    n, length, h = e.shape
     heads = p["heads"]
     k = layer_norm(e, p["h_ln1_g"], p["h_ln1_b"]) @ p["h_qkv_w"] + p["h_qkv_b"]
-    qs, ks, vs = (k[:, j * h : (j + 1) * h].reshape(n, heads, h // heads).transpose(1, 0, 2) for j in range(3))
-    att = qs @ ks.transpose(0, 2, 1) / np.sqrt(h // heads)
+    qs, ks, vs = (k[..., j * h : (j + 1) * h].reshape(n, length, heads, h // heads).transpose(0, 2, 1, 3)
+                  for j in range(3))  # fmt: skip
+    att = np.where(mask[:, None, None, :], qs @ ks.transpose(0, 1, 3, 2) / np.sqrt(h // heads), -np.inf)
     att = np.exp(att - att.max(-1, keepdims=True))
     att /= att.sum(-1, keepdims=True)
-    e = e + (att @ vs).transpose(1, 0, 2).reshape(n, h) @ p["h_out_w"] + p["h_out_b"]
+    e = e + (att @ vs).transpose(0, 2, 1, 3).reshape(n, length, h) @ p["h_out_w"] + p["h_out_b"]
     e = layer_norm(e, p["h_ln2_g"], p["h_ln2_b"])
-    fg = np.exp(p["scale"]) * (x @ q - p["lam"] * off) + p["bias"] + e @ p["h_s_w"] + p["h_s_b"]
+    fg = np.exp(p["scale"]) * (np.einsum("nld,d->nl", x, q) - p["lam"] * off) + p["bias"] + e @ p["h_s_w"] + p["h_s_b"]
     reach = np.logaddexp(0.0, e @ p["h_d_w"] + p["h_d_b"]) * 5.0
     return fg.astype(np.float32), reach.astype(np.float32)
 

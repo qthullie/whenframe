@@ -248,6 +248,9 @@ def loss(p, batch, layers, heads, key, cfg):
     within = jnp.mean(jax.nn.logsumexp(own, axis=-1) - jax.nn.logsumexp(jnp.where(inside, own, -1e9), axis=-1))
     leash = jnp.sum((1 - jnp.sum(new * x, -1)) * mask) / jnp.sum(mask)
     total = cfg["between"] * between + cfg["within"] * within + cfg["leash"] * leash
+    if not cfg["head"]:  # the adapter alone
+        zero = jnp.float32(0.0)
+        return total, (between, within, leash, zero, zero, zero)
     sg = jax.lax.stop_gradient  # the head learns from the adapter's output; its losses do not reshape it
     found, parts = head_loss(p, sg(new), t, mask, q, sg(off), inside, start, end, heads, cfg["negatives"], sub)
     return total + cfg["head"] * found, (between, within, leash, *parts)
@@ -340,7 +343,7 @@ class DiDeMo:
     def adapted(self, p: dict) -> np.ndarray:
         return adapt(p, self.kept.emb, self.kept.times, self.kept.starts, self.kept.counts)
 
-    def score(self, p: dict | None) -> dict:
+    def score(self, p: dict | None, with_head: bool = True) -> dict:
         from benchmark import run
 
         emb = None if p is None else self.adapted(p)
@@ -348,7 +351,7 @@ class DiDeMo:
         r = run(f, self.queries, self.text, self.method, self.params)
         out = {"R@5": r["corpus"]["R@5 IoU>=0.5"], "R@1": r["corpus"]["R@1 IoU>=0.5"], "video_R@5": r["video"]["R@5"],
                "single_R1@0.5": r["single"]["R1 IoU>=0.5"]}  # fmt: skip
-        if p is not None:
+        if p is not None and with_head:
             h = search_with_head(p, self.kept, self.queries, self.text, self.kept.bank, emb=emb)
             w = search_with_head(p, self.kept, self.queries, self.text, self.kept.bank, emb=emb, place="windows")
             out |= {"head_R@5": h["corpus"]["R@5 IoU>=0.5"], "head_R@1": h["corpus"]["R@1 IoU>=0.5"],
@@ -385,20 +388,42 @@ def search_with_head(
     hits = {(k, th): 0 for k in CORPUS_KS for th in (0.5, 0.7)}
     video_hits = dict.fromkeys(CORPUS_KS, 0)
     single, found = [], []
-
-    def placed(v: int, q: np.ndarray, n: int):
+    # videos of one window, padded together, so that a description's shortlist goes through the head at once
+    nv, w = len(f.starts), temporal.WINDOW
+    short = f.counts <= w
+    X, T = np.zeros((nv, w, emb.shape[1]), np.float32), np.zeros((nv, w))
+    M, OFF = np.zeros((nv, w), bool), np.zeros((nv, w), np.float32)
+    for v in np.flatnonzero(short):
         s, c = int(f.starts[v]), int(f.counts[v])
-        t = f.times[s : s + c]
-        fg, reach = temporal.head_video(p, emb[s : s + c], t, q, off[s : s + c])
+        X[v, :c], T[v, :c], M[v, :c], OFF[v, :c] = emb[s : s + c], f.times[s : s + c], True, off[s : s + c]
+    U = temporal.frames_projection(p, X)
+
+    def scored(vids: np.ndarray, q: np.ndarray) -> dict:
+        out = {}
+        one = vids[short[vids]]
+        if len(one):
+            fg, reach = temporal.head_batch(p, X[one], T[one], M[one], q, OFF[one], U[one])
+            for j, v in enumerate(one):
+                c = int(f.counts[v])
+                out[int(v)] = fg[j, :c], reach[j, :c]
+        for v in vids[~short[vids]]:
+            s, c = int(f.starts[v]), int(f.counts[v])
+            out[int(v)] = temporal.head_video(p, emb[s : s + c], f.times[s : s + c], q, off[s : s + c])
+        return out
+
+    def placed(v: int, fg: np.ndarray, reach: np.ndarray, n: int):
+        t = f.times[int(f.starts[v]) : int(f.starts[v]) + int(f.counts[v])]
         if place == "windows":
-            found = windows(t.astype(np.float64), fg.astype(np.float64), float(f.durations[v]), 10.0, n)
-            return [(x.start, x.end, x.peak) for x in found]
+            ws = windows(t.astype(np.float64), fg.astype(np.float64), float(f.durations[v]), 10.0, n)
+            return [(x.start, x.end, x.peak) for x in ws]
         return [(lo, hi, float(fg[i])) for lo, hi, i in temporal.moments(fg, reach, t, float(f.durations[v]), n)]
 
     for qi, query in enumerate(queries):
         q = text[qi]
         best = np.maximum.reduceat(emb @ q - lam * off, f.starts)
-        ranked = [(int(v), *m) for v in np.argsort(-best)[:SHORTLIST] for m in placed(int(v), q, count)]
+        shortlist = np.argsort(-best)[:SHORTLIST]
+        heads = scored(np.unique(np.concatenate([shortlist, [query["video"]]])), q)
+        ranked = [(int(v), *m) for v in shortlist for m in placed(int(v), *heads[int(v)], count)]
         ranked.sort(key=lambda m: -m[3])
         ranked = ranked[: max(CORPUS_KS)]
         first_ok = {th: None for th in (0.5, 0.7)}
@@ -416,7 +441,7 @@ def search_with_head(
         rank_v = order.index(query["video"]) if query["video"] in order else None
         for k in CORPUS_KS:
             video_hits[k] += rank_v is not None and rank_v < k
-        top = placed(query["video"], q, 1)
+        top = placed(query["video"], *heads[int(query["video"])], 1)
         single.append(iou(top[0][:2], query["moment"]) if top else 0.0)
     n, single = len(queries), np.array(single)
     out = {"corpus": {f"R@{k} IoU>={th}": hits[(k, th)] / n for k in CORPUS_KS for th in (0.5, 0.7)},
@@ -500,16 +525,14 @@ def train(args) -> None:
         params, adam_m, adam_v, value, parts = step(params, adam_m, adam_v, batch, sub, warm, i)
         if (i + 1) % args.every == 0 or i + 1 == args.steps:
             p = numpy_params(jax.device_get(params), args.layers, args.heads)
-            s = tuning.score(p)
+            s = tuning.score(p, with_head=args.head > 0)
             names = ("between", "within", "leash", "frames", "rank", "bounds")
             losses = {k: float(v) for k, v in zip(names, parts, strict=True)}
             log["checks"].append({"step": i + 1, "loss": float(value), **losses, **s, "seconds": time.time() - t0})
+            shown = ", ".join(f"{k} {100 * v:.1f}" for k, v in s.items())
             print(f"step {i + 1}: loss {float(value):.3f} ({', '.join(f'{k} {v:.3f}' for k, v in losses.items())}); "
-                  f"tuning R@5 {100 * s['R@5']:.1f}, head's moments {100 * s['head_R@5']:.1f}, head's scores "
-                  f"in windows {100 * s['rescored_R@5']:.1f}; single {100 * s['single_R1@0.5']:.1f} / "
-                  f"{100 * s['head_single_R1@0.5']:.1f} / {100 * s['rescored_single_R1@0.5']:.1f}; "
-                  f"{time.time() - t0:.0f} s", flush=True)  # fmt: skip
-            score = max(s["R@5"], s["head_R@5"], s["rescored_R@5"])
+                  f"tuning {shown}; {time.time() - t0:.0f} s", flush=True)  # fmt: skip
+            score = max(s[k] for k in ("R@5", "head_R@5", "rescored_R@5") if k in s)
             if score > best:
                 best, best_params = score, p
     OUT.mkdir(parents=True, exist_ok=True)
