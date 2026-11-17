@@ -81,6 +81,23 @@ whenframe stats      # what is indexed
 whenframe compact    # reclaim space after videos were re-indexed or removed
 ```
 
+### whenframe's own model
+
+```bash
+whenframe index ~/Videos --temporal     # the first time the library is indexed
+```
+
+runs each video's frames through whenframe's temporal model before they are
+stored: two transformer layers, trained on DiDeMo's 7,745 training videos,
+that add to each frame's embedding what the frames around it show. On the
+DiDeMo test it put the right moment among the first five 29.3 % of the time
+instead of 27.6 %, and a little more often on Charades-STA and YouCook2; on
+UnAV-100's sound events it did 1.1 points worse, which is why it is not the
+default ([RESULTS.md](RESULTS.md), "Fifth round"). It costs about a
+millisecond of CPU per frame, the image encoder some 80. It is for the
+standard mode; photos keep their embedding. A library is built with it or
+without it: use a new folder to change.
+
 ### What is said
 
 ```bash

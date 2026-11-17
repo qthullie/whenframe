@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- `whenframe index --temporal`: whenframe's own model, a temporal adapter of
+  1.45 million weights trained on DiDeMo's 7,745 training videos, rewrites
+  each frame's SigLIP 2 embedding with what the frames around it show (standard
+  mode, fixed for a library). On the DiDeMo test the right moment is among the
+  first five 29.3 % of the time instead of 27.6 % (151 descriptions gained, 87
+  lost); Charades-STA +0.9 points, YouCook2 +0.4, but UnAV-100 -1.1 points of
+  P@10, more than the protocol allowed, so it is not the default
+  ([docs/RESULTS.md](https://github.com/qthullie/whenframe/blob/main/docs/RESULTS.md), fifth round).
+- `scripts/train_data.py` and `scripts/temporal.py` stream DiDeMo's training
+  archive, train the model with JAX (`pip install 'whenframe[train]'`) and
+  evaluate it; a head placing moments was tried and not kept.
+
 ## 0.1.0
 
 The first release. Every number below was measured with the protocol of
