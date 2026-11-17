@@ -350,8 +350,10 @@ class DiDeMo:
                "single_R1@0.5": r["single"]["R1 IoU>=0.5"]}  # fmt: skip
         if p is not None:
             h = search_with_head(p, self.kept, self.queries, self.text, self.kept.bank, emb=emb)
+            w = search_with_head(p, self.kept, self.queries, self.text, self.kept.bank, emb=emb, place="windows")
             out |= {"head_R@5": h["corpus"]["R@5 IoU>=0.5"], "head_R@1": h["corpus"]["R@1 IoU>=0.5"],
-                    "head_single_R1@0.5": h["single"]["R1 IoU>=0.5"]}  # fmt: skip
+                    "head_single_R1@0.5": h["single"]["R1 IoU>=0.5"], "rescored_R@5": w["corpus"]["R@5 IoU>=0.5"],
+                    "rescored_single_R1@0.5": w["single"]["R1 IoU>=0.5"]}  # fmt: skip
         return out
 
 
@@ -364,13 +366,17 @@ def search_with_head(
     emb: np.ndarray | None = None,
     count: int = 3,
     per_query: bool = False,
+    place: str = "reach",
 ) -> dict:
     """The whole search with the model, as the tool runs it: adapted frames, the query bank, the 64 best
-    videos shortlisted, the head placing up to `count` moments in each (whenframe.temporal, numpy), all moments
-    ranked by the head's logit. Metrics as benchmark.run's."""
+    videos shortlisted, the head scoring their frames for the description (whenframe.temporal, numpy), up to
+    `count` moments in each, all moments ranked by the head's logit. Moments as the head places them
+    (place="reach"), or 10-second windows around its best frames, as the default search places them
+    (place="windows"). Metrics as benchmark.run's."""
     from benchmark import CORPUS_KS, SHORTLIST, iou
 
     from whenframe.bank import offsets as numpy_offsets
+    from whenframe.moments import windows
 
     if emb is None:
         emb = adapt(p, f.emb, f.times, f.starts, f.counts)
@@ -382,9 +388,12 @@ def search_with_head(
 
     def placed(v: int, q: np.ndarray, n: int):
         s, c = int(f.starts[v]), int(f.counts[v])
-        fg, reach = temporal.head_video(p, emb[s : s + c], f.times[s : s + c], q, off[s : s + c])
-        return [(lo, hi, float(fg[i])) for lo, hi, i in temporal.moments(fg, reach, f.times[s : s + c],
-                                                                          float(f.durations[v]), n)]  # fmt: skip
+        t = f.times[s : s + c]
+        fg, reach = temporal.head_video(p, emb[s : s + c], t, q, off[s : s + c])
+        if place == "windows":
+            found = windows(t.astype(np.float64), fg.astype(np.float64), float(f.durations[v]), 10.0, n)
+            return [(x.start, x.end, x.peak) for x in found]
+        return [(lo, hi, float(fg[i])) for lo, hi, i in temporal.moments(fg, reach, t, float(f.durations[v]), n)]
 
     for qi, query in enumerate(queries):
         q = text[qi]
@@ -482,10 +491,11 @@ def train(args) -> None:
             losses = {k: float(v) for k, v in zip(names, parts, strict=True)}
             log["checks"].append({"step": i + 1, "loss": float(value), **losses, **s, "seconds": time.time() - t0})
             print(f"step {i + 1}: loss {float(value):.3f} ({', '.join(f'{k} {v:.3f}' for k, v in losses.items())}); "
-                  f"tuning R@5 {100 * s['R@5']:.1f}, with the head {100 * s['head_R@5']:.1f}, single "
-                  f"{100 * s['single_R1@0.5']:.1f} / {100 * s['head_single_R1@0.5']:.1f}; {time.time() - t0:.0f} s",
-                  flush=True)  # fmt: skip
-            score = max(s["R@5"], s["head_R@5"])
+                  f"tuning R@5 {100 * s['R@5']:.1f}, head's moments {100 * s['head_R@5']:.1f}, head's scores "
+                  f"in windows {100 * s['rescored_R@5']:.1f}; single {100 * s['single_R1@0.5']:.1f} / "
+                  f"{100 * s['head_single_R1@0.5']:.1f} / {100 * s['rescored_single_R1@0.5']:.1f}; "
+                  f"{time.time() - t0:.0f} s", flush=True)  # fmt: skip
+            score = max(s["R@5"], s["head_R@5"], s["rescored_R@5"])
             if score > best:
                 best, best_params = score, p
     OUT.mkdir(parents=True, exist_ok=True)
@@ -517,23 +527,27 @@ def evaluate(args) -> None:
     p = temporal.load(Path(args.model))
     res = {"model": str(Path(args.model).relative_to(ROOT)) if Path(args.model).is_relative_to(ROOT) else args.model}
 
+    variants = ("without", "adapter", "head", "rescored")
+
     def three(f, queries, text, method, params):
-        """SigLIP 2 as it is, the adapter, the adapter and the head; R@5 found or not for each description."""
+        """SigLIP 2 as it is, the adapter, the adapter and the head (its moments, and its scores in the default
+        search's windows); R@5 found or not for each description."""
         emb = adapt(p, f.emb, f.times, f.starts, f.counts)
         out = {"without": run(f, queries, text, method, params, per_query=True),
                "adapter": run(replace(f, emb=emb, _offsets={}), queries, text, method, params, per_query=True),
-               "head": search_with_head(p, f, queries, text, f.bank, emb=emb, per_query=True)}  # fmt: skip
+               "head": search_with_head(p, f, queries, text, f.bank, emb=emb, per_query=True),
+               "rescored": search_with_head(p, f, queries, text, f.bank, emb=emb, per_query=True,
+                                            place="windows")}  # fmt: skip
         found = {k: v.pop("found") for k, v in out.items()}
-        for k in ("adapter", "head"):
+        for k in variants[1:]:
             out[f"{k}_vs_without"] = versus(found[k], found["without"])
-        out["head_vs_adapter"] = versus(found["head"], found["adapter"])
-        for k in ("without", "adapter", "head"):
             out[k].pop("params", None)
+        out["without"].pop("params", None)
         return out
 
     def show(name, r):
-        print(f"{name}: R@5 " + ", ".join(f"{k} {100 * r[k]['corpus']['R@5 IoU>=0.5']:.1f}"
-                                          for k in ("without", "adapter", "head")), flush=True)  # fmt: skip
+        print(f"{name}: R@5 " + ", ".join(f"{k} {100 * r[k]['corpus']['R@5 IoU>=0.5']:.1f}" for k in variants),
+              flush=True)  # fmt: skip
 
     test = DiDeMo(args, "test")
     res["didemo"] = {"videos": len(test.kept.starts), "queries": len(test.queries), "method": test.method,
