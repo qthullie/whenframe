@@ -25,7 +25,7 @@ from pathlib import Path
 import numpy as np
 
 from . import bank as qbank
-from . import sounds, speech
+from . import sounds, speech, temporal
 from .encoder import DEFAULT_MODEL, Encoder
 from .half import float32_copy, memory_budget
 from .video import RepeatFilter, VideoError, is_photo, iter_frames, probe, read_photo, thumbnails
@@ -40,6 +40,7 @@ class Settings:
     speech: str = ""  # Whisper model transcribing the videos ("base", "small"), or "" for none
     photos: bool = True  # photos are indexed with the videos, each as a single frame
     sounds: bool = False  # CLAP embeds windows of the sound tracks, to search what is heard
+    temporal: str = ""  # whenframe's temporal model, run over the first model's frames of each video, or ""
 
     @property
     def models(self) -> tuple[str, ...]:
@@ -96,6 +97,16 @@ class Library:
         if encoder is not None:
             self._encoders[self.settings.models[0]] = encoder
         self._cache = None
+        self._temporal = None
+
+    @property
+    def temporal_model(self) -> dict:
+        """The weights of the temporal model this library's frames go through (whenframe/temporal.py)."""
+        if self._temporal is None:
+            self._temporal = temporal.load(name=f"{self.settings.temporal}.npz")
+            if self._temporal is None:
+                raise ValueError(f"{self.folder} was indexed with {self.settings.temporal}, which is not installed")
+        return self._temporal
 
     def enable_speech(self, size: str) -> None:
         """Transcribe this library's videos with Whisper `size` from now on (and those not transcribed yet)."""
@@ -247,8 +258,12 @@ class Library:
                 stream.close()
         if not seen:
             raise VideoError(f"{path}: no frame decoded")
-        return self._store(path, {m: np.concatenate(e) for m, e in embs.items()}, np.concatenate(kept_times),
-                           info.duration or float(seen / s.fps))  # fmt: skip
+        embs = {m: np.concatenate(e) for m, e in embs.items()}
+        times = np.concatenate(kept_times)
+        if s.temporal:  # each frame told what the frames around it show; photos have no frames around them
+            first = s.models[0]
+            embs[first] = temporal.apply(self.temporal_model, embs[first].astype(np.float32), times).astype(np.float16)
+        return self._store(path, embs, times, info.duration or float(seen / s.fps))
 
     def _add_photo(self, path: Path) -> Video:
         """A photo is a video of one frame and no duration: its moment is the photo itself."""

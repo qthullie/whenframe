@@ -8,8 +8,8 @@ import sys
 import time
 from pathlib import Path
 
-from . import __version__
-from .encoder import BACKENDS, MODES
+from . import __version__, temporal
+from .encoder import BACKENDS, DEFAULT_MODEL, MODES
 from .library import Library, Settings
 from .search import HEARD, SearchConfig, Searcher, worth_showing
 from .video import find_media
@@ -33,6 +33,11 @@ def open_library(args) -> Library:
         overrides["model"] = MODES[args.mode]
     if args.no_photos:
         overrides["photos"] = False
+    if not (Path(args.library) / "config.json").exists() and not args.no_temporal:
+        # a new library goes through whenframe's temporal model when one is installed for its encoder
+        name = temporal.MODELS.get(overrides.get("model", DEFAULT_MODEL).split("+")[0])
+        if name and temporal.load(name=f"{name}.npz") is not None:
+            overrides["temporal"] = name
     lib = Library(args.library, Settings(**overrides) if overrides else None, backend=args.backend)
     if args.speech:
         lib.enable_speech(args.speech)
@@ -172,6 +177,9 @@ def main(argv: list[str] | None = None) -> int:
                             "Runtime; also $WHENFRAME_BACKEND")  # fmt: skip
         p.add_argument("--no-photos", action="store_true", help="index videos only, not the photos next to them "
                        "(fixed for a library)")  # fmt: skip
+        p.add_argument("--no-temporal", action="store_true",
+                       help="keep SigLIP 2's frame embeddings as they are, without whenframe's temporal model "
+                            "(fixed for a library)")  # fmt: skip
         p.add_argument("--speech", choices=["base", "small"], default=None,
                        help="also transcribe what is said, with this Whisper model (pip install whenframe[speech]); "
                             "kept for the library from then on")  # fmt: skip

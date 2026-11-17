@@ -23,6 +23,7 @@ from importlib import resources
 import numpy as np
 
 WINDOW, STRIDE = 32, 16  # frames read together, and how far the next window starts
+MODELS = {"siglip2-base": "temporal-siglip2-base"}  # the image encoders a temporal model was trained for
 PERIODS = (2.0, 4.0, 8.0, 16.0, 32.0, 64.0)  # seconds: the times' sines and cosines at these periods
 
 

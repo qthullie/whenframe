@@ -190,3 +190,28 @@ def test_a_library_larger_than_the_memory_budget_is_searched_from_its_files(vide
     _, embs, _ = small.snapshot()
     assert embs["toy"].dtype == np.float16  # mapped from the file, converted a block at a time
     assert [(h.path, h.start) for h in Searcher(small, SearchConfig(window=4.0)).search("blue", k=3)] == found
+
+
+def test_a_temporal_model_rewrites_the_frames_of_videos_not_photos(videos, tmp_path):
+    from test_temporal import params
+
+    from whenframe import temporal
+
+    make_photo = videos / "d.jpg"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "color=c=0x00ff00:s=64x64:d=1",
+                    "-frames:v", "1", str(make_photo)], check=True)  # fmt: skip
+    plain = Library(tmp_path / "plain", Settings(model="toy"), encoder=ToyEncoder())
+    lib = Library(tmp_path / "lib", Settings(model="toy", temporal="toy-temporal"), encoder=ToyEncoder())
+    lib._temporal = params(np.random.default_rng(0), dim=3)  # no such model is installed: a toy one
+    for name in ("a.mp4", "d.jpg"):
+        plain.add(videos / name)
+        lib.add(videos / name)
+    (video, photo), raw, times = plain.videos(), plain.snapshot()[1]["toy"], plain.snapshot()[2]
+    new = lib.snapshot()[1]["toy"]
+    rows = slice(video.start, video.start + video.count)
+    expected = temporal.apply(lib._temporal, raw[rows], times[rows])
+    assert np.allclose(new[rows], expected, atol=2e-3)  # stored as float16
+    assert not np.allclose(new[rows], raw[rows], atol=1e-2)
+    assert np.array_equal(new[photo.start], raw[photo.start])
+    with pytest.raises(ValueError, match="not installed"):
+        Library(tmp_path / "lib", encoder=ToyEncoder()).temporal_model  # noqa: B018

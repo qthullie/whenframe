@@ -9,7 +9,7 @@ from whenframe import temporal
 DIM, WIDTH, LAYERS, HEADS = 16, 8, 2, 2
 
 
-def params(rng: np.random.Generator, out_scale: float = 0.1) -> dict:
+def params(rng: np.random.Generator, out_scale: float = 0.1, dim: int = DIM) -> dict:
     """Random weights of the model's shapes, small: the parity and the windows are tested, not the training."""
 
     def w(*shape, scale=0.3):
@@ -17,15 +17,15 @@ def params(rng: np.random.Generator, out_scale: float = 0.1) -> dict:
 
     d, h, f = WIDTH, WIDTH // 2, 2 * len(temporal.PERIODS)
     p = {
-        "in_ln_g": 1 + w(DIM),
-        "in_ln_b": w(DIM),
-        "in_w": w(DIM, d),
+        "in_ln_g": 1 + w(dim),
+        "in_ln_b": w(dim),
+        "in_w": w(dim, d),
         "in_b": w(d),
         "time_w": w(f, d),
         "out_ln_g": 1 + w(d),
         "out_ln_b": w(d),
-        "out_w": w(d, DIM, scale=out_scale),
-        "out_b": w(DIM, scale=0.0),
+        "out_w": w(d, dim, scale=out_scale),
+        "out_b": w(dim, scale=0.0),
     }
     for i in range(LAYERS):
         p |= {
@@ -43,8 +43,8 @@ def params(rng: np.random.Generator, out_scale: float = 0.1) -> dict:
             f"l{i}_fc2_b": w(d),
         }
     p |= {"scale": np.float32(np.log(10.0)), "bias": np.float32(-2.0), "lam": np.float32(1.0),
-          "beta": np.float32(50.0), "h_f_ln_g": 1 + w(DIM), "h_f_ln_b": w(DIM), "h_f_w": w(DIM, h),
-          "h_q_w": w(DIM, h), "h_q_b": 1 + w(h), "h_m_w": w(h, h), "h_m_b": w(h), "h_time_w": w(f, h),
+          "beta": np.float32(50.0), "h_f_ln_g": 1 + w(dim), "h_f_ln_b": w(dim), "h_f_w": w(dim, h),
+          "h_q_w": w(dim, h), "h_q_b": 1 + w(h), "h_m_w": w(h, h), "h_m_b": w(h), "h_time_w": w(f, h),
           "h_ln1_g": 1 + w(h), "h_ln1_b": w(h), "h_qkv_w": w(h, 3 * h), "h_qkv_b": w(3 * h), "h_out_w": w(h, h),
           "h_out_b": w(h), "h_ln2_g": 1 + w(h), "h_ln2_b": w(h), "h_s_w": w(h), "h_s_b": np.float32(0.1),
           "h_d_w": w(h, 2), "h_d_b": w(2)}  # fmt: skip
