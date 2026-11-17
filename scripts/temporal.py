@@ -155,10 +155,10 @@ def forward(p: dict, x, t, mask, layers: int, heads: int, key=None, dropout: flo
     return out / jnp.sqrt(jnp.sum(out**2, axis=-1, keepdims=True) + 1e-12)
 
 
-def head(p, new, t, mask, q, off, heads: int):
+def head(p, new, t, mask, q, off, heads: int, u=None):
     """(N, L, 768) adapted frames of N videos and their bank offsets (N, L), each with the description q (N, 768)
     it is searched for -> foreground logits (N, L) and the moment's reach before and after each frame's middle,
-    in seconds (N, L, 2)."""
+    in seconds (N, L, 2). u: the frames' projection, which does not depend on the description, when known."""
     import jax
     import jax.numpy as jnp
 
@@ -166,7 +166,8 @@ def head(p, new, t, mask, q, off, heads: int):
         mu = v.mean(-1, keepdims=True)
         return (v - mu) / jnp.sqrt(((v - mu) ** 2).mean(-1, keepdims=True) + 1e-5) * g + b
 
-    u = ln(new, p["h_f_ln_g"], p["h_f_ln_b"]) @ p["h_f_w"]
+    if u is None:
+        u = frames_projection(p, new)
     c = q @ p["h_q_w"] + p["h_q_b"]
     rel = (t - t[:, :1])[..., None] * (2 * jnp.pi / jnp.array(temporal.PERIODS))
     e = jax.nn.gelu((u * c[:, None, :]) @ p["h_m_w"] + p["h_m_b"], approximate=True)
@@ -183,6 +184,14 @@ def head(p, new, t, mask, q, off, heads: int):
     return fg, reach
 
 
+def frames_projection(p, new):
+    import jax.numpy as jnp
+
+    mu = new.mean(-1, keepdims=True)
+    v = (new - mu) / jnp.sqrt(((new - mu) ** 2).mean(-1, keepdims=True) + 1e-5)
+    return (v * p["h_f_ln_g"] + p["h_f_ln_b"]) @ p["h_f_w"]
+
+
 def head_loss(p, new, t, mask, q, off, inside, start, end, heads: int, negatives: int, key):
     """Foreground of the description's frames, against the rest of its video and against other videos, and
     the reach of the frames inside the moment to its two ends (L1 and generalised IoU, as in Moment-DETR)."""
@@ -190,21 +199,23 @@ def head_loss(p, new, t, mask, q, off, inside, start, end, heads: int, negatives
     import jax.numpy as jnp
 
     n = q.shape[0]
-    fg, reach = head(p, new, t, mask, q, off, heads)
+    u = frames_projection(p, new)
+    fg, reach = head(p, new, t, mask, q, off, heads, u)
     pos = jnp.where(inside, 1.0, 0.0)
     frames = jnp.sum(jnp.where(mask, jax.nn.softplus(fg) - pos * fg, 0.0)) / jnp.sum(mask)  # binary cross-entropy
     # other videos, as many per description: their frames are all background for it
     shift = jax.random.randint(key, (negatives,), 1, n)
     others = [(jnp.arange(n) + s) % n for s in shift]
-    neg_fg = jnp.stack([head(p, new[o], t[o], mask[o], q, off[o], heads)[0] for o in others], 1)  # (n, K, L)
+    neg_fg = jnp.stack([head(p, new[o], t[o], mask[o], q, off[o], heads, u[o])[0] for o in others], 1)  # (n, K, L)
     neg_best = jax.nn.logsumexp(jnp.where(mask[jnp.stack(others, 1)], neg_fg, -1e9), -1)
     own_best = jax.nn.logsumexp(jnp.where(mask, fg, -1e9), -1)
     rank = jnp.mean(jax.nn.softplus(-own_best)) + jnp.mean(jax.nn.softplus(neg_best))
     mid = t + 0.5
     lo, hi = mid - reach[..., 0], mid + reach[..., 1]
     inter = jnp.maximum(0.0, jnp.minimum(hi, end[:, None]) - jnp.maximum(lo, start[:, None]))
-    union = jnp.maximum(hi, end[:, None]) - jnp.minimum(lo, start[:, None])
-    giou = 1 - inter / jnp.maximum(union, 1e-6)
+    union = (hi - lo) + (end - start)[:, None] - inter
+    hull = jnp.maximum(hi, end[:, None]) - jnp.minimum(lo, start[:, None])
+    giou = 1 - inter / jnp.maximum(union, 1e-6) + (hull - union) / jnp.maximum(hull, 1e-6)  # 1 - GIoU
     l1 = (jnp.abs(lo - start[:, None]) + jnp.abs(hi - end[:, None])) / 10.0
     bounds = jnp.sum((giou + l1) * pos) / jnp.maximum(jnp.sum(pos), 1.0)
     return frames + rank + bounds, (frames, rank, bounds)
@@ -581,9 +592,9 @@ def evaluate(args) -> None:
         if isinstance(ua[k], dict) and "labels" in ua[k]:
             ua[k] = {"p_at_k": ua[k]["p_at_k"], "map": ua[k]["map"]}
     res["unav"] = ua
-    out = ROOT / "results" / "temporal_test.json"
+    out = Path(args.out or ROOT / "results" / "temporal_test.json")
     out.write_text(json.dumps(res, indent=1))
-    print(f"wrote {out.relative_to(ROOT)}")
+    print(f"wrote {out}")
 
 
 def main() -> None:
@@ -616,6 +627,7 @@ def main() -> None:
     ap.add_argument("--youcook2-annotations", help="evaluate: YouCook2's validation parquet")
     ap.add_argument("--unav-annotations", help="evaluate: UnAV-100's unav100_all.json")
     ap.add_argument("--clap-dir", help="evaluate: folder of CLAP's files")
+    ap.add_argument("--out", help="evaluate: where to write the results (default: results/temporal_test.json)")
     args = ap.parse_args()
     args.train_annotations = args.train_annotations or args.annotations
     args.split = "train"
