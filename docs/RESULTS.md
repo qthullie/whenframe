@@ -458,6 +458,7 @@ part, each before its test run.
 | 13. speech with adaptive spans beats speech with fixed windows by at least 2 points (YouCook2) | +7.0 points | yes |
 | 14. So400m beats the base model by at least 2 points (DiDeMo, both with OpenVINO) | +1.9 points | no |
 | 15. indexing with So400m takes at most 30 min of CPU time per hour of video | 25.8 min | yes |
+| 16. the motion grids add at least 1 point (DiDeMo, weight 0.25) | +0.4 points | no |
 <!-- /table -->
 
 ### Speech with adaptive spans
@@ -515,3 +516,29 @@ round (24.9), and four times what it takes with OpenVINO (6.5); embedding a
 description takes 148 ms instead of 45, and the model is a 4.3 GB download
 instead of 1.5. It is offered as `--mode large`, for those who would rather
 wait than miss a moment.
+
+### Motion: grids of four frames
+
+Each second shown to SigLIP 2 as one more image, a 2x2 grid of four frames a
+quarter of a second apart, its score added to the frame's with the weight
+chosen on the tuning videos (0.25).
+
+<!-- table round4-motion -->
+| DiDeMo test (OpenVINO, repeats skipped) | R@1 | R@5 | R@10 | right video in top 5 | R@5, the 1,663 descriptions of movement | R@5, the others |
+|---|---|---|---|---|---|---|
+| frames (the default) | 13.4 | 27.6 | 34.3 | 46.3 | 26.4 | 28.5 |
+| frames + 0.25 x grids | 13.6 | 28.0 | 35.0 | 46.6 | 26.8 | 28.9 |
+<!-- /table -->
+
+<!-- table round4-motion-wins -->
+The grids move 97 test descriptions into the first five moments and 82 out of them (sign test p = 0.3); among the descriptions of movement, 40 in and 34 out (p = 0.56). Decoding the frames for the grids and embedding them took 6.8 CPU minutes per hour of video.
+<!-- /table -->
+
+On the tuning videos the grids had added 1.2 points; on the test videos they
+add 0.4, within what chance moves (criterion 16 is not met), and no more on the
+1,663 descriptions that say how something moves than on the others. Four small
+frames in one image do not show SigLIP the movement a description names, or
+not more clearly than the frame alone; the weight, picked among four on the
+tuning descriptions, had fitted them. The tool does not use the grids. Seeing
+motion likely takes an encoder trained on video clips, which was not tried
+here.

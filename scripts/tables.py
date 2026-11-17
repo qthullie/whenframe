@@ -333,6 +333,28 @@ def round4_tables() -> dict[str, str]:
             f"(sign test p = {r['p']:.2g}), with lower-case descriptions and the base model's query bank values "
             f"(beta {r['params']['beta']:g}, strength {r['params']['lam']:g}), chosen on the tuning videos."
         )
+    f = RESULTS / "didemo_test_motion.json"
+    if f.exists():
+        r = json.loads(f.read_text())
+        still, both = r["rows"]
+        gain = both["score"] - still["score"]
+        rows.append([f"16. the motion grids add at least 1 point (DiDeMo, weight {r['weight']:g})",
+                     f"{100 * gain:+.1f} points", gain >= 0.01])  # fmt: skip
+        out["round4-motion"] = table(
+            ["DiDeMo test (OpenVINO, repeats skipped)", "R@1", "R@5", "R@10", "right video in top 5",
+             f"R@5, the {r['motion_queries']:,} descriptions of movement", "R@5, the others"],
+            [[label, pct(x["corpus"]["R@1 IoU>=0.5"]), pct(x["score"]), pct(x["corpus"]["R@10 IoU>=0.5"]),
+              pct(x["video"]["R@5"]), pct(x["motion"]), pct(x["other"])]
+             for label, x in (("frames (the default)", still), (f"frames + {r['weight']:g} x grids", both))],
+        )  # fmt: skip
+        c = r["cost"]
+        out["round4-motion-wins"] = (
+            f"The grids move {both['wins']} test descriptions into the first five moments and {both['losses']} out "
+            f"of them (sign test p = {both['p']:.2g}); among the descriptions of movement, {both['motion_wins']} in "
+            f"and {both['motion_losses']} out (p = {both['motion_p']:.2g}). Decoding the frames for the grids and "
+            f"embedding them took {(c['decode_cpu'] + c['encode_cpu']) / 60 / c['hours']:.1f} CPU minutes per hour "
+            f"of video."
+        )
     if rows:
         out["round4-criteria"] = table(["criterion (fixed before its test run)", "measured on test", "met"],
                                        [[n, m, "yes" if ok else "no"] for n, m, ok in rows])  # fmt: skip
