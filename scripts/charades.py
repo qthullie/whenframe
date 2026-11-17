@@ -75,7 +75,8 @@ def extract(args) -> None:
     print(f"wrote {len(done)} videos, {row} frames in {time.time() - t0:.0f} s")
 
 
-def evaluate(args) -> None:
+def load(args):
+    """The test videos' frames (every frame, as in the evaluation), the descriptions and their embeddings."""
     z = np.load(CACHE / "charades_test.npz")
     names = z["names"].tolist()
     frozen = Frozen(names=names, emb=z["emb"].astype(np.float32), times=z["times"], starts=z["starts"],
@@ -93,6 +94,12 @@ def evaluate(args) -> None:
         np.save(path, didemo.encode([q["text"] for q in queries], args.model_dir))
     text = np.load(path)
     frozen.bank = didemo.bank(args)  # the DiDeMo bank, unchanged
+    return frozen, queries, text
+
+
+def evaluate(args) -> None:
+    frozen, queries, text = load(args)
+    names = frozen.names
     tuned = json.loads((ROOT / "results" / "didemo_tuned.json").read_text())
     res = {"queries": len(queries), "videos": len(names), "corpus_ks": CORPUS_KS, "methods": METHODS}
     for m in METHODS:
