@@ -50,7 +50,7 @@ video from the moment found:
 </p>
 
 The first run downloads the SigLIP 2 model (1.5 GB). A library is indexed in
-one of three modes, chosen the first time (`--mode`):
+one of four modes, chosen the first time (`--mode`):
 
 <!-- table readme-modes -->
 | `--mode` | right moment in the first five (DiDeMo) | indexing, CPU min per hour of video | search (ms) |
@@ -58,6 +58,7 @@ one of three modes, chosen the first time (`--mode`):
 | `standard` | 27.2 % | 24.9 | 63 |
 | `economy` | 24.5 % | 8.4 | 61 |
 | `precision` | 27.2 % | 33.2 | 123 |
+| `large` | 29.5 % | 25.8 (OpenVINO) | 155 |
 <!-- /table -->
 
 <!-- table readme-openvino -->
@@ -68,8 +69,11 @@ Photos in the same folders are indexed too, each as a moment of its own, so a
 search returns photos and moments of videos together (`--no-photos` to leave
 them out). `whenframe index --speech base` also transcribes what is said (Whisper, on the
 CPU, `pip install 'whenframe[speech]'`), and a search then finds the words
-said as well as what is seen. `serve --jellyfin` links each moment to the
-video in a Jellyfin server.
+said as well as what is seen. `whenframe index --sounds` also listens to the
+sound tracks (CLAP), to find laughter, applause, a dog barking or a siren.
+`search --moments spans` lets a moment last as long as the frames match, which
+suits long videos. `serve --jellyfin` links each moment to the video in a
+Jellyfin server.
 
 Nothing else goes over the network. ONNX Runtime 1.29 sends usage telemetry to
 Microsoft by default, and `import openvino` reports to Google Analytics;
@@ -88,11 +92,26 @@ logging every outbound connection of an indexing and search run). More in
    4,096 unrelated descriptions: query-bank normalisation
    ([Bogolin et al., CVPR 2022](https://arxiv.org/abs/2112.12777)), applied to
    video frames.
-4. In each of the best videos, up to three 10-second moments are placed around
+4. With `--speech`, the words of the description said around a frame add to
+   its score (Whisper and a full-text index); with `--sounds`, so does what is
+   heard around it ([CLAP](https://arxiv.org/abs/2211.06687), standardised and
+   added).
+5. In each of the best videos, up to three 10-second moments are placed around
    the best frames, and all moments are ranked together. In precision mode the
    scores of two models are standardised and added first.
 
 ## Results
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/figures/benchmark-dark.png">
+    <img src="docs/figures/benchmark.png" alt="whenframe against what exists: on Charades-STA it places 45.7 to 47.2 % of the moments, between VTG-GPT (43.7 %) and TFVTG (50.0 %) and below a 7-billion-parameter vision-language model (56.8 %); on DiDeMo it finds the right video among the first five 46.4 % of the time against 28 to 31 % for one image per video, and the right moment 27.2 % against 2.3 % for one keyframe per shot; on YouCook2, adaptive spans and speech raise 12.3 % to 25.8 %; on UnAV-100, adding the sound raises 42.9 % to 53.2 %" width="800">
+  </picture>
+</p>
+
+Beside published zero-shot methods, on the one benchmark and metric they
+share, and beside the ways home tools index videos, run here on the same
+videos ([docs/RESEARCH.md](docs/RESEARCH.md) gives the sources).
 
 DiDeMo test split, with the protocol fixed in advance and every change to it
 listed ([docs/PROTOCOL.md](docs/PROTOCOL.md)). The numbers on this page are
@@ -145,7 +164,8 @@ Third round (OpenVINO, long videos, what is said):
 | 12. transcription takes at most 15 min of CPU time per hour of video | 8.1 min | yes |
 <!-- /table -->
 
-Fourth round, under way (each part fixed before its test run):
+Fourth round (So400m, speech with spans, what is heard, motion; each part fixed
+before its test run):
 
 <!-- table round4-criteria -->
 | criterion (fixed before its test run) | measured on test | met |
@@ -154,15 +174,18 @@ Fourth round, under way (each part fixed before its test run):
 | 14. So400m beats the base model by at least 2 points (DiDeMo, both with OpenVINO) | +1.9 points | no |
 | 15. indexing with So400m takes at most 30 min of CPU time per hour of video | 25.8 min | yes |
 | 16. the motion grids add at least 1 point (DiDeMo, weight 0.25) | +0.4 points | no |
+| 17. frames and sound together beat the frames alone by at least 4 points (UnAV-100, P@10) | +10.3 points | yes |
 <!-- /table -->
 
 All tables, the costs and the figures: [docs/RESULTS.md](docs/RESULTS.md).
 
 ## Limits
 
-- It sees frames, not motion: "the camera pans left" is out of its reach. Of
-  the sound it only hears speech, with `--speech`: "someone laughs" is not
-  found.
+- It sees frames, not motion: "the camera pans left" is out of its reach, and
+  grids of four successive frames did not help (DiDeMo test, +0.4 points).
+- What is heard (`--sounds`) was measured on short clips cut around their
+  events (UnAV-100); in long home videos, where most of the sound is talk or
+  nothing, it was not.
 - It was measured on short personal videos (DiDeMo, their first 30 seconds) and
   on cooking videos of about 5 minutes (YouCook2); recordings of an hour or more
   were not measured.

@@ -22,6 +22,7 @@ from figures import PX, THEMES, axes, figure, rounded_bar, save  # noqa: E402
 
 RESULTS = ROOT / "results"
 PRIMARY = "R@5 IoU>=0.5"
+EXAMPLES = ("dog barking", "baby laughter")  # shown under the sound panel's first bar
 
 # Charades-STA, zero-shot: (name, what it runs, R1 at IoU 0.5 in %), as published
 PUBLISHED = [
@@ -69,7 +70,8 @@ def panels() -> list[dict]:
         rows = []
         big = load("didemo_test_so400m.json")
         if big:
-            rows.append(("whenframe, SigLIP 2 So400m", "the larger model, with OpenVINO",
+            gain = 100 * (big["siglip2-so400m"]["corpus"][PRIMARY] - big["base"]["corpus"][PRIMARY])
+            rows.append(("whenframe, --mode large", f"SigLIP 2 So400m: {gain:+.1f} points on the same frames",
                          100 * big["siglip2-so400m"]["corpus"][PRIMARY], True))  # fmt: skip
         rows += [("whenframe, default", "SigLIP 2 base", 100 * d[d["default"]]["corpus"][PRIMARY], True),
                  ("frames searched as they are", "the same model, 10-second windows, no query bank",
@@ -94,14 +96,18 @@ def panels() -> list[dict]:
                     "rows": rows, "unit": "%"})  # fmt: skip
     un = load("unav_test.json")
     if un:
-        heard = f"CLAP, {un['length']:g}-second windows"
-        rows = [("frames and sound", f"SigLIP 2 + CLAP, weight {un['weight']:g}", 100 * un["both"]["p_at_k"], True),
-                ("frames only", "SigLIP 2, as before", 100 * un["frames"]["p_at_k"], True),
-                ("sound only", heard, 100 * un["sound"]["p_at_k"], True)]  # fmt: skip
-        out.append({"title": "Hearing: laughter, applause, a dog barking, music",
-                    "subtitle": f"UnAV-100 test, {un['videos']:,} videos at once, {un['labels']} kinds of events: "
+        per = {k: (un["frames"]["labels"][k]["p_at_k"], un["both"]["labels"][k]["p_at_k"]) for k in EXAMPLES
+               if k in un["frames"]["labels"]}  # fmt: skip
+        examples = ", ".join(f"{k} {100 * a:.0f} → {100 * b:.0f} %" for k, (a, b) in per.items())
+        rows = [
+            ("frames and sound (--sounds)", examples, 100 * un["both"]["p_at_k"], True),
+            ("frames only", "SigLIP 2, the default search", 100 * un["frames"]["p_at_k"], True),
+            ("sound only", f"CLAP, {un['length']:g}-second windows", 100 * un["sound"]["p_at_k"], True),
+        ]
+        out.append({"title": "Hearing: laughter, a dog barking, a siren",
+                    "subtitle": f"UnAV-100 test, {un['videos']} videos at once, {un['labels']} kinds of events: "
                                 "share of the first ten moments that are right",
-                    "rows": sorted(rows, key=lambda r: -r[2]), "unit": "%"})  # fmt: skip
+                    "rows": rows, "unit": "%"})  # fmt: skip
     return out
 
 
@@ -119,13 +125,12 @@ def cost_points() -> list[tuple[str, float, float]]:
            ("economy", minutes(c["siglip2-b32"]), 100 * r2["siglip32_bank"]["corpus"][PRIMARY]),
            ("precision", minutes(c) + minutes(c["siglip2-b32"]),
             100 * r2["ensemble32_bank"]["corpus"][PRIMARY])]  # fmt: skip
-    ov = load("didemo_test_backends.json")
-    if ov:
-        pts.append(("standard, OpenVINO", sum(ov["openvino"]["cpu_min_per_hour"].values()),
-                    100 * ov["openvino"]["corpus"][PRIMARY]))  # fmt: skip
-    big = load("didemo_test_so400m.json")
+    ov, big = load("didemo_test_backends.json"), load("didemo_test_so400m.json")
+    if ov:  # repeats skipped, as the tool indexes, when So400m was measured that way beside it
+        score = big["base"]["corpus"][PRIMARY] if big else ov["openvino"]["corpus"][PRIMARY]
+        pts.append(("standard, OpenVINO", sum(ov["openvino"]["cpu_min_per_hour"].values()), 100 * score))
     if big:
-        pts.append(("So400m, OpenVINO", sum(big["cost"]["cpu_min_per_hour"].values()),
+        pts.append(("large, OpenVINO", sum(big["cost"]["cpu_min_per_hour"].values()),
                     100 * big["siglip2-so400m"]["corpus"][PRIMARY]))  # fmt: skip
     return pts
 

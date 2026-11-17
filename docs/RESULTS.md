@@ -452,6 +452,17 @@ so the gain there is likely smaller; it was not measured.
 The fourth round of the protocol ([PROTOCOL.md](PROTOCOL.md)), written part by
 part, each before its test run.
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="figures/benchmark-dark.png">
+    <img src="figures/benchmark.png" alt="whenframe beside published zero-shot methods on Charades-STA, beside one image per video and one keyframe per shot on DiDeMo, and with speech, adaptive spans and sound on YouCook2 and UnAV-100" width="800">
+  </picture>
+</p>
+
+The figure sets whenframe beside published methods only on Charades-STA, the
+benchmark and metric they share ([RESEARCH.md](RESEARCH.md) gives the sources);
+the other references are run here, on the same videos as whenframe.
+
 <!-- table round4-criteria -->
 | criterion (fixed before its test run) | measured on test | met |
 |---|---|---|
@@ -459,6 +470,7 @@ part, each before its test run.
 | 14. So400m beats the base model by at least 2 points (DiDeMo, both with OpenVINO) | +1.9 points | no |
 | 15. indexing with So400m takes at most 30 min of CPU time per hour of video | 25.8 min | yes |
 | 16. the motion grids add at least 1 point (DiDeMo, weight 0.25) | +0.4 points | no |
+| 17. frames and sound together beat the frames alone by at least 4 points (UnAV-100, P@10) | +10.3 points | yes |
 <!-- /table -->
 
 ### Speech with adaptive spans
@@ -542,3 +554,54 @@ not more clearly than the frame alone; the weight, picked among four on the
 tuning descriptions, had fitted them. The tool does not use the grids. Seeing
 motion likely takes an encoder trained on video clips, which was not tried
 here.
+
+### What is heard: CLAP on UnAV-100
+
+UnAV-100's test videos whose files match their annotations: 392 videos of 35
+seconds on average, 262 of them for the test (the others chose the window and
+the weight). Each of the 63 kinds of events that happen at least three times
+in the test videos is searched for among all of them at once; a moment is
+right when its best instant falls inside an event of that kind.
+
+<!-- table round4-sounds -->
+| UnAV-100, 262 test videos, 63 kinds of events | right among the first ten (P@10) | average precision, first 100 (mAP) |
+|---|---|---|
+| frames (SigLIP 2, the default search) | 42.9 | 36.1 |
+| sound alone (CLAP, 5-second windows) | 41.6 | 32.3 |
+| frames + 2 x sound (`--sounds`) | 53.2 | 45.3 |
+<!-- /table -->
+
+<!-- table round4-sounds-wins -->
+With the sound, 34 kinds of events have more right moments among the first ten and 11 fewer (sign test p = 0.00082). Decoding the sound and embedding its 5-second windows took 4.7 CPU minutes per hour of video.
+<!-- /table -->
+
+The frames alone already find many of these events, which can all be seen as
+well as heard (a guitar, a tennis match), but they cannot tell a dog that
+barks from one that does not, a laughing baby from a smiling one, or someone
+whistling from someone standing still. With the sound, the share of right
+moments among the first ten goes from 42.9 % to 53.2 %: criterion 17 is met.
+The kinds of events that gained the most, and the four that lost the most:
+
+<!-- table round4-sounds-labels -->
+| kind of event (test events) | frames | sound | frames + sound |
+|---|---|---|---|
+| people whistling (9) | 10.0 | 80.0 | 90.0 |
+| people burping (8) | 0.0 | 50.0 | 70.0 |
+| fire truck siren (9) | 50.0 | 50.0 | 100.0 |
+| dog barking (30) | 10.0 | 90.0 | 60.0 |
+| baby laughter (6) | 50.0 | 80.0 | 90.0 |
+| baby crying (7) | 40.0 | 60.0 | 80.0 |
+| water burbling (4) | 30.0 | 80.0 | 70.0 |
+| skidding (11) | 60.0 | 50.0 | 90.0 |
+| people crowd (15) | 40.0 | 0.0 | 10.0 |
+| playing volleyball (4) | 50.0 | 20.0 | 20.0 |
+| dog howling (13) | 80.0 | 50.0 | 60.0 |
+| playing saxophone (3) | 20.0 | 0.0 | 0.0 |
+<!-- /table -->
+
+Where CLAP does not recognise the description in the sound (a crowd, a
+volleyball match), adding it moves wrong moments up; where it says it all (a dog barking),
+the sound alone does better than the two together, and one weight serves all
+descriptions. These videos are short clips cut around their events; in long
+home videos, where most of the sound is talk or nothing, the gain was not
+measured. `whenframe index --sounds` embeds the sound tracks this way.

@@ -8,6 +8,7 @@ tuning videos; the test videos are evaluated once, with them.
 
     python scripts/so400m.py tune --split train --annotations ... --train-annotations ...
     python scripts/so400m.py evaluate --split test --annotations ... --train-annotations ...
+    python scripts/so400m.py latency --split test ...    # milliseconds per search, for the README
 
 Writes results/didemo_tuned_so400m.json, then results/didemo_test_so400m.json.
 """
@@ -152,10 +153,26 @@ def evaluate(args) -> None:
           f"hour; {cost['query_ms']:.0f} ms per query; wrote {out.relative_to(ROOT)}")  # fmt: skip
 
 
+def search_latency(args) -> None:
+    """Milliseconds per search over the test frames once the description is embedded (benchmark.latency), added
+    to the evaluation's costs; the evaluation's numbers are left as they are."""
+    from benchmark import latency
+
+    out = ROOT / "results" / f"didemo_{args.split}_so400m.json"
+    res = json.loads(out.read_text())
+    _, queries, _, big, _ = prepare(args)
+    q, bank = texts(args, queries, res["clean"])
+    kept = replace(big, bank=bank, _offsets={}).only_kept()
+    res["cost"]["search_ms"] = latency(kept, q, res["method"], res["params"])
+    out.write_text(json.dumps(res, indent=1))
+    print(f"{res['cost']['search_ms']:.0f} ms per search, besides embedding the description; wrote "
+          f"{out.relative_to(ROOT)}")  # fmt: skip
+
+
 def main() -> None:
     stage = sys.argv[1]
     args = didemo.main_args(["evaluate", *sys.argv[2:]])
-    {"tune": tune, "evaluate": evaluate}[stage](args)
+    {"tune": tune, "evaluate": evaluate, "latency": search_latency}[stage](args)
 
 
 if __name__ == "__main__":

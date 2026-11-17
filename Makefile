@@ -106,11 +106,16 @@ round4:
 		--annotations $(DIDEMO)/didemo_test.json --list results/didemo_test_videos.txt
 	$(PY) scripts/so400m.py evaluate --split test --annotations $(DIDEMO)/didemo_test.json \
 		--train-annotations $(DIDEMO)/didemo_train.json
+	$(PY) scripts/so400m.py latency --split test --annotations $(DIDEMO)/didemo_test.json \
+		--train-annotations $(DIDEMO)/didemo_train.json
 	$(PY) scripts/unav.py extract --annotations $(UNAV)/unav100_all.json
 	$(PY) scripts/unav.py tune --annotations $(UNAV)/unav100_all.json
 	$(PY) scripts/unav.py evaluate --annotations $(UNAV)/unav100_all.json
 	$(PY) scripts/motion.py extract --split train --videos $(DIDEMO)/train --annotations $(DIDEMO)/didemo_train.json
 	$(PY) scripts/motion.py tune --split train --annotations $(DIDEMO)/didemo_train.json \
+		--train-annotations $(DIDEMO)/didemo_train.json
+	$(PY) scripts/motion.py extract --split test --videos $(DIDEMO)/test --annotations $(DIDEMO)/didemo_test.json
+	$(PY) scripts/motion.py evaluate --split test --annotations $(DIDEMO)/didemo_test.json \
 		--train-annotations $(DIDEMO)/didemo_train.json
 	$(PY) scripts/thumbnail.py --split test --annotations $(DIDEMO)/didemo_test.json \
 		--train-annotations $(DIDEMO)/didemo_train.json

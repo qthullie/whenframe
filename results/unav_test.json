@@ -1,0 +1,982 @@
+{
+ "videos": 262,
+ "length": 5.0,
+ "weight": 2.0,
+ "frames": {
+  "p_at_k": 0.4285714285714286,
+  "map": 0.360652896179939,
+  "labels": {
+   "airplane flyby": {
+    "p_at_k": 0.7,
+    "ap": 0.6634920634920635,
+    "events": 6
+   },
+   "ambulance siren": {
+    "p_at_k": 0.2,
+    "ap": 0.7023809523809524,
+    "events": 3
+   },
+   "baby babbling": {
+    "p_at_k": 0.1,
+    "ap": 0.08432539682539682,
+    "events": 6
+   },
+   "baby crying": {
+    "p_at_k": 0.4,
+    "ap": 0.5737784769080045,
+    "events": 7
+   },
+   "baby laughter": {
+    "p_at_k": 0.5,
+    "ap": 0.5544444444444444,
+    "events": 6
+   },
+   "basketball bounce": {
+    "p_at_k": 0.4,
+    "ap": 0.09656084656084656,
+    "events": 9
+   },
+   "bull bellowing": {
+    "p_at_k": 0.4,
+    "ap": 0.35454545454545455,
+    "events": 5
+   },
+   "car passing by": {
+    "p_at_k": 0.4,
+    "ap": 0.21140476945581008,
+    "events": 34
+   },
+   "cat meowing": {
+    "p_at_k": 0.5,
+    "ap": 0.1566035644561701,
+    "events": 28
+   },
+   "chainsawing trees": {
+    "p_at_k": 0.6,
+    "ap": 0.5873015873015873,
+    "events": 3
+   },
+   "dog barking": {
+    "p_at_k": 0.1,
+    "ap": 0.10416709284782541,
+    "events": 30
+   },
+   "dog howling": {
+    "p_at_k": 0.8,
+    "ap": 0.3729561501300631,
+    "events": 13
+   },
+   "driving buses": {
+    "p_at_k": 0.8,
+    "ap": 0.5001899335232669,
+    "events": 9
+   },
+   "driving motorcycle": {
+    "p_at_k": 0.6,
+    "ap": 0.4546871021135727,
+    "events": 11
+   },
+   "engine knocking": {
+    "p_at_k": 0.9,
+    "ap": 0.4238305150994904,
+    "events": 17
+   },
+   "fire truck siren": {
+    "p_at_k": 0.5,
+    "ap": 0.42394304415940653,
+    "events": 9
+   },
+   "fireworks banging": {
+    "p_at_k": 0.9,
+    "ap": 0.7583333333333333,
+    "events": 6
+   },
+   "frog croaking": {
+    "p_at_k": 0.7,
+    "ap": 0.76,
+    "events": 5
+   },
+   "hammering nails": {
+    "p_at_k": 0.5,
+    "ap": 0.4821038633818589,
+    "events": 8
+   },
+   "horse clip-clop": {
+    "p_at_k": 1.0,
+    "ap": 0.6527777777777778,
+    "events": 6
+   },
+   "kid speaking": {
+    "p_at_k": 0.0,
+    "ap": 0.010402015939990624,
+    "events": 15
+   },
+   "lions roaring": {
+    "p_at_k": 1.0,
+    "ap": 0.6362244897959183,
+    "events": 7
+   },
+   "machine gun shooting": {
+    "p_at_k": 0.4,
+    "ap": 0.29437229437229434,
+    "events": 14
+   },
+   "man speaking": {
+    "p_at_k": 0.3,
+    "ap": 0.1411454709071918,
+    "events": 19
+   },
+   "people battle cry": {
+    "p_at_k": 0.0,
+    "ap": 0.007246376811594203,
+    "events": 3
+   },
+   "people burping": {
+    "p_at_k": 0.0,
+    "ap": 0.05036658604265959,
+    "events": 8
+   },
+   "people cheering": {
+    "p_at_k": 0.1,
+    "ap": 0.08333333333333333,
+    "events": 3
+   },
+   "people clapping": {
+    "p_at_k": 0.6,
+    "ap": 0.6331127365610124,
+    "events": 6
+   },
+   "people coughing": {
+    "p_at_k": 0.0,
+    "ap": 0.0,
+    "events": 7
+   },
+   "people crowd": {
+    "p_at_k": 0.4,
+    "ap": 0.1506227555934622,
+    "events": 15
+   },
+   "people laughing": {
+    "p_at_k": 0.3,
+    "ap": 0.2898351016897628,
+    "events": 11
+   },
+   "people nose blowing": {
+    "p_at_k": 0.1,
+    "ap": 0.1447811447811448,
+    "events": 9
+   },
+   "people running": {
+    "p_at_k": 0.5,
+    "ap": 0.7192982456140351,
+    "events": 3
+   },
+   "people shouting": {
+    "p_at_k": 0.1,
+    "ap": 0.03329184351833631,
+    "events": 13
+   },
+   "people slapping": {
+    "p_at_k": 0.0,
+    "ap": 0.0049261083743842365,
+    "events": 7
+   },
+   "people sobbing": {
+    "p_at_k": 0.0,
+    "ap": 0.02065934065934066,
+    "events": 3
+   },
+   "people whistling": {
+    "p_at_k": 0.1,
+    "ap": 0.04022719634334879,
+    "events": 9
+   },
+   "playing badminton": {
+    "p_at_k": 0.3,
+    "ap": 0.125,
+    "events": 4
+   },
+   "playing banjo": {
+    "p_at_k": 0.5,
+    "ap": 0.5,
+    "events": 3
+   },
+   "playing clarinet": {
+    "p_at_k": 0.8,
+    "ap": 0.5968253968253968,
+    "events": 5
+   },
+   "playing harmonica": {
+    "p_at_k": 0.6,
+    "ap": 0.4040816326530612,
+    "events": 7
+   },
+   "playing saxophone": {
+    "p_at_k": 0.2,
+    "ap": 0.38888888888888884,
+    "events": 3
+   },
+   "playing tennis": {
+    "p_at_k": 0.5,
+    "ap": 0.2963095238095238,
+    "events": 10
+   },
+   "playing trombone": {
+    "p_at_k": 0.4,
+    "ap": 0.6071428571428571,
+    "events": 4
+   },
+   "playing trumpet": {
+    "p_at_k": 0.8,
+    "ap": 0.46296296296296297,
+    "events": 6
+   },
+   "playing ukulele": {
+    "p_at_k": 0.8,
+    "ap": 0.625,
+    "events": 4
+   },
+   "playing volleyball": {
+    "p_at_k": 0.5,
+    "ap": 0.44375,
+    "events": 4
+   },
+   "police car siren": {
+    "p_at_k": 0.6,
+    "ap": 0.5844328703703704,
+    "events": 8
+   },
+   "raining": {
+    "p_at_k": 0.7,
+    "ap": 0.5914285714285714,
+    "events": 5
+   },
+   "sailing": {
+    "p_at_k": 0.6,
+    "ap": 0.8333333333333334,
+    "events": 3
+   },
+   "sea waves": {
+    "p_at_k": 0.3,
+    "ap": 0.3650793650793651,
+    "events": 3
+   },
+   "sheep bleating": {
+    "p_at_k": 0.8,
+    "ap": 0.5033814836235224,
+    "events": 13
+   },
+   "skateboarding": {
+    "p_at_k": 0.3,
+    "ap": 0.65,
+    "events": 4
+   },
+   "skidding": {
+    "p_at_k": 0.6,
+    "ap": 0.36444744893425246,
+    "events": 11
+   },
+   "striking bowling": {
+    "p_at_k": 0.0,
+    "ap": 0.0,
+    "events": 6
+   },
+   "telephone bell ringing": {
+    "p_at_k": 0.4,
+    "ap": 0.2437641723356009,
+    "events": 7
+   },
+   "train horning": {
+    "p_at_k": 0.1,
+    "ap": 0.1717171717171717,
+    "events": 3
+   },
+   "train wheels squealing": {
+    "p_at_k": 0.5,
+    "ap": 0.34375,
+    "events": 4
+   },
+   "typing on computer keyboard": {
+    "p_at_k": 0.9,
+    "ap": 0.8962585034013607,
+    "events": 7
+   },
+   "vehicle honking": {
+    "p_at_k": 0.1,
+    "ap": 0.026959247648902823,
+    "events": 9
+   },
+   "water burbling": {
+    "p_at_k": 0.3,
+    "ap": 0.3024509803921569,
+    "events": 4
+   },
+   "wind noise": {
+    "p_at_k": 0.4,
+    "ap": 0.11306834757575437,
+    "events": 16
+   },
+   "woman speaking": {
+    "p_at_k": 0.1,
+    "ap": 0.10342829213796956,
+    "events": 12
+   }
+  }
+ },
+ "sound": {
+  "p_at_k": 0.41587301587301584,
+  "map": 0.32334385328167065,
+  "labels": {
+   "airplane flyby": {
+    "p_at_k": 0.2,
+    "ap": 0.07722832722832723,
+    "events": 6
+   },
+   "ambulance siren": {
+    "p_at_k": 0.0,
+    "ap": 0.09056350626118069,
+    "events": 3
+   },
+   "baby babbling": {
+    "p_at_k": 0.3,
+    "ap": 0.1875,
+    "events": 6
+   },
+   "baby crying": {
+    "p_at_k": 0.6,
+    "ap": 0.51510496671787,
+    "events": 7
+   },
+   "baby laughter": {
+    "p_at_k": 0.8,
+    "ap": 0.7027777777777778,
+    "events": 6
+   },
+   "basketball bounce": {
+    "p_at_k": 0.1,
+    "ap": 0.13756613756613756,
+    "events": 9
+   },
+   "bull bellowing": {
+    "p_at_k": 0.2,
+    "ap": 0.2612121212121212,
+    "events": 5
+   },
+   "car passing by": {
+    "p_at_k": 0.1,
+    "ap": 0.06855351760531675,
+    "events": 34
+   },
+   "cat meowing": {
+    "p_at_k": 0.4,
+    "ap": 0.1621663059163059,
+    "events": 28
+   },
+   "chainsawing trees": {
+    "p_at_k": 0.7,
+    "ap": 0.8666666666666667,
+    "events": 3
+   },
+   "dog barking": {
+    "p_at_k": 0.9,
+    "ap": 0.4361765840106243,
+    "events": 30
+   },
+   "dog howling": {
+    "p_at_k": 0.5,
+    "ap": 0.31274676740263785,
+    "events": 13
+   },
+   "driving buses": {
+    "p_at_k": 0.4,
+    "ap": 0.2729145558932793,
+    "events": 9
+   },
+   "driving motorcycle": {
+    "p_at_k": 0.6,
+    "ap": 0.45554697369579406,
+    "events": 11
+   },
+   "engine knocking": {
+    "p_at_k": 0.9,
+    "ap": 0.378166105182027,
+    "events": 17
+   },
+   "fire truck siren": {
+    "p_at_k": 0.5,
+    "ap": 0.3965452847805789,
+    "events": 9
+   },
+   "fireworks banging": {
+    "p_at_k": 0.7,
+    "ap": 0.6669973544973544,
+    "events": 6
+   },
+   "frog croaking": {
+    "p_at_k": 1.0,
+    "ap": 0.71,
+    "events": 5
+   },
+   "hammering nails": {
+    "p_at_k": 0.5,
+    "ap": 0.3680555555555556,
+    "events": 8
+   },
+   "horse clip-clop": {
+    "p_at_k": 0.8,
+    "ap": 0.6625,
+    "events": 6
+   },
+   "kid speaking": {
+    "p_at_k": 0.1,
+    "ap": 0.07573099415204677,
+    "events": 15
+   },
+   "lions roaring": {
+    "p_at_k": 1.0,
+    "ap": 0.643140589569161,
+    "events": 7
+   },
+   "machine gun shooting": {
+    "p_at_k": 0.7,
+    "ap": 0.2385075242218099,
+    "events": 14
+   },
+   "man speaking": {
+    "p_at_k": 0.2,
+    "ap": 0.0876768857032015,
+    "events": 19
+   },
+   "people battle cry": {
+    "p_at_k": 0.2,
+    "ap": 0.3523809523809524,
+    "events": 3
+   },
+   "people burping": {
+    "p_at_k": 0.5,
+    "ap": 0.30357142857142855,
+    "events": 8
+   },
+   "people cheering": {
+    "p_at_k": 0.1,
+    "ap": 0.14814814814814814,
+    "events": 3
+   },
+   "people clapping": {
+    "p_at_k": 0.4,
+    "ap": 0.2805250305250305,
+    "events": 6
+   },
+   "people coughing": {
+    "p_at_k": 0.3,
+    "ap": 0.2523809523809524,
+    "events": 7
+   },
+   "people crowd": {
+    "p_at_k": 0.0,
+    "ap": 0.022734134379686785,
+    "events": 15
+   },
+   "people laughing": {
+    "p_at_k": 0.2,
+    "ap": 0.0606060606060606,
+    "events": 11
+   },
+   "people nose blowing": {
+    "p_at_k": 0.3,
+    "ap": 0.17973856209150327,
+    "events": 9
+   },
+   "people running": {
+    "p_at_k": 0.4,
+    "ap": 0.5555555555555555,
+    "events": 3
+   },
+   "people shouting": {
+    "p_at_k": 0.1,
+    "ap": 0.01771255060728745,
+    "events": 13
+   },
+   "people slapping": {
+    "p_at_k": 0.0,
+    "ap": 0.0,
+    "events": 7
+   },
+   "people sobbing": {
+    "p_at_k": 0.1,
+    "ap": 0.07341269841269842,
+    "events": 3
+   },
+   "people whistling": {
+    "p_at_k": 0.8,
+    "ap": 0.6260895997007108,
+    "events": 9
+   },
+   "playing badminton": {
+    "p_at_k": 0.3,
+    "ap": 0.41666666666666663,
+    "events": 4
+   },
+   "playing banjo": {
+    "p_at_k": 0.5,
+    "ap": 0.6333333333333333,
+    "events": 3
+   },
+   "playing clarinet": {
+    "p_at_k": 0.6,
+    "ap": 0.19880952380952382,
+    "events": 5
+   },
+   "playing harmonica": {
+    "p_at_k": 0.6,
+    "ap": 0.3874884931488705,
+    "events": 7
+   },
+   "playing saxophone": {
+    "p_at_k": 0.0,
+    "ap": 0.016992266992266993,
+    "events": 3
+   },
+   "playing tennis": {
+    "p_at_k": 0.2,
+    "ap": 0.2504155844155844,
+    "events": 10
+   },
+   "playing trombone": {
+    "p_at_k": 0.6,
+    "ap": 0.5416666666666666,
+    "events": 4
+   },
+   "playing trumpet": {
+    "p_at_k": 0.5,
+    "ap": 0.5988756613756613,
+    "events": 6
+   },
+   "playing ukulele": {
+    "p_at_k": 0.6,
+    "ap": 0.525,
+    "events": 4
+   },
+   "playing volleyball": {
+    "p_at_k": 0.2,
+    "ap": 0.16460970064418337,
+    "events": 4
+   },
+   "police car siren": {
+    "p_at_k": 0.4,
+    "ap": 0.511953601953602,
+    "events": 8
+   },
+   "raining": {
+    "p_at_k": 0.6,
+    "ap": 0.5575415282392026,
+    "events": 5
+   },
+   "sailing": {
+    "p_at_k": 0.3,
+    "ap": 0.4042081949058693,
+    "events": 3
+   },
+   "sea waves": {
+    "p_at_k": 0.2,
+    "ap": 0.45138888888888884,
+    "events": 3
+   },
+   "sheep bleating": {
+    "p_at_k": 1.0,
+    "ap": 0.5750412985707103,
+    "events": 13
+   },
+   "skateboarding": {
+    "p_at_k": 0.3,
+    "ap": 0.2826923076923077,
+    "events": 4
+   },
+   "skidding": {
+    "p_at_k": 0.5,
+    "ap": 0.1798435482646009,
+    "events": 11
+   },
+   "striking bowling": {
+    "p_at_k": 0.0,
+    "ap": 0.0,
+    "events": 6
+   },
+   "telephone bell ringing": {
+    "p_at_k": 0.4,
+    "ap": 0.3238095238095238,
+    "events": 7
+   },
+   "train horning": {
+    "p_at_k": 0.3,
+    "ap": 0.27777777777777773,
+    "events": 3
+   },
+   "train wheels squealing": {
+    "p_at_k": 0.4,
+    "ap": 0.3333333333333333,
+    "events": 4
+   },
+   "typing on computer keyboard": {
+    "p_at_k": 0.8,
+    "ap": 0.4212418300653595,
+    "events": 7
+   },
+   "vehicle honking": {
+    "p_at_k": 0.3,
+    "ap": 0.10679012345679012,
+    "events": 9
+   },
+   "water burbling": {
+    "p_at_k": 0.8,
+    "ap": 0.5,
+    "events": 4
+   },
+   "wind noise": {
+    "p_at_k": 0.2,
+    "ap": 0.05200639780365811,
+    "events": 16
+   },
+   "woman speaking": {
+    "p_at_k": 0.0,
+    "ap": 0.012276329955080373,
+    "events": 12
+   }
+  }
+ },
+ "both": {
+  "p_at_k": 0.5317460317460319,
+  "map": 0.45275228585355,
+  "labels": {
+   "airplane flyby": {
+    "p_at_k": 0.7,
+    "ap": 0.8055555555555555,
+    "events": 6
+   },
+   "ambulance siren": {
+    "p_at_k": 0.1,
+    "ap": 0.2545893719806763,
+    "events": 3
+   },
+   "baby babbling": {
+    "p_at_k": 0.3,
+    "ap": 0.3333333333333333,
+    "events": 6
+   },
+   "baby crying": {
+    "p_at_k": 0.8,
+    "ap": 0.7209183673469388,
+    "events": 7
+   },
+   "baby laughter": {
+    "p_at_k": 0.9,
+    "ap": 0.8486111111111111,
+    "events": 6
+   },
+   "basketball bounce": {
+    "p_at_k": 0.3,
+    "ap": 0.1875,
+    "events": 9
+   },
+   "bull bellowing": {
+    "p_at_k": 0.5,
+    "ap": 0.6433333333333333,
+    "events": 5
+   },
+   "car passing by": {
+    "p_at_k": 0.3,
+    "ap": 0.1943730599954979,
+    "events": 34
+   },
+   "cat meowing": {
+    "p_at_k": 0.7,
+    "ap": 0.3024757980115123,
+    "events": 28
+   },
+   "chainsawing trees": {
+    "p_at_k": 0.8,
+    "ap": 0.6984126984126983,
+    "events": 3
+   },
+   "dog barking": {
+    "p_at_k": 0.6,
+    "ap": 0.30919312254838566,
+    "events": 30
+   },
+   "dog howling": {
+    "p_at_k": 0.6,
+    "ap": 0.4223642161424967,
+    "events": 13
+   },
+   "driving buses": {
+    "p_at_k": 0.8,
+    "ap": 0.5378256003256003,
+    "events": 9
+   },
+   "driving motorcycle": {
+    "p_at_k": 0.6,
+    "ap": 0.49284262349277824,
+    "events": 11
+   },
+   "engine knocking": {
+    "p_at_k": 1.0,
+    "ap": 0.42964554482865186,
+    "events": 17
+   },
+   "fire truck siren": {
+    "p_at_k": 1.0,
+    "ap": 0.9365079365079365,
+    "events": 9
+   },
+   "fireworks banging": {
+    "p_at_k": 1.0,
+    "ap": 0.7162698412698413,
+    "events": 6
+   },
+   "frog croaking": {
+    "p_at_k": 0.7,
+    "ap": 0.7333333333333333,
+    "events": 5
+   },
+   "hammering nails": {
+    "p_at_k": 0.8,
+    "ap": 0.7271645021645021,
+    "events": 8
+   },
+   "horse clip-clop": {
+    "p_at_k": 1.0,
+    "ap": 0.6521164021164021,
+    "events": 6
+   },
+   "kid speaking": {
+    "p_at_k": 0.1,
+    "ap": 0.08147964460021197,
+    "events": 15
+   },
+   "lions roaring": {
+    "p_at_k": 1.0,
+    "ap": 0.635858585858586,
+    "events": 7
+   },
+   "machine gun shooting": {
+    "p_at_k": 0.7,
+    "ap": 0.4018398268398268,
+    "events": 14
+   },
+   "man speaking": {
+    "p_at_k": 0.5,
+    "ap": 0.3586049416083741,
+    "events": 19
+   },
+   "people battle cry": {
+    "p_at_k": 0.2,
+    "ap": 0.36231884057971014,
+    "events": 3
+   },
+   "people burping": {
+    "p_at_k": 0.7,
+    "ap": 0.5476190476190477,
+    "events": 8
+   },
+   "people cheering": {
+    "p_at_k": 0.1,
+    "ap": 0.13333333333333333,
+    "events": 3
+   },
+   "people clapping": {
+    "p_at_k": 0.5,
+    "ap": 0.5291895604395604,
+    "events": 6
+   },
+   "people coughing": {
+    "p_at_k": 0.3,
+    "ap": 0.18027210884353742,
+    "events": 7
+   },
+   "people crowd": {
+    "p_at_k": 0.1,
+    "ap": 0.12653199304616805,
+    "events": 15
+   },
+   "people laughing": {
+    "p_at_k": 0.4,
+    "ap": 0.30922865013774103,
+    "events": 11
+   },
+   "people nose blowing": {
+    "p_at_k": 0.4,
+    "ap": 0.35238095238095235,
+    "events": 9
+   },
+   "people running": {
+    "p_at_k": 0.5,
+    "ap": 0.6848484848484849,
+    "events": 3
+   },
+   "people shouting": {
+    "p_at_k": 0.2,
+    "ap": 0.10118018837531031,
+    "events": 13
+   },
+   "people slapping": {
+    "p_at_k": 0.0,
+    "ap": 0.0015873015873015873,
+    "events": 7
+   },
+   "people sobbing": {
+    "p_at_k": 0.1,
+    "ap": 0.11934156378600823,
+    "events": 3
+   },
+   "people whistling": {
+    "p_at_k": 0.9,
+    "ap": 0.6253561253561253,
+    "events": 9
+   },
+   "playing badminton": {
+    "p_at_k": 0.3,
+    "ap": 0.28125,
+    "events": 4
+   },
+   "playing banjo": {
+    "p_at_k": 0.5,
+    "ap": 0.4666666666666666,
+    "events": 3
+   },
+   "playing clarinet": {
+    "p_at_k": 0.7,
+    "ap": 0.41904761904761906,
+    "events": 5
+   },
+   "playing harmonica": {
+    "p_at_k": 0.6,
+    "ap": 0.444028194028194,
+    "events": 7
+   },
+   "playing saxophone": {
+    "p_at_k": 0.0,
+    "ap": 0.03110209601081812,
+    "events": 3
+   },
+   "playing tennis": {
+    "p_at_k": 0.5,
+    "ap": 0.576388888888889,
+    "events": 10
+   },
+   "playing trombone": {
+    "p_at_k": 0.5,
+    "ap": 0.625,
+    "events": 4
+   },
+   "playing trumpet": {
+    "p_at_k": 0.9,
+    "ap": 0.7861111111111111,
+    "events": 6
+   },
+   "playing ukulele": {
+    "p_at_k": 0.8,
+    "ap": 0.525,
+    "events": 4
+   },
+   "playing volleyball": {
+    "p_at_k": 0.2,
+    "ap": 0.42901583710407243,
+    "events": 4
+   },
+   "police car siren": {
+    "p_at_k": 0.6,
+    "ap": 0.6878787878787879,
+    "events": 8
+   },
+   "raining": {
+    "p_at_k": 0.9,
+    "ap": 0.6754901960784314,
+    "events": 5
+   },
+   "sailing": {
+    "p_at_k": 0.5,
+    "ap": 0.6428571428571429,
+    "events": 3
+   },
+   "sea waves": {
+    "p_at_k": 0.5,
+    "ap": 0.4166666666666667,
+    "events": 3
+   },
+   "sheep bleating": {
+    "p_at_k": 0.9,
+    "ap": 0.6255902772573408,
+    "events": 13
+   },
+   "skateboarding": {
+    "p_at_k": 0.5,
+    "ap": 1.0,
+    "events": 4
+   },
+   "skidding": {
+    "p_at_k": 0.9,
+    "ap": 0.6302947052947053,
+    "events": 11
+   },
+   "striking bowling": {
+    "p_at_k": 0.0,
+    "ap": 0.006410256410256411,
+    "events": 6
+   },
+   "telephone bell ringing": {
+    "p_at_k": 0.5,
+    "ap": 0.37142857142857144,
+    "events": 7
+   },
+   "train horning": {
+    "p_at_k": 0.2,
+    "ap": 0.20634920634920637,
+    "events": 3
+   },
+   "train wheels squealing": {
+    "p_at_k": 0.6,
+    "ap": 0.6875,
+    "events": 4
+   },
+   "typing on computer keyboard": {
+    "p_at_k": 0.9,
+    "ap": 0.7172077922077922,
+    "events": 7
+   },
+   "vehicle honking": {
+    "p_at_k": 0.1,
+    "ap": 0.08617131062951497,
+    "events": 9
+   },
+   "water burbling": {
+    "p_at_k": 0.7,
+    "ap": 0.42986111111111114,
+    "events": 4
+   },
+   "wind noise": {
+    "p_at_k": 0.3,
+    "ap": 0.1150440894993057,
+    "events": 16
+   },
+   "woman speaking": {
+    "p_at_k": 0.2,
+    "ap": 0.1436965811965812,
+    "events": 12
+   }
+  }
+ },
+ "labels": 63,
+ "both_vs_frames": {
+  "up": 34,
+  "down": 11,
+  "p": 0.0008240823595997426
+ },
+ "cost": {
+  "hours": 3.8253947275,
+  "decode_cpu_min_per_hour": 1.4172893970064386,
+  "encode_cpu_min_per_hour": 5.034496280723998,
+  "sound_cpu_min_per_hour": 0.4162841840396034,
+  "clap_cpu_5_min_per_hour": 4.262196137104395,
+  "clap_cpu_10_min_per_hour": 2.217105636440498
+ }
+}

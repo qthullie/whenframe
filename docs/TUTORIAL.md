@@ -48,18 +48,22 @@ them as photos. `--no-photos`, the first time a library is indexed, keeps it to
 videos. A video's moment is judged on its best frame among about ten, a photo
 on its only one, which can favour videos slightly; it was not measured.
 
-A library is built in one of three modes, chosen the first time it is indexed:
+A library is built in one of four modes, chosen the first time it is indexed:
 
 | `--mode` | model |
 |---|---|
 | `standard` (default) | SigLIP 2 B/16 |
 | `economy` | SigLIP 2 B/32 (another 1.5 GB download) |
 | `precision` | both, their scores combined |
+| `large` | SigLIP 2 So400m (a 4.3 GB download; OpenVINO advised) |
 
 The economy mode costs about a third of the CPU time and finds fewer moments;
 the precision mode costs more and, on DiDeMo, found as many as the standard
-mode. The measured numbers are in the README and in [RESULTS.md](RESULTS.md),
-"Second round".
+mode. The large mode costs four times the CPU time of the standard mode with
+OpenVINO, about what the standard mode costs without it, and found 1.9 points
+more of the moments on DiDeMo; its index takes 1.5 times the space. The
+measured numbers are in the README and in [RESULTS.md](RESULTS.md), "Second
+round" and "Fourth round".
 
 The index lives in `~/.local/share/whenframe/library` (or `$WHENFRAME_LIBRARY`,
 or `--library DIR`). It takes about 5 MB per hour of video, and a search holds
@@ -85,6 +89,24 @@ transcribes the videos it already has. Whisper base took 8.1 minutes of CPU time
 per hour of video on 252 YouCook2 cooking videos, where it raised the right step
 among the first five moments from 12.3 % to 18.8 % ([RESULTS.md](RESULTS.md),
 third round); the time depends on how much is said.
+
+### What is heard
+
+```bash
+whenframe index ~/Videos --sounds
+```
+
+With `--sounds`, the sound track of every video is cut into 5-second windows
+that overlap by half, and each is embedded by CLAP (LAION, Apache 2.0; a 0.8 GB
+download at the first run). A search then adds what is heard around each frame
+to what is seen: "a dog barking", "people laughing", "a fire truck siren".
+Like `--speech`, the library keeps the setting, and running it on a library
+indexed without it embeds the sound of the videos it already has. It took 4.7
+CPU minutes per hour of video with OpenVINO. On the clips of UnAV-100, it
+raised the share of right moments among the first ten from 42.9 % to 53.2 %
+([RESULTS.md](RESULTS.md), fourth round); it moves wrong moments up when CLAP
+does not recognise the description in the sound, and it was not measured on
+long home videos.
 
 ### Long moments
 

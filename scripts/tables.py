@@ -178,12 +178,17 @@ def round2_tables(r: dict, first: dict | None) -> dict[str, str]:
           f"{100 * (r['french'][m]['corpus'][PRIMARY] - r[m]['corpus'][PRIMARY]):+.1f}",
           f"{pct(r[m]['video']['R@5'])} / {pct(r['french'][m]['video']['R@5'])}"] for mode, m, _ in MODES],
     )  # fmt: skip
-    compact = table(
-        ["`--mode`", "right moment in the first five (DiDeMo)", "indexing, CPU min per hour of video",
-         "search (ms)"],
-        [[f"`{mode}`", f"{pct(r[m]['corpus'][PRIMARY])} %", f"{mode_cost(m, model)[0]:.1f}",
-          f"{mode_cost(m, model)[2] + r[m]['query_ms']:.0f}"] for mode, m, model in MODES[:3]],
-    )  # fmt: skip
+    compact_rows = [[f"`{mode}`", f"{pct(r[m]['corpus'][PRIMARY])} %", f"{mode_cost(m, model)[0]:.1f}",
+                     f"{mode_cost(m, model)[2] + r[m]['query_ms']:.0f}"] for mode, m, model in MODES[:3]]  # fmt: skip
+    big = RESULTS / "didemo_test_so400m.json"
+    if big.exists():  # the fourth round's larger model, measured with OpenVINO only
+        b = json.loads(big.read_text())
+        c = b["cost"]
+        compact_rows.append(["`large`", f"{pct(b['siglip2-so400m']['corpus'][PRIMARY])} %",
+                             f"{sum(c['cpu_min_per_hour'].values()):.1f} (OpenVINO)",
+                             f"{c['query_ms'] + c.get('search_ms', 0.0):.0f}"])  # fmt: skip
+    compact = table(["`--mode`", "right moment in the first five (DiDeMo)", "indexing, CPU min per hour of video",
+                     "search (ms)"], compact_rows)  # fmt: skip
     out = {"round2-criteria": criteria, "round2-modes": modes, "round2-french": french, "readme-modes": compact}
     if first:
 
@@ -354,6 +359,35 @@ def round4_tables() -> dict[str, str]:
             f"and {both['motion_losses']} out (p = {both['motion_p']:.2g}). Decoding the frames for the grids and "
             f"embedding them took {(c['decode_cpu'] + c['encode_cpu']) / 60 / c['hours']:.1f} CPU minutes per hour "
             f"of video."
+        )
+    f = RESULTS / "unav_test.json"
+    if f.exists():
+        r = json.loads(f.read_text())
+        gain = r["both"]["p_at_k"] - r["frames"]["p_at_k"]
+        rows.append(["17. frames and sound together beat the frames alone by at least 4 points (UnAV-100, P@10)",
+                     f"{100 * gain:+.1f} points", gain >= 0.04])  # fmt: skip
+        names = {"frames": "frames (SigLIP 2, the default search)",
+                 "sound": f"sound alone (CLAP, {r['length']:g}-second windows)",
+                 "both": f"frames + {r['weight']:g} x sound (`--sounds`)"}  # fmt: skip
+        out["round4-sounds"] = table(
+            [f"UnAV-100, {r['videos']} test videos, {r['labels']} kinds of events", "right among the first ten (P@10)",
+             "average precision, first 100 (mAP)"],
+            [[label, pct(r[m]["p_at_k"]), pct(r[m]["map"])] for m, label in names.items()],
+        )  # fmt: skip
+        per = {k: (r["frames"]["labels"][k]["p_at_k"], r["sound"]["labels"][k]["p_at_k"],
+                   r["both"]["labels"][k]["p_at_k"], r["frames"]["labels"][k]["events"])
+               for k in r["frames"]["labels"]}  # fmt: skip
+        order = sorted(per, key=lambda k: per[k][2] - per[k][0])
+        out["round4-sounds-labels"] = table(
+            ["kind of event (test events)", "frames", "sound", "frames + sound"],
+            [[f"{k} ({per[k][3]})", *(pct(v) for v in per[k][:3])] for k in [*order[-8:][::-1], *order[:4]]],
+        )  # fmt: skip
+        c, w = r["cost"], r["both_vs_frames"]
+        heard = c["sound_cpu_min_per_hour"] + c[f"clap_cpu_{r['length']:g}_min_per_hour"]
+        out["round4-sounds-wins"] = (
+            f"With the sound, {w['up']} kinds of events have more right moments among the first ten and {w['down']} "
+            f"fewer (sign test p = {w['p']:.2g}). Decoding the sound and embedding its {r['length']:g}-second "
+            f"windows took {heard:.1f} CPU minutes per hour of video."
         )
     if rows:
         out["round4-criteria"] = table(["criterion (fixed before its test run)", "measured on test", "met"],
