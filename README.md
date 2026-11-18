@@ -21,7 +21,7 @@ it happens.
 </p>
 
 <!-- table readme-headline -->
-Searching 979 personal videos at once (DiDeMo test) for 3,902 descriptions written by people, whenframe puts the right moment among its first five results **27.2 %** of the time. Indexing one keyframe per shot, as some home video tools do, finds it 2.3 % of the time, and the best of the two baselines (fixed windows) 25.0 %.
+Searching 979 personal videos at once (DiDeMo test) for 3,902 descriptions written by people, whenframe puts the right moment among its first five results **29.2 %** of the time with its own model (27.6 % without it; 29.5 % with SigLIP 2 So400m, for 3.4 times the CPU time). Indexing one keyframe per shot, as some home video tools do, finds it 2.3 % of the time.
 <!-- /table -->
 
 ## Use
@@ -50,16 +50,20 @@ video from the moment found:
 </p>
 
 The first run downloads the SigLIP 2 model (1.5 GB). A library is indexed in
-one of four modes, chosen the first time (`--mode`):
+one of four modes, chosen the first time (`--mode`); measured the same way on
+four benchmarks (sixth round, below):
 
-<!-- table readme-modes -->
-| `--mode` | right moment in the first five (DiDeMo) | indexing, CPU min per hour of video | search (ms) |
+<!-- table readme-models -->
+| `--mode` | right moment in the first five (DiDeMo) | mean of the four benchmarks | indexing, CPU min per hour of video (OpenVINO) |
 |---|---|---|---|
-| `standard` | 27.2 % | 24.9 | 63 |
-| `economy` | 24.5 % | 8.4 | 61 |
-| `precision` | 27.2 % | 33.2 | 123 |
-| `large` | 29.5 % | 25.8 (OpenVINO) | 155 |
+| `standard`, with whenframe's model (the default) | 29.2 % | 38.65 | 7.3 |
+| `standard --no-temporal` | 27.6 % | 38.07 | 7.2 |
+| `economy` | 24.3 % | 36.80 | 4.3 |
+| `large` | 29.5 % | 40.63 | 24.9 |
 <!-- /table -->
+
+The `precision` mode (B/16 and B/32 combined) found as many moments as
+`standard` on DiDeMo in the second round and was not part of the sixth.
 
 <!-- table readme-openvino -->
 With OpenVINO (`pip install 'whenframe[fast]'`) on a processor that computes in bfloat16, as this one does, the standard mode indexes for 6.5 CPU minutes per hour of video instead of 24.9, and finds 27.5 % of the moments instead of 27.2 % (DiDeMo test).
@@ -72,11 +76,11 @@ CPU, `pip install 'whenframe[speech]'`), and a search then finds the words
 said as well as what is seen. `whenframe index --sounds` also listens to the
 sound tracks (CLAP), to find laughter, applause, a dog barking or a siren.
 In a library of long videos, a moment lasts as long as the frames match
-(`--moments`). `whenframe index --temporal` runs each video's frames through
-whenframe's own model, trained on DiDeMo: 1.6 points more of DiDeMo's test
-moments found, 1.1 points fewer of UnAV-100's sound events, so it is not the
-default (fifth round, below). `serve --jellyfin` and `serve --immich` link
-each moment to the video in a Jellyfin or Immich server.
+(`--moments`). In the standard mode, each video's frames go through
+whenframe's own model, trained on DiDeMo and MSR-VTT (`--no-temporal` leaves
+it out; its weights are for research and non-commercial use). `serve
+--jellyfin` and `serve --immich` link each moment to the video in a Jellyfin
+or Immich server.
 
 Nothing else goes over the network. ONNX Runtime 1.29 sends usage telemetry to
 Microsoft by default, and `import openvino` reports to Google Analytics;
@@ -90,11 +94,13 @@ logging every outbound connection of an indexing and search run). More in
    one kept are skipped.
 2. [SigLIP 2](https://arxiv.org/abs/2502.14786) embeds the frames and the
    description (ONNX Runtime, CPU). Its sigmoid gives each frame an absolute
-   match score, so frames from different videos compare directly. With
-   `--temporal`, a small transformer of whenframe's own, trained on DiDeMo's
+   match score, so frames from different videos compare directly. Then a
+   small transformer of whenframe's own, trained on DiDeMo's and MSR-VTT's
    training videos, rewrites each frame's embedding with what the frames
    around it show (in the spirit of
-   [CLIP4Clip](https://arxiv.org/abs/2104.08860)'s temporal transformer).
+   [CLIP4Clip](https://arxiv.org/abs/2104.08860)'s temporal transformer; the
+   average of three runs, a model soup), for about 0.04 CPU minutes per hour
+   of video.
 3. Frames that match almost any description are marked down, using a bank of
    4,096 unrelated descriptions: query-bank normalisation
    ([Bogolin et al., CVPR 2022](https://arxiv.org/abs/2112.12777)), applied to
@@ -112,7 +118,7 @@ logging every outbound connection of an indexing and search run). More in
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/qthullie/whenframe/main/docs/figures/benchmark-dark.png">
-    <img src="https://raw.githubusercontent.com/qthullie/whenframe/main/docs/figures/benchmark.png" alt="whenframe against what exists: on Charades-STA it places 45.7 to 47.2 % of the moments, between VTG-GPT (43.7 %) and TFVTG (50.0 %) and below a 7-billion-parameter vision-language model (56.8 %); on DiDeMo it finds the right video among the first five 46.4 % of the time against 28 to 31 % for one image per video, and the right moment 27.2 % against 2.3 % for one keyframe per shot; on YouCook2, adaptive spans and speech raise 12.3 % to 25.8 %; on UnAV-100, adding the sound raises 42.9 % to 53.2 %; whenframe's own model (--temporal) adds 1.6 points on DiDeMo at almost no cost, 0.9 on Charades-STA and 0.4 on YouCook2, and loses 1.1 on UnAV-100" width="800">
+    <img src="https://raw.githubusercontent.com/qthullie/whenframe/main/docs/figures/benchmark.png" alt="whenframe against what exists: on Charades-STA it places 45.7 to 50.4 % of the moments, between VTG-GPT (43.7 %) and a 7-billion-parameter vision-language model (56.8 %); on DiDeMo it finds the right video among the first five 46.4 % of the time against 28 to 31 % for one image per video, and the right moment 29.2 % with its own model (the default), 27.6 % without it, 29.5 % with SigLIP 2 So400m for 3.4 times the CPU time, against 2.3 % for one keyframe per shot; on YouCook2, speech and adaptive spans reach 26.0 to 28.5 %; on UnAV-100, frames and sound 53.2 to 54.1 %" width="800">
   </picture>
 </p>
 
@@ -194,6 +200,18 @@ Fifth round (whenframe's own model, trained on DiDeMo's training videos):
 | 20. the adapter adds at most 1 CPU minute per hour of video | 0.04 min | yes |
 <!-- /table -->
 
+Sixth round (the encoders compared the same way on the four benchmarks, and
+whenframe's model trained again on DiDeMo and MSR-VTT; the mean of the four
+primary metrics, each step significant):
+
+<!-- table round6-criteria -->
+| criterion (fixed before its test run) | measured on test | met |
+|---|---|---|
+| 21. v2's mean is higher than SigLIP 2 B/16's, sign test p < 0.05 | +0.57 points, p = 6.5e-05 | yes |
+| 22. v2 loses at most 1 point on each test against B/16 | DiDeMo +1.5; Charades-STA +0.4; YouCook2 +0.2; UnAV-100 +0.2 | yes |
+| 23. v2's mean is higher than v1's | -0.78 points | no |
+<!-- /table -->
+
 All tables, the costs and the figures: [docs/RESULTS.md](https://github.com/qthullie/whenframe/blob/main/docs/RESULTS.md).
 
 ## Limits
@@ -215,9 +233,9 @@ All tables, the costs and the figures: [docs/RESULTS.md](https://github.com/qthu
 - Indexing is slow on a small machine without OpenVINO (see the modes above,
   measured on 4 vCPUs); OpenVINO's speed-up was measured on one processor only.
 - Descriptions in French were measured through machine translation only.
-- whenframe's own model (`--temporal`) learnt from DiDeMo's sentences about
-  people; on UnAV-100's events, named by what is heard, it found fewer of them
-  (1.1 points of P@10).
+- whenframe's own model learnt from DiDeMo's and MSR-VTT's descriptions; it
+  gains most on personal videos like DiDeMo's (+1.5 points) and little
+  elsewhere (+0.2 to +0.4), and was not measured on videos of an hour or more.
 - Several criteria set in advance were not met; the results page says which and
   why.
 
@@ -249,10 +267,10 @@ All tables, the costs and the figures: [docs/RESULTS.md](https://github.com/qthu
   faster-whisper (SYSTRAN, MIT) on CTranslate2.
 - The query banks hold embeddings of DiDeMo training descriptions (BSD 2-Clause);
   see [whenframe/data/NOTICE](https://github.com/qthullie/whenframe/blob/main/whenframe/data/NOTICE).
-- whenframe's own model (`--temporal`) was trained on DiDeMo's training videos,
-  Flickr videos under Creative Commons licences (some non-commercial) published
-  for research; its weights are for research and non-commercial use (same
-  NOTICE).
+- whenframe's own model was trained on DiDeMo's training videos (Flickr,
+  Creative Commons licences, some non-commercial) and MSR-VTT's training clips
+  (Xu et al., CVPR 2016; YouTube), both published for research; its weights
+  are for research and non-commercial use (same NOTICE).
 - The benchmark also measures MobileCLIP-S2 (Apple, research-only licence) and
   translates descriptions with Opus-MT (Helsinki-NLP, Apache 2.0); the tool uses
   neither.
@@ -262,5 +280,5 @@ All tables, the costs and the figures: [docs/RESULTS.md](https://github.com/qthu
 ## Licence
 
 MIT, except the weights of whenframe's own model
-(`whenframe/data/temporal-siglip2-base.npz`, used only with `--temporal`):
-research and non-commercial use, as the videos it was trained on.
+(`whenframe/data/temporal-siglip2-base.npz`; `--no-temporal` does without
+them): research and non-commercial use, as the videos it was trained on.

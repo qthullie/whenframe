@@ -41,22 +41,24 @@ def load(name: str) -> dict | None:
 def panels() -> list[dict]:
     """Each panel: a title, a subtitle, and rows (label, note, value in %, is whenframe)."""
     out = []
-    model = load("temporal_test.json")  # the fifth round: whenframe's own model, --temporal
+    six = load("compare_test.json")  # the sixth round: the encoders and whenframe's model, measured the same way
 
-    def own(gain: float) -> str:
-        return f"whenframe's own model: {gain:+.1f} points on the same frames"
+    def ours(key: str) -> list[tuple]:
+        """The default (with whenframe's model), --no-temporal and --mode large on one benchmark, sixth round."""
+        if not six:
+            return []
+        rows = [
+            ("whenframe, default", "with its own model, trained on DiDeMo and MSR-VTT", six["v2"][key]["value"]),
+            ("whenframe, --no-temporal", "SigLIP 2 B/16 alone", six["base"][key]["value"]),
+            ("whenframe, --mode large", "SigLIP 2 So400m, 3.4 times the CPU", six["so400m"][key]["value"]),
+        ]
+        return [(a, b, 100 * c, True) for a, b, c in rows]
 
     ch = load("charades_test.json")
     if ch:
-        rows = [(name, note, value, False) for name, note, value in PUBLISHED]
-        if model:
-            m = model["charades"]
-            gain = 100 * (m["adapter"]["single"]["R1 IoU>=0.5"] - m["without"]["single"]["R1 IoU>=0.5"])
-            rows.append(("whenframe, --temporal", own(gain), 100 * m["adapter"]["single"]["R1 IoU>=0.5"], True))
-        rows += [("whenframe, adaptive spans", "SigLIP 2 on the CPU, parameters from DiDeMo",
-                  100 * ch["whenframe_bank"]["single"]["R1 IoU>=0.5"], True),
-                 ("whenframe, default", "SigLIP 2 on the CPU, parameters from DiDeMo",
-                  100 * ch["frame_window_bank"]["single"]["R1 IoU>=0.5"], True)]  # fmt: skip
+        rows = [(name, note, value, False) for name, note, value in PUBLISHED] + ours("charades")
+        rows.append(("whenframe, adaptive spans", "SigLIP 2 B/16 alone, parameters from DiDeMo",
+                     100 * ch["whenframe_bank"]["single"]["R1 IoU>=0.5"], True))  # fmt: skip
         if "middle_window" in ch:
             rows.append(("10 seconds in the middle", "no model: where moments usually are",
                          100 * ch["middle_window"]["single"]["R1 IoU>=0.5"], False))  # fmt: skip
@@ -76,65 +78,40 @@ def panels() -> list[dict]:
                     "rows": rows, "unit": "%"})  # fmt: skip
     d = load("didemo_test.json")
     if d:
-        rows = []
-        big = load("didemo_test_so400m.json")
-        if big:
-            gain = 100 * (big["siglip2-so400m"]["corpus"][PRIMARY] - big["base"]["corpus"][PRIMARY])
-            rows.append(("whenframe, --mode large", f"SigLIP 2 So400m: {gain:+.1f} points on the same frames",
-                         100 * big["siglip2-so400m"]["corpus"][PRIMARY], True))  # fmt: skip
-        if model:
-            m = model["didemo"]
-            gain = 100 * (m["adapter"]["corpus"][PRIMARY] - m["without"]["corpus"][PRIMARY])
-            rows.append(("whenframe, --temporal", own(gain), 100 * m["adapter"]["corpus"][PRIMARY], True))
-        rows += [("whenframe, default", "SigLIP 2 base", 100 * d[d["default"]]["corpus"][PRIMARY], True),
-                 ("frames searched as they are", "the same model, 10-second windows, no query bank",
+        rows = ours("didemo") or [
+            ("whenframe, default", "SigLIP 2 base", 100 * d[d["default"]]["corpus"][PRIMARY], True)
+        ]
+        rows += [("frames searched as they are", "the same model, 10-second windows, no query bank",
                   100 * d["frame_window"]["corpus"][PRIMARY], False),
                  ("one keyframe per shot", "as home video tools cut videos", 100 * d["scene"]["corpus"][PRIMARY],
                   False)]  # fmt: skip
         out.append({"title": "Finding the moment among a whole library",
                     "subtitle": f"DiDeMo test, {d['cost']['videos']:,} videos at once: right moment among the first"
                                 " five (R@5, IoU ≥ 0.5)",
-                    "rows": rows, "unit": "%"})  # fmt: skip
+                    "rows": sorted(rows, key=lambda r: -r[2]), "unit": "%"})  # fmt: skip
     yc, yc4 = load("youcook2_test.json"), load("youcook2_test_round4.json")
     if yc and yc4:
-        spans_speech = 100 * yc4["speech_spans"]["corpus"][PRIMARY]
-        rows = []
-        if model:
-            m = model["youcook2"]
-            mine = 100 * m["adapter_speech_spans"]["corpus"][PRIMARY]
-            gain = mine - 100 * m["without_speech_spans"]["corpus"][PRIMARY]
-            rows.append(("adaptive spans + what is said, --temporal", own(gain), mine, True))
-        rows += [("adaptive spans + what is said", "Whisper base, on the CPU", spans_speech, True),
-                ("adaptive spans", "", 100 * yc4["whenframe_bank"]["corpus"][PRIMARY], True),
-                ("fixed windows + what is said", "", 100 * yc["speech_bank"]["corpus"][PRIMARY], True),
-                ("fixed windows (the default)", "frames only", 100 * yc["frame_window_bank"]["corpus"][PRIMARY],
-                 True)]  # fmt: skip
+        rows = [(f"{n}, speech + spans", note, v, w) for n, note, v, w in ours("youcook2")] or [
+            ("adaptive spans + what is said", "Whisper base, on the CPU", 100 * yc4["speech_spans"]["corpus"][PRIMARY],
+             True)]  # fmt: skip
+        rows += [("adaptive spans", "frames only", 100 * yc4["whenframe_bank"]["corpus"][PRIMARY], True),
+                 ("fixed windows + what is said", "", 100 * yc["speech_bank"]["corpus"][PRIMARY], True),
+                 ("fixed windows", "frames only", 100 * yc["frame_window_bank"]["corpus"][PRIMARY], True)]  # fmt: skip
         out.append({"title": "Long videos, and what is said in them",
                     "subtitle": f"YouCook2, {yc['videos']} cooking videos of 5 minutes on average, at once: right step "
                                 "among the first five (R@5, IoU ≥ 0.5)",
-                    "rows": rows, "unit": "%"})  # fmt: skip
+                    "rows": sorted(rows, key=lambda r: -r[2]), "unit": "%"})  # fmt: skip
     un = load("unav_test.json")
     if un:
         per = {k: (un["frames"]["labels"][k]["p_at_k"], un["both"]["labels"][k]["p_at_k"]) for k in EXAMPLES
                if k in un["frames"]["labels"]}  # fmt: skip
         examples = ", ".join(f"{k} {100 * a:.0f} → {100 * b:.0f} %" for k, (a, b) in per.items())
-        rows = [
-            ("frames and sound (--sounds)", examples, 100 * un["both"]["p_at_k"], True),
-            *(
-                [
-                    (
-                        "frames and sound, --temporal",
-                        own(100 * (model["unav"]["adapter_both"]["p_at_k"] - model["unav"]["without_both"]["p_at_k"])),
-                        100 * model["unav"]["adapter_both"]["p_at_k"],
-                        True,
-                    )
-                ]
-                if model
-                else []
-            ),
-            ("frames only", "SigLIP 2, the default search", 100 * un["frames"]["p_at_k"], True),
-            ("sound only", f"CLAP, {un['length']:g}-second windows", 100 * un["sound"]["p_at_k"], True),
-        ]
+        rows = [(f"{n}, frames + sound", note, v, w) for n, note, v, w in ours("unav")] or [
+            ("frames and sound (--sounds)", examples, 100 * un["both"]["p_at_k"], True)]  # fmt: skip
+        clap = f"CLAP, {un['length']:g}-second windows"
+        rows += [("frames only", "SigLIP 2 B/16 alone, without the sound", 100 * un["frames"]["p_at_k"], True),
+                 ("sound only", clap, 100 * un["sound"]["p_at_k"], True)]  # fmt: skip
+        rows = sorted(rows, key=lambda r: -r[2])
         out.append({"title": "Hearing: laughter, a dog barking, a siren",
                     "subtitle": f"UnAV-100 test, {un['videos']} videos at once, {un['labels']} kinds of events: "
                                 "share of the first ten moments that are right",
@@ -144,31 +121,15 @@ def panels() -> list[dict]:
 
 def cost_points() -> list[tuple[str, float, float]]:
     """(label, CPU minutes per hour of video, R@5 on DiDeMo test) of each way of indexing."""
-    r2 = load("didemo_test_round2.json")
-    if not r2:
-        return []
-    c = r2["cost"]
-
-    def minutes(t: dict) -> float:
-        return (t["decode_cpu"] + t["encode_cpu"]) / t["hours"] / 60
-
-    pts = [("standard", minutes(c), 100 * r2["frame_window_bank"]["corpus"][PRIMARY]),
-           ("economy", minutes(c["siglip2-b32"]), 100 * r2["siglip32_bank"]["corpus"][PRIMARY]),
-           ("precision", minutes(c) + minutes(c["siglip2-b32"]),
-            100 * r2["ensemble32_bank"]["corpus"][PRIMARY])]  # fmt: skip
-    ov, big = load("didemo_test_backends.json"), load("didemo_test_so400m.json")
-    if ov:  # repeats skipped, as the tool indexes, when So400m was measured that way beside it
-        score = big["base"]["corpus"][PRIMARY] if big else ov["openvino"]["corpus"][PRIMARY]
-        pts.append(("standard, OpenVINO", sum(ov["openvino"]["cpu_min_per_hour"].values()), 100 * score))
-    if big:
-        pts.append(("large, OpenVINO", sum(big["cost"]["cpu_min_per_hour"].values()),
-                    100 * big["siglip2-so400m"]["corpus"][PRIMARY]))  # fmt: skip
-    model = load("temporal_test.json")
-    if ov and model:  # the same frames as the standard mode's, through whenframe's own model
-        m = model["didemo"]
-        pts.append(("standard, OpenVINO, --temporal",
-                    sum(ov["openvino"]["cpu_min_per_hour"].values()) + m["adapter_cost"]["cpu_min_per_hour"],
-                    100 * m["adapter"]["corpus"][PRIMARY]))  # fmt: skip
+    pts = []
+    six, cost, model = load("compare_test.json"), load("compare_cost.json"), load("temporal_test.json")
+    if six and cost:  # the sixth round, OpenVINO, every encoder's cost measured the same way
+        adapter = model["didemo"]["adapter_cost"]["cpu_min_per_hour"] if model else 0.0
+        for label, name, enc, extra in (("standard (with its own model)", "v2", "siglip2-base", adapter),
+                                        ("--no-temporal", "base", "siglip2-base", 0.0),
+                                        ("economy", "b32", "siglip2-b32", 0.0),
+                                        ("large", "so400m", "siglip2-so400m", 0.0)):  # fmt: skip
+            pts.append((label, cost[enc]["cpu_min_per_hour"] + extra, 100 * six[name]["didemo"]["value"]))
     return pts
 
 
@@ -182,10 +143,12 @@ def draw(theme: str):
     y = total - 0.2
     fig.text(0.02, y / total, "whenframe against what exists", color=t["ink"], fontsize=17 * PX, fontweight="bold",
              va="top")  # fmt: skip
-    fig.text(0.02, (y - 0.32) / total, "On a 4-vCPU machine without a GPU; zero-shot but for --temporal, trained on "
-             "DiDeMo's training videos. Published\nnumbers are as their authors report them; the other references are "
-             "run here, on the same videos and descriptions.",
-             color=t["ink2"], fontsize=12 * PX, va="top", linespacing=1.5)  # fmt: skip
+    intro = (
+        "On a 4-vCPU machine without a GPU; zero-shot but for whenframe's own model, trained on DiDeMo's and "
+        "MSR-VTT's\ntraining videos. Published numbers are as their authors report them; the other references "
+        "are run here, on the same videos."
+    )
+    fig.text(0.02, (y - 0.32) / total, intro, color=t["ink2"], fontsize=12 * PX, va="top", linespacing=1.5)
     key = 10 * PX / 72  # inches
     for x, color, name in ((0.02, t["s1"], "whenframe"), (0.16, t["muted"], "other methods and references")):
         mid = (y - 0.88) / total

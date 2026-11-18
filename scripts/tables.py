@@ -528,6 +528,26 @@ def round6_tables() -> dict[str, str]:
           "yes" if r["pairs"][f"{a} vs {b}"]["p"] < 0.05 and r[a]["mean"] > r[b]["mean"] else "no"]
          for a, b in pairs],
     )  # fmt: skip
+    first = RESULTS / "didemo_test.json"
+    if first.exists() and {"v2", "base", "so400m"} <= set(r):
+        shots = json.loads(first.read_text())["scene"]["corpus"][PRIMARY]
+        times = (cost.get("siglip2-so400m", {}).get("cpu_min_per_hour", 0) /
+                 max(cost.get("siglip2-base", {}).get("cpu_min_per_hour", 1), 1e-9))  # fmt: skip
+        out["readme-headline"] = (
+            f"Searching 979 personal videos at once (DiDeMo test) for 3,902 descriptions written by people, "
+            f"whenframe puts the right moment among its first five results **{pct(r['v2']['didemo']['value'])} %** "
+            f"of the time with its own model ({pct(r['base']['didemo']['value'])} % without it; "
+            f"{pct(r['so400m']['didemo']['value'])} % with SigLIP 2 So400m, for {times:.1f} times the CPU time). "
+            f"Indexing one keyframe per shot, as some home video tools do, finds it {pct(shots)} % of the time."
+        )
+        modes = [("`standard`, with whenframe's model (the default)", "v2"), ("`standard --no-temporal`", "base"),
+                 ("`economy`", "b32"), ("`large`", "so400m")]  # fmt: skip
+        out["readme-models"] = table(
+            ["`--mode`", "right moment in the first five (DiDeMo)", "mean of the four benchmarks",
+             "indexing, CPU min per hour of video (OpenVINO)"],
+            [[m, f"{pct(r[n]['didemo']['value'])} %", f"{100 * r[n]['mean']:.2f}", minutes(n)] for m, n in modes
+             if n in r],
+        )  # fmt: skip
     if "v2" in r and "base" in r:
         v2, base = r["v2"], r["base"]
         p = r["pairs"]["v2 vs base"]

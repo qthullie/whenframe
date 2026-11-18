@@ -765,7 +765,7 @@ met: v1's mean is higher than v2's.
 <!-- /table -->
 
 Every step of the ranking is significant. **So400m finds the most** on all
-four benchmarks, for 3.5 times the standard mode's CPU time. **whenframe's
+four benchmarks, for 3.4 times the standard mode's CPU time. **whenframe's
 model** adds 0.6 (v2) to 1.4 (v1) points to the standard mode's mean for
 0.04 CPU minutes per hour of video, a fifth to a half of So400m's gain at
 almost none of its cost. B/32 costs the least and finds the least, except on
