@@ -657,6 +657,10 @@ model for the test, on all of them (`results/temporal/*.json`).
 | e4: adapter | 600 x 64 | 1 | 1 | 100 | 600 | 33.0 | 52.8 | 48.3 | 0.998 |
 | e5: adapter | 600 x 64 | 1 | 2 | 100 | 400 | 33.1 | 52.7 | 49.1 | 0.997 |
 | temporal-siglip2-base: adapter | 3000 x 128 | 1 | 2 | 100 | 1750 | 34.1 | 53.9 | 49.9 | 0.998 |
+| v2-infonce-s1: adapter | 3000 x 128 | 1 | 2 | 100 | 1500 | 33.4 | 52.7 | 48.9 | 0.999 |
+| v2-infonce-s2: adapter | 3000 x 128 | 1 | 2 | 100 | 1250 | 33.0 | 52.6 | 48.5 | 0.999 |
+| v2-infonce: adapter | 3000 x 128 | 1 | 2 | 100 | 2250 | 33.4 | 53.2 | 48.6 | 0.999 |
+| v2-sigmoid: adapter | 3000 x 128 | 1 | 2 | 100 | 2250 | 33.1 | 52.6 | 48.5 | 0.998 |
 <!-- /table -->
 
 ### DiDeMo test
@@ -710,3 +714,36 @@ little, and what it learnt from DiDeMo's sentences moves the rest of the
 search with it. Training on descriptions of other kinds (objects, animals,
 sounds, from other collections) might keep the gain without the loss; it was
 not tried.
+
+## Sixth round: the models compared the same way
+
+The sixth round of the protocol ([PROTOCOL.md](PROTOCOL.md)): five ways of
+embedding frames, each searched as the tool searches with it, on the frames at
+the same instants of the four benchmarks; and whenframe's model trained again
+(v2) on DiDeMo and MSR-VTT.
+
+<!-- table round6-criteria -->
+<!-- /table -->
+
+### On the test sets
+
+<!-- table round6-test -->
+<!-- /table -->
+
+<!-- table round6-pairs -->
+<!-- /table -->
+
+### Model v2, chosen on the tuning sets
+
+<!-- table round6-tuning -->
+| tuning sets | DiDeMo R@5 | YouCook2 R@5 | UnAV-100 P@10 | mean |
+|---|---|---|---|---|
+| SigLIP 2 B/16 (standard) | 31.3 | 29.4 | 41.0 | 33.92 |
+| B/16 + model v1 | 34.1 | 28.9 | 41.0 | 34.68 |
+| v2, InfoNCE, one run | 33.4 | 29.4 | 41.0 | 34.60 |
+| v2, SigLIP's own loss (FLYP) | 33.1 | 28.4 | 41.8 | 34.43 |
+| v2, soup of three runs | 33.2 | 29.9 | 41.3 | 34.79 |
+| v2 soup, alpha 0.25 | 32.1 | 29.2 | 41.0 | 34.14 |
+| v2 soup, alpha 0.5 | 32.6 | 29.4 | 41.3 | 34.43 |
+| v2 soup, alpha 0.75 | 33.1 | 29.9 | 41.3 | 34.74 |
+<!-- /table -->

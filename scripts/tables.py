@@ -477,6 +477,65 @@ def round5_tables() -> dict[str, str]:
     return out
 
 
+def round6_tables() -> dict[str, str]:
+    """The sixth round: five ways of embedding frames, compared the same way; whenframe's model v2."""
+    out = {}
+    f = RESULTS / "compare_tuned.json"
+    if f.exists():
+        t = json.loads(f.read_text())
+        names = {"v2-infonce": "v2, InfoNCE, one run", "v2-sigmoid": "v2, SigLIP's own loss (FLYP)",
+                 "v2-soup": "v2, soup of three runs", "v2-soup-a0.25": "v2 soup, alpha 0.25",
+                 "v2-soup-a0.5": "v2 soup, alpha 0.5", "v2-soup-a0.75": "v2 soup, alpha 0.75"}  # fmt: skip
+        rows = [[label, pct(t[k]["didemo"]), pct(t[k]["youcook2"]), pct(t[k]["unav"]), f"{100 * t[k]['mean']:.2f}"]
+                for k, label in (("base", "SigLIP 2 B/16 (standard)"), ("v1", "B/16 + model v1"), *names.items())
+                if k in t]  # fmt: skip
+        out["round6-tuning"] = table(["tuning sets", "DiDeMo R@5", "YouCook2 R@5", "UnAV-100 P@10", "mean"], rows)
+    f = RESULTS / "compare_test.json"
+    if not f.exists():
+        return out
+    r = json.loads(f.read_text())
+    label = {"b32": "SigLIP 2 B/32 (`--mode economy`)", "base": "SigLIP 2 B/16 (standard)",
+             "so400m": "SigLIP 2 So400m (`--mode large`)", "v1": "B/16 + whenframe's model v1",
+             "v2": "B/16 + whenframe's model v2"}  # fmt: skip
+    rows = []
+    for n in r["ranking"]:
+        x = r[n]
+        rows.append([label.get(n, n), pct(x["didemo"]["value"]), pct(x["charades"]["value"]),
+                     pct(x["youcook2"]["value"]), pct(x["unav"]["value"]), f"**{100 * x['mean']:.2f}**"])  # fmt: skip
+    out["round6-test"] = table(["test sets, ranked by the mean", "DiDeMo R@5", "Charades-STA R1", "YouCook2 R@5",
+                                "UnAV-100 P@10", "mean"], rows)  # fmt: skip
+    pairs = [(a, b) for a in r["ranking"] for b in r["ranking"] if r["ranking"].index(a) < r["ranking"].index(b)]
+    out["round6-pairs"] = table(
+        ["the first finds more than the second?", "items better", "items worse", "sign test p", "said"],
+        [[f"{label.get(a, a)} / {label.get(b, b)}", str(r["pairs"][f"{a} vs {b}"]["wins"]),
+          str(r["pairs"][f"{a} vs {b}"]["losses"]), f"{r['pairs'][f'{a} vs {b}']['p']:.2g}",
+          "yes" if r["pairs"][f"{a} vs {b}"]["p"] < 0.05 and r[a]["mean"] > r[b]["mean"] else "no"]
+         for a, b in pairs],
+    )  # fmt: skip
+    if "v2" in r and "base" in r:
+        v2, base = r["v2"], r["base"]
+        p = r["pairs"]["v2 vs base"]
+        losses = {k: v2[k]["value"] - base[k]["value"] for k in ("didemo", "charades", "youcook2", "unav")}
+        rows = [
+            [
+                "21. v2's mean is higher than SigLIP 2 B/16's, sign test p < 0.05",
+                f"{100 * (v2['mean'] - base['mean']):+.2f} points, p = {p['p']:.2g}",
+                v2["mean"] > base["mean"] and p["p"] < 0.05,
+            ],
+            [
+                "22. v2 loses at most 1 point on each test against B/16",
+                "; ".join(f"{k} {100 * v:+.1f}" for k, v in losses.items()),
+                min(losses.values()) >= -0.01,
+            ],
+        ]
+        if "v1" in r:
+            rows.append(["23. v2's mean is higher than v1's", f"{100 * (v2['mean'] - r['v1']['mean']):+.2f} points",
+                         v2["mean"] > r["v1"]["mean"]])  # fmt: skip
+        out["round6-criteria"] = table(["criterion (fixed before its test run)", "measured on test", "met"],
+                                       [[n, m, "yes" if ok else "no"] for n, m, ok in rows])  # fmt: skip
+    return out
+
+
 def charades_table() -> str | None:
     f = RESULTS / "charades_test.json"
     if not f.exists():
@@ -546,6 +605,7 @@ def main() -> int:
     tables.update(round3_tables())
     tables.update(round4_tables())  # after the third round's: replaces its README sentence on YouCook2
     tables.update(round5_tables())
+    tables.update(round6_tables())
     f2 = RESULTS / "didemo_test_round2.json"
     if f2.exists():
         tables.update(round2_tables(json.loads(f2.read_text()), json.loads(f.read_text()) if f.exists() else None))
