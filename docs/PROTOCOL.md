@@ -857,3 +857,40 @@ sentences are under the BSD 2-Clause licence, and So400m's weights, the
 teacher's, under the Apache License 2.0. v3's weights, as v2's, are provided
 for research and non-commercial use; whenframe's code stays under the MIT
 licence.
+
+**The choices on the tuning sets, before the test** (`scripts/round7.py`;
+`results/round7_tuned.json`, `results/round7_choices.json`; the mean of
+DiDeMo's R@5, Charades-STA's held-out R1 at IoU >= 0.5, YouCook2's R@5 with
+speech and spans and UnAV-100's P@10 with sound, each candidate's speech and
+sound weights chosen on the same sets). The standard mode: 31.3, 44.9, 29.4
+and 41.0 %, mean 36.66; v2: 33.2, 45.4, 29.9 and 41.3 %, mean 37.45.
+
+| v3, trained on DiDeMo with TEMPO-HL, MSR-VTT, Charades-STA and YouCook2 | DiDeMo | Charades-STA | YouCook2 | UnAV-100 | mean |
+|---|---|---|---|---|---|
+| 1. no teacher | 32.7 | 49.4 | 31.8 | 41.8 | 38.92 |
+| 1. So400m's losses on Charades-STA's frames: not kept | 32.4 | 48.6 | 31.8 | 41.5 | 38.61 |
+| **2. the leash's weight 30, not 100: kept** | 33.7 | 50.6 | 32.1 | 42.1 | **39.63** |
+| 3. width 512 and four layers: not kept | 34.4 | 49.7 | 31.7 | 42.1 | 39.47 |
+| 4. a soup of three runs (data seeds 0, 1, 2): not kept | 33.5 | 50.3 | 32.0 | 42.1 | 39.46 |
+| 5. alpha 0.25 | 32.5 | 47.1 | 29.6 | 40.8 | 37.50 |
+| 5. alpha 0.5 | 32.9 | 48.9 | 30.4 | 41.3 | 38.35 |
+| 5. alpha 0.75 | 33.6 | 50.1 | 31.3 | 42.3 | 39.33 |
+
+v3 is the run with the leash's weight 30 (data seed 0) at alpha 1, exported
+in float16 as v2 was (`results/temporal/temporal-siglip2-base-v3.npz`, the
+file the test runs; on the tuning sets it measures as the run, 39.63). Its
+settings, chosen on the tuning sets: what is said weighs 0.005 and counts up
+to 5 seconds around a frame, the sound weighs 2. Its training drew on 46,338
+descriptions of DiDeMo's training videos with TEMPO-HL's, 44,990 of
+MSR-VTT's clips, 11,256 of Charades-STA's training videos (the 500 held out
+left out) and 8,563 of YouCook2's training steps, a batch's items from each
+with probability 0.34, 0.34, 0.17 and 0.15; its best check came at step
+5,000 of 6,000 (`results/temporal/v3-leash30.json`), and it trained in 37
+minutes on the four cores, checks included. The teacher's losses did not
+help on Charades-STA's frames, so So400m's frames of DiDeMo and MSR-VTT were
+not computed. Neither did the larger adapter, the soup or a smaller alpha:
+of the round's five choices, only the leash's lighter weight is kept. Every
+choice was judged on the same tuning sets, so v3's gain on the tests is
+likely smaller than on them. Beside, deciding nothing: v3's recipe without
+Charades-STA's videos (checked as it trains on DiDeMo's tuning videos alone)
+and without YouCook2's, one run each, as v3.
