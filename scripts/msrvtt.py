@@ -210,8 +210,19 @@ def texts(args) -> None:
                 queries.append({"video": c["name"], "text": text, "times": None})
     enc = Encoder("siglip2-base", folder=args.model_dir)
     t0 = time.time()
-    out = np.concatenate([enc.encode_texts([q["text"] for q in queries[i : i + 64]])
-                          for i in range(0, len(queries), 64)]).astype(np.float16)  # fmt: skip
+    parts = CACHE / "msrvtt_text_parts"  # in blocks, so that a stopped run resumes
+    parts.mkdir(parents=True, exist_ok=True)
+    block = 2048
+    for start in range(0, len(queries), block):
+        part = parts / f"{start:06d}.npy"
+        if part.exists():
+            continue
+        chunk = [q["text"] for q in queries[start : start + block]]
+        out = np.concatenate([enc.encode_texts(chunk[i : i + 64]) for i in range(0, len(chunk), 64)])
+        np.save(parts / f"{start:06d}.tmp.npy", out.astype(np.float16))
+        (parts / f"{start:06d}.tmp.npy").replace(part)
+        print(f"{start + len(chunk)}/{len(queries)} descriptions, {time.time() - t0:.0f} s", flush=True)
+    out = np.concatenate([np.load(parts / f"{start:06d}.npy") for start in range(0, len(queries), block)])
     np.save(TEXTS, out)
     QUERIES.write_text(json.dumps(queries))
     print(f"{len(queries)} descriptions of {len(have)} clips embedded in {time.time() - t0:.0f} s")
