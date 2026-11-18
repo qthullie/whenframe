@@ -7,5 +7,14 @@
   "encode_cpu_min_per_hour": 4.5921845061495175,
   "cpu_min_per_hour": 7.235067171581075,
   "encode_ms_per_frame": 88.19898989048022
+ },
+ "siglip2-b32": {
+  "videos": 100,
+  "hours": 1.5198605494444437,
+  "frames": 4747,
+  "decode_cpu_min_per_hour": 2.6760681442035583,
+  "encode_cpu_min_per_hour": 1.6185840652064325,
+  "cpu_min_per_hour": 4.294652209409991,
+  "encode_ms_per_frame": 31.09360101116499
  }
 }
