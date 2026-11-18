@@ -8,7 +8,7 @@ YOUCOOK2 ?= data/youcook2
 UNAV ?= data/unav
 
 .PHONY: install check lint test didemo-extract didemo-tune didemo-eval didemo-explore didemo-round2 tables figures \
-	didemo-rerank charades didemo-round3 youcook2 round4 round5 benchmark-figure demo site
+	didemo-rerank charades didemo-round3 youcook2 round4 round5 round6 benchmark-figure demo site
 
 install:
 	$(PY) -m pip install -e ".[dev]"
@@ -132,6 +132,25 @@ round5:
 	$(PY) scripts/temporal.py evaluate $(ROUND5) --model whenframe/data/temporal-siglip2-base.npz \
 		--test-annotations $(DIDEMO)/didemo_test.json --charades-annotations $(CHARADES)/test.parquet \
 		--youcook2-annotations $(YOUCOOK2)/val.parquet --unav-annotations $(UNAV)/unav100_all.json
+
+# the sixth round (docs/PROTOCOL.md): So400m and B/32 on the same frames of the four benchmarks, model v2 trained on
+# DiDeMo and MSR-VTT (msrvtt_train_9k.json of friedrichor/MSR-VTT in $(MSRVTT)), the choices made on the tuning sets,
+# then every candidate tested once
+MSRVTT ?= data/msrvtt
+ROUND6 = $(ROUND5) --test-annotations $(DIDEMO)/didemo_test.json --charades-annotations $(CHARADES)/test.parquet \
+	--youcook2-annotations $(YOUCOOK2)/val.parquet --unav-annotations $(UNAV)/unav100_all.json
+V2 = --steps 3000 --batch 128 --every 250 --lr 1e-4 --warmup 200 --bank-sample 1024 --head 0 --leash 100 --within 2 \
+	--extra msrvtt --init-seed 0
+round6:
+	for d in unav charades youcook2; do $(PY) scripts/compare.py extract --dataset $$d; done
+	$(PY) scripts/compare.py extract --dataset didemo-train --models siglip2-b32 --videos $(DIDEMO)/train
+	$(PY) scripts/compare.py extract --dataset didemo-test --models siglip2-b32 --videos $(DIDEMO)/test
+	$(PY) scripts/msrvtt.py extract --annotations $(MSRVTT)/msrvtt_train_9k.json
+	$(PY) scripts/msrvtt.py texts --annotations $(MSRVTT)/msrvtt_train_9k.json
+	$(PY) scripts/temporal.py train $(ROUND5) --name v2-infonce --between-loss infonce --seed 0 $(V2)
+	$(PY) scripts/temporal.py train $(ROUND5) --name v2-sigmoid --between-loss sigmoid --seed 0 $(V2)
+	$(PY) scripts/compare.py tune $(ROUND6) --candidates b32,base,so400m,v1,v2-infonce=results/temporal/v2-infonce.npz@1,v2-sigmoid=results/temporal/v2-sigmoid.npz@1
+	@echo "then the soup and alpha, as docs/PROTOCOL.md records them, and: scripts/compare.py evaluate $(ROUND6)"
 
 # whenframe beside published numbers and home-tool approaches (docs/figures/benchmark.png)
 benchmark-figure:
