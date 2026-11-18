@@ -55,6 +55,24 @@
    "against": "v3-noteacher",
    "against_mean": 0.3891619408546849,
    "kept": true
+  },
+  {
+   "choice": 3,
+   "run": "v3-wide",
+   "recipe": {
+    "without": [],
+    "leash": 30.0,
+    "width": 512,
+    "layers": 4,
+    "heads": 8,
+    "distil": 0.0,
+    "teacher": []
+   },
+   "spec": "v3-wide=results/temporal/v3-wide.npz@1",
+   "mean": 0.3947382741094508,
+   "against": "v3-leash30",
+   "against_mean": 0.39633159295051007,
+   "kept": false
   }
  ]
 }
