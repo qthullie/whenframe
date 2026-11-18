@@ -17,11 +17,17 @@ text and no video.
 
 temporal-siglip2-base.npz
 
-whenframe's temporal model (whenframe/temporal.py; `whenframe index
---temporal`), trained by scripts/temporal.py on the frames and descriptions of
-DiDeMo's training videos: Flickr videos from YFCC100M, each under its own
-Creative Commons licence (some of them non-commercial), with descriptions
-released under the BSD 2-Clause license. These videos were published for
-research. The weights are provided for research and non-commercial use only;
-the rest of whenframe stays under the MIT licence. The file holds weights
-only: no frame, description or video.
+whenframe's temporal model (whenframe/temporal.py), applied by default to the
+frames of a new library in the standard mode (`whenframe index --no-temporal`
+leaves it out). Model v2 of docs/PROTOCOL.md's sixth round: the average of
+three runs of scripts/temporal.py on the frames and descriptions of
+
+- DiDeMo's training videos: Flickr videos from YFCC100M, each under its own
+  Creative Commons licence (some of them non-commercial), with descriptions
+  released under the BSD 2-Clause license;
+- MSR-VTT's training clips: YouTube clips with their descriptions (Xu et al.,
+  CVPR 2016, Microsoft Research), published for research.
+
+These videos were published for research. The weights are provided for
+research and non-commercial use only; the rest of whenframe stays under the
+MIT licence. The file holds weights only: no frame, description or video.
