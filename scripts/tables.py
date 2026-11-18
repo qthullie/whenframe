@@ -572,6 +572,153 @@ def round6_tables() -> dict[str, str]:
     return out
 
 
+# the seventh round's runs on the tuning sets, in the order of its choices (docs/PROTOCOL.md): name, choice, label
+SEVENTH = [
+    ("v3-noteacher", 1, "v3: all five sets of descriptions, no teacher"),
+    ("v3-teacher", 1, "+ So400m's losses, on Charades-STA's frames"),
+    ("v3-teacher-all", 1, "+ So400m's losses on DiDeMo's and MSR-VTT's frames too"),
+    ("v3-leash30", 2, "the leash's weight 30, not 100"),
+    ("v3-wide", 3, "width 512 and four layers, not 256 and two"),
+    ("v3-soup", 4, "a soup of three runs (data seeds 0, 1, 2)"),
+    ("v3-a0.25", 5, "alpha 0.25"),
+    ("v3-a0.5", 5, "alpha 0.5"),
+    ("v3-a0.75", 5, "alpha 0.75"),
+]
+MAIN7 = ["b32", "base", "so400m", "v1", "v2", "v3"]
+LEFT_OUT = {"v3-no-charades": "charades", "v3-no-youcook2": "youcook2"}  # reported beside, deciding nothing
+LABEL7 = {"b32": "SigLIP 2 B/32 (`--mode economy`)", "base": "SigLIP 2 B/16 (standard)",
+          "so400m": "SigLIP 2 So400m (`--mode large`)", "v1": "B/16 + whenframe's model v1",
+          "v2": "B/16 + whenframe's model v2", "v3": "B/16 + whenframe's model v3"}  # fmt: skip
+
+
+def seventh_choices(t: dict) -> tuple[dict[str, bool], str | None]:
+    """Each run of SEVENTH found on the tuning sets: kept or not, by the rule (a higher mean than the run kept
+    so far), and the run kept at the end; alpha: the best of the four, 1 being the run kept before it."""
+    kept, current = {}, None
+    for name, choice, _ in SEVENTH:
+        if name not in t:
+            continue
+        if current is None:
+            kept[name], current = True, name
+        elif choice == 5:
+            best = max([current] + [n for n, c, _ in SEVENTH if c == 5 and n in t], key=lambda n: t[n]["mean"])
+            kept[name] = name == best
+            if kept[name]:
+                current = name
+        else:
+            kept[name] = t[name]["mean"] > t[current]["mean"]
+            if kept[name]:
+                current = name
+    return kept, current
+
+
+def round7_tables() -> dict[str, str]:
+    """The seventh round: whenframe's model v3, taught by So400m, trained on more moments."""
+    out = {}
+    f = RESULTS / "round7_tuned.json"
+    if f.exists():
+        t = json.loads(f.read_text())
+        kept, _ = seventh_choices(t)
+        cols = ("didemo", "charades", "youcook2", "unav")
+        rows = [[LABEL7[k], *(pct(t[k][c]) for c in cols), f"{100 * t[k]['mean']:.2f}", ""] for k in ("base", "v2")
+                if k in t]  # fmt: skip
+        rows += [[label, *(pct(t[k][c]) for c in cols), f"{100 * t[k]['mean']:.2f}", "yes" if kept[k] else "no"]
+                 for k, _, label in SEVENTH if k in t]  # fmt: skip
+        rows += [[f"*v3 without {BENCH[c]}'s videos (beside)*", *(pct(t[k][x]) for x in cols),
+                  f"{100 * t[k]['mean']:.2f}", ""] for k, c in LEFT_OUT.items() if k in t]  # fmt: skip
+        out["round7-tuning"] = table(["tuning sets", "DiDeMo R@5", "Charades-STA R1", "YouCook2 R@5", "UnAV-100 P@10",
+                                      "mean", "kept"], rows)  # fmt: skip
+    f = RESULTS / "round7_test.json"
+    if not f.exists():
+        return out
+    r = json.loads(f.read_text())
+    cost = json.loads((RESULTS / "compare_cost.json").read_text()) if (RESULTS / "compare_cost.json").exists() else {}
+    encoder = {"b32": "siglip2-b32", "so400m": "siglip2-so400m"}
+
+    def minutes(n: str) -> float | None:
+        c = cost.get(encoder.get(n, "siglip2-base"), {}).get("cpu_min_per_hour")
+        return None if c is None else c + r[n].get("adapter_cost", {}).get("cpu_min_per_hour", 0.0)
+
+    main = [n for n in r["ranking"] if n in MAIN7]
+    rows = [[LABEL7[n], pct(r[n]["didemo"]["value"]), pct(r[n]["charades"]["value"]), pct(r[n]["youcook2"]["value"]),
+             pct(r[n]["unav"]["value"]), f"**{100 * r[n]['mean']:.2f}**",
+             "" if minutes(n) is None else f"{minutes(n):.1f}"] for n in main]  # fmt: skip
+    out["round7-test"] = table(["test sets, ranked by the mean", "DiDeMo R@5", "Charades-STA R1", "YouCook2 R@5",
+                                "UnAV-100 P@10", "mean", "indexing, CPU min per hour"], rows)  # fmt: skip
+    pairs = [(a, b) for i, a in enumerate(main) for b in main[i + 1 :]]
+
+    def said(a: str, b: str) -> bool:
+        return r["pairs"][f"{a} vs {b}"]["p"] < 0.05 and r[a]["mean"] > r[b]["mean"]
+
+    out["round7-pairs"] = table(
+        ["the first finds more than the second?", "items better", "items worse", "sign test p", "said"],
+        [[f"{LABEL7[a]} / {LABEL7[b]}", str(r["pairs"][f"{a} vs {b}"]["wins"]),
+          str(r["pairs"][f"{a} vs {b}"]["losses"]), f"{r['pairs'][f'{a} vs {b}']['p']:.2g}",
+          "yes" if said(a, b) else "no"] for a, b in pairs],
+    )  # fmt: skip
+    left = [(k, c) for k, c in LEFT_OUT.items() if k in r]
+    if left and "v3" in r and "base" in r:
+        out["round7-left-out"] = table(
+            ["the test of a collection left out of training", "B/16 (never trained on it)", "v3 trained without it",
+             "v3"],
+            [[f"{BENCH[c]}, {('R1 at IoU >= 0.5' if c == 'charades' else 'R@5, speech + spans')}",
+              pct(r["base"][c]["value"]), pct(r[k][c]["value"]), pct(r["v3"][c]["value"])] for k, c in left],
+        )  # fmt: skip
+    if not {"v3", "v2", "base", "so400m"} <= set(r):
+        return out
+    v3 = r["v3"]
+    losses = {k: v3[k]["value"] - r["base"][k]["value"] for k in ("didemo", "charades", "youcook2", "unav")}
+    p_large, p_v2 = r["pairs"]["v3 vs so400m"], r["pairs"]["v3 vs v2"]
+    met = {
+        24: v3["mean"] > r["so400m"]["mean"] and p_large["p"] < 0.05,
+        25: v3["mean"] > r["v2"]["mean"] and p_v2["p"] < 0.05,
+        26: min(losses.values()) >= -0.01,
+    }
+    rows = [
+        ["24. v3's mean is higher than So400m's, sign test p < 0.05",
+         f"{100 * (v3['mean'] - r['so400m']['mean']):+.2f} points, p = {p_large['p']:.2g}", met[24]],
+        ["25. v3's mean is higher than v2's, p < 0.05",
+         f"{100 * (v3['mean'] - r['v2']['mean']):+.2f} points, p = {p_v2['p']:.2g}", met[25]],
+        ["26. v3 loses at most 1 point on each test against B/16",
+         "; ".join(f"{BENCH[k]} {100 * v:+.1f}" for k, v in losses.items()), met[26]],
+    ]  # fmt: skip
+    out["round7-criteria"] = table(["criterion (fixed before its test run)", "measured on test", "met"],
+                                   [[n, m, "yes" if ok else "no"] for n, m, ok in rows])  # fmt: skip
+    if not (met[25] and met[26]):  # v2 stays the default: the README's tables stay the sixth round's
+        return out
+    first = RESULTS / "didemo_test.json"
+    shots = json.loads(first.read_text())["scene"]["corpus"][PRIMARY] if first.exists() else None
+    times = minutes("so400m") / minutes("v3") if minutes("so400m") and minutes("v3") else None
+    large = (
+        f"; {pct(r['so400m']['didemo']['value'])} % with SigLIP 2 So400m, for {times:.1f} times the CPU time"
+        if times
+        else ""
+    )
+    headline = (
+        f"Searching 979 personal videos at once (DiDeMo test) for 3,902 descriptions written by people, "
+        f"whenframe puts the right moment among its first five results **{pct(v3['didemo']['value'])} %** of the "
+        f"time with its own model ({pct(r['base']['didemo']['value'])} % without it{large})."
+    )
+    if met[24]:  # the protocol's sentence, when criterion 24 is met
+        headline += (
+            f" At the standard mode's cost, it finds more moments than its large mode over four benchmarks (mean "
+            f"{100 * v3['mean']:.2f} against {100 * r['so400m']['mean']:.2f}, sign test p = {p_large['p']:.2g})."
+        )
+    if shots is not None:
+        headline += f" Indexing one keyframe per shot, as some home video tools do, finds it {pct(shots)} % of the "
+        headline += "time."
+    out["readme-headline"] = headline
+    modes = [("`standard`, with whenframe's model (the default)", "v3"), ("`standard --no-temporal`", "base"),
+             ("`economy`", "b32"), ("`large`", "so400m")]  # fmt: skip
+    out["readme-models"] = table(
+        ["`--mode`", "right moment in the first five (DiDeMo)", "mean of the four benchmarks",
+         "indexing, CPU min per hour of video (OpenVINO)"],
+        [[m, f"{pct(r[n]['didemo']['value'])} %", f"{100 * r[n]['mean']:.2f}",
+          "" if minutes(n) is None else f"{minutes(n):.1f}"] for m, n in modes if n in r],
+    )  # fmt: skip
+    return out
+
+
 def charades_table() -> str | None:
     f = RESULTS / "charades_test.json"
     if not f.exists():
@@ -642,6 +789,7 @@ def main() -> int:
     tables.update(round4_tables())  # after the third round's: replaces its README sentence on YouCook2
     tables.update(round5_tables())
     tables.update(round6_tables())
+    tables.update(round7_tables())  # after the sixth round's: replaces the README's tables if v3 is the default
     f2 = RESULTS / "didemo_test_round2.json"
     if f2.exists():
         tables.update(round2_tables(json.loads(f2.read_text()), json.loads(f.read_text()) if f.exists() else None))

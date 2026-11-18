@@ -449,12 +449,28 @@ def strip(r: dict) -> dict:
 
 
 NAMED = {"b32": Candidate("b32", "siglip2-b32"), "base": Candidate("base"),
-         "so400m": Candidate("so400m", "siglip2-so400m"),
-         "v1": Candidate("v1", weights=str(ROOT / "whenframe" / "data" / "temporal-siglip2-base.npz"))}  # fmt: skip
+         "so400m": Candidate("so400m", "siglip2-so400m")}  # fmt: skip
+# model v1 as the package shipped it, until model v2 replaced it (commit fb885b0): taken from the repository's history
+V1, V1_COMMIT = ROOT / "results" / "temporal" / "temporal-siglip2-base-v1.npz", "fb885b0^"
+
+
+def shipped(path: Path, commit: str) -> Path:
+    """Weights the package shipped before a later model replaced them, written to `path` from the repository."""
+    if not path.exists():
+        import subprocess
+
+        blob = subprocess.run(["git", "-C", str(ROOT), "show", f"{commit}:whenframe/data/temporal-siglip2-base.npz"],
+                              capture_output=True, check=True).stdout  # fmt: skip
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.with_suffix(".tmp").write_bytes(blob)
+        path.with_suffix(".tmp").replace(path)
+    return path
 
 
 def candidate(spec: str) -> Candidate:
     """b32, base, so400m, v1, or NAME=WEIGHTS@ALPHA (whenframe's model on the base encoder)."""
+    if spec == "v1":
+        return Candidate("v1", weights=str(shipped(V1, V1_COMMIT)))
     if spec in NAMED:
         return NAMED[spec]
     name, rest = spec.split("=", 1)
@@ -524,7 +540,7 @@ def evaluate(args) -> None:
 
     tuned = json.loads(TUNED.read_text())
     if args.round == 7:  # the sixth round's candidates keep the weights chosen for them then
-        tuned |= json.loads(TUNED7.read_text())
+        tuned = json.loads(TUNED7.read_text()) | tuned
     b = Benchmarks(args)
     res, items = {"candidates": args.candidates.split(",")}, {}
     for name in res["candidates"]:
