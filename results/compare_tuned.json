@@ -30,5 +30,21 @@
    "normalise": "raw"
   },
   "sound_weight": 1.5
+ },
+ "v2-infonce": {
+  "spec": "v2-infonce=results/temporal/v2-infonce.npz@1",
+  "model": "siglip2-base",
+  "weights": "results/temporal/v2-infonce.npz",
+  "alpha": 1.0,
+  "didemo": 0.33367399080224835,
+  "youcook2": 0.2940226171243942,
+  "unav": 0.4102564102564102,
+  "mean": 0.3459843393943509,
+  "speech": {
+   "weight": 0.005,
+   "pad": 0.0,
+   "normalise": "raw"
+  },
+  "sound_weight": 1.5
  }
 }
