@@ -108,7 +108,7 @@ logging every outbound connection of an indexing and search run). More in
 4. With `--speech`, the words of the description said around a frame add to
    its score (Whisper and a full-text index); with `--sounds`, so does what is
    heard around it ([CLAP](https://arxiv.org/abs/2211.06687), standardised and
-   added).
+   added). Both count as chosen with each mode's model on the tuning sets.
 5. In each of the best videos, up to three 10-second moments are placed around
    the best frames, and all moments are ranked together. In precision mode the
    scores of two models are standardised and added first.

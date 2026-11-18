@@ -7,7 +7,8 @@
    library and added, with weights tuned on DiDeMo training videos.
 4. When the videos were transcribed, the words of the query that are said
    around a frame add to its score (speech.py); when their sound tracks were
-   embedded, so does CLAP's score of what is heard around it (sounds.py).
+   embedded, so does CLAP's score of what is heard around it (sounds.py); with
+   the weights chosen with the library's model (chosen, below).
 5. Each video's best frame shortlists the videos worth a closer look.
 6. In each shortlisted video, moments are placed around its best frames: fixed
    windows by default, or spans grown around the peaks of its curve.
@@ -19,7 +20,7 @@ training videos.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 
 import numpy as np
 
@@ -51,8 +52,30 @@ class SearchConfig:
     alpha: float = 0.6  # where a span stops, between the video's floor (0) and the peak (1)
     contrast: float = 0.0  # weight of (peak - floor) in the ranking score
     min_length: float = 10.0
-    speech: SpeechConfig = field(default_factory=SpeechConfig)  # used when the library is transcribed
-    sound: SoundConfig = field(default_factory=SoundConfig)  # used when the library's sound tracks are embedded
+    # used when the library is transcribed, and when its sound tracks are embedded; None: as chosen with the
+    # library's model on the tuning sets (chosen, below)
+    speech: SpeechConfig | None = None
+    sound: SoundConfig | None = None
+
+
+def chosen(library: Library) -> tuple[SpeechConfig, SoundConfig]:
+    """The speech settings and the sound weight chosen with the library's model on YouCook2's and UnAV-100's tuning
+    sets (docs/RESULTS.md, sixth and seventh rounds): its temporal model's, kept in the model's file, when its frames
+    go through one; else its image model's (encoder.MODELS); the defaults when several models are searched together,
+    for which none were chosen."""
+    models = library.settings.models
+    if len(models) > 1 or models[0] not in MODELS:
+        return SpeechConfig(), SoundConfig()
+    if library.settings.temporal:
+        try:
+            s = library.temporal_model.get("search")
+        except ValueError:  # the model is not installed: its frames, already indexed, are searched all the same
+            s = None
+        if s:
+            sp = s["speech"]
+            return SpeechConfig(sp["weight"], sp["pad"], sp["normalise"]), SoundConfig(weight=s["sound_weight"])
+    spec = MODELS[models[0]]
+    return SpeechConfig(pad=spec.speech_pad), SoundConfig(weight=spec.sound_weight)
 
 
 # Windows did better on DiDeMo's clips of at most 30 seconds, spans on YouCook2's videos of 289 seconds
@@ -101,7 +124,10 @@ class Searcher:
     def __init__(self, library: Library, config: SearchConfig | None = None,
                  banks: dict[str, np.ndarray] | None = None):  # fmt: skip
         self.library = library
-        self.config = config or SearchConfig()
+        config = config or SearchConfig()
+        speech, sound = chosen(library)
+        self.config = replace(config, speech=speech if config.speech is None else config.speech,
+                              sound=sound if config.sound is None else config.sound)  # fmt: skip
         self.models = library.settings.models
         banks = banks or {}
         self.banks = {m: banks[m] if m in banks else qbank.load(m) for m in self.models}

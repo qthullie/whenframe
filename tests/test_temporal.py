@@ -248,10 +248,28 @@ def test_the_export_keeps_alpha_of_the_correction(tmp_path):
     p = params(rng)
     p["out_b"] = (rng.standard_normal(DIM) * 0.1).astype(np.float32)
     np.savez(tmp_path / "run.npz", **p)
-    s.export(types.SimpleNamespace(model=str(tmp_path / "run.npz"), out=str(tmp_path / "v3.npz"), alpha=0.5))
+    s.export(
+        types.SimpleNamespace(model=str(tmp_path / "run.npz"), out=str(tmp_path / "v3.npz"), alpha=0.5, settings=None)
+    )
     exported = temporal.load(tmp_path / "v3.npz")
     x, t = frames(rng, 40)
     half = dict(p, out_w=0.5 * p["out_w"], out_b=0.5 * p["out_b"])
     np.testing.assert_allclose(temporal.apply(exported, x, t), temporal.apply(half, x, t), atol=2e-3)
     assert not np.allclose(temporal.apply(exported, x, t), temporal.apply(p, x, t), atol=2e-3)
     assert not any(k.startswith("h_") or k in s.FIXED for k in np.load(tmp_path / "v3.npz").files)
+
+
+def test_the_export_keeps_the_search_settings_chosen_for_the_model(tmp_path):
+    """With --settings, the file carries the speech settings and the sound weight compare.py tune chose for the
+    model, which a search of its frames uses (search.chosen); without, none."""
+    import types
+
+    s = script()
+    np.savez(tmp_path / "run.npz", **params(np.random.default_rng(6)))
+    tuned = {"v3": {"speech": {"weight": 0.005, "pad": 5.0, "normalise": "raw"}, "sound_weight": 1.5, "mean": 0.4}}
+    (tmp_path / "tuned.json").write_text(json.dumps(tuned))
+    for out, settings in (("v3.npz", f"{tmp_path / 'tuned.json'}:v3"), ("plain.npz", None)):
+        s.export(types.SimpleNamespace(model=str(tmp_path / "run.npz"), out=str(tmp_path / out), alpha=1.0,
+                                       settings=settings))  # fmt: skip
+    assert temporal.load(tmp_path / "v3.npz")["search"] == {"speech": tuned["v3"]["speech"], "sound_weight": 1.5}
+    assert "search" not in temporal.load(tmp_path / "plain.npz")

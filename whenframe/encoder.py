@@ -70,13 +70,17 @@ class ModelSpec:
     bank_beta: float = 50.0  # query-bank correction, as tuned on DiDeMo training videos
     bank_lambda: float = 1.0
     spans_lambda: float | None = None  # its strength when moments are adaptive spans; None: as bank_lambda
+    # what is said and what is heard in a search, as chosen with this model on YouCook2's and UnAV-100's tuning
+    # sets (sixth round, results/compare_tuned.json); a temporal model's file brings its own (whenframe/temporal.py)
+    speech_pad: float = 0.0  # seconds before and after a frame in which what is said counts
+    sound_weight: float = 2.0  # of CLAP's standardised score, added to the frames'
 
 
 MODELS = {
     "siglip2-base": ModelSpec("onnx-community/siglip2-base-patch16-224-ONNX", 224, 112.6689, -16.7717,
                               spans_lambda=0.5),
     "siglip2-b32": ModelSpec("onnx-community/siglip2-base-patch32-256-ONNX", 256, 111.8326, -16.7669,
-                             bank_lambda=0.5),
+                             bank_lambda=0.5, speech_pad=5.0, sound_weight=1.5),
     # research use only (Apple Machine Learning Research Model licence)
     "mobileclip-s2": ModelSpec(
         "Xenova/mobileclip_s2", 256, 66.86, -19.567, pixels="unit", image_output="image_embeds",
@@ -86,7 +90,7 @@ MODELS = {
         "immich-app/ViT-SO400M-14-SigLIP2__webli", 224, 109.8812, -15.9324, vision_file="visual/model.onnx",
         text_file="textual/model.onnx", tokenizer_file="textual/tokenizer.json", image_input="image",
         text_input="text", text_dtype="int32", image_output="embedding", text_output="embedding",
-        clean="lower", weights_folder="textual", text_openvino=True,
+        clean="lower", weights_folder="textual", text_openvino=True, sound_weight=1.5,
     ),
 }  # fmt: skip
 DEFAULT_MODEL = "siglip2-base"

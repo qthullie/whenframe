@@ -19,6 +19,7 @@ training runs the same computation with JAX.
 
 from __future__ import annotations
 
+import json
 from importlib import resources
 
 import numpy as np
@@ -88,13 +89,17 @@ def apply(p: dict, emb: np.ndarray, times: np.ndarray) -> np.ndarray:
 
 
 def load(path=None, name: str = "temporal-siglip2-base.npz") -> dict | None:
-    """Trained weights: those shipped with the package (None when there are none), or a file's."""
+    """Trained weights: those shipped with the package (None when there are none), or a file's. When the file has
+    them, p["search"] holds the speech settings and the sound weight chosen with the model on the tuning sets, which
+    a search of its frames uses (search.chosen)."""
     if path is None:
         path = resources.files("whenframe.data").joinpath(name)
         if not path.is_file():
             return None
     with path.open("rb") as f:
         z = np.load(f)
-        p = {k: z[k].astype(np.float32) for k in z.files if k not in ("layers", "heads")}
+        p = {k: z[k].astype(np.float32) for k in z.files if k not in ("layers", "heads", "search")}
         p["layers"], p["heads"] = int(z["layers"]), int(z["heads"])
+        if "search" in z.files:
+            p["search"] = json.loads(str(z["search"]))
     return p

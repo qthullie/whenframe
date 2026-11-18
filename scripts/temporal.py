@@ -951,6 +951,10 @@ def export(args) -> None:
     w = {k: z[k] for k in keep}
     if args.alpha != 1.0:
         w["out_w"], w["out_b"] = args.alpha * w["out_w"].astype(np.float32), args.alpha * w["out_b"].astype(np.float32)
+    if args.settings:  # FILE:NAME, the speech settings and sound weight chosen for it on the tuning sets
+        path, _, name = args.settings.rpartition(":")
+        t = json.loads(Path(path).read_text())[name]
+        w["search"] = np.array(json.dumps({"speech": t["speech"], "sound_weight": t["sound_weight"]}))
     out = Path(args.out or ROOT / "whenframe" / "data" / f"{temporal.MODELS['siglip2-base']}.npz")
     np.savez(out, **{k: v.astype(np.float16) if v.ndim else v for k, v in w.items()})
     print(f"wrote {out}: {sum(v.size for v in w.values() if v.ndim)} weights, alpha {args.alpha:g}")
@@ -1009,6 +1013,7 @@ def main() -> None:
     ap.add_argument("--models", help="soup: the runs' weights to average, comma-separated")
     ap.add_argument("--model", help="export, evaluate: the trained weights (results/temporal/NAME.npz)")
     ap.add_argument("--alpha", type=float, default=1.0, help="export: the share of the model's correction kept")
+    ap.add_argument("--settings", help="export: FILE:NAME, the search settings compare.py tune chose for NAME")
     ap.add_argument("--test-annotations", help="evaluate: DiDeMo's didemo_test.json")
     ap.add_argument("--charades-annotations", help="evaluate: Charades-STA's test parquet")
     ap.add_argument("--youcook2-annotations", help="evaluate: YouCook2's validation parquet")

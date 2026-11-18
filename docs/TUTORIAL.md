@@ -139,6 +139,11 @@ raised the share of right moments among the first ten from 42.9 % to 53.2 %
 does not recognise the description in the sound, and it was not measured on
 long home videos.
 
+How much what is said and what is heard count was chosen with each mode's
+model on tuning videos, and a search uses its library's: what is heard weighs
+1.5 with whenframe's model and in the economy and large modes, 2 otherwise; in
+the economy mode, what is said counts up to 5 seconds around a frame.
+
 ### Long moments
 
 ```bash

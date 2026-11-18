@@ -30,4 +30,6 @@ three runs of scripts/temporal.py on the frames and descriptions of
 
 These videos were published for research. The weights are provided for
 research and non-commercial use only; the rest of whenframe stays under the
-MIT licence. The file holds weights only: no frame, description or video.
+MIT licence. The file holds weights, and the speech settings and sound weight
+chosen with the model on the tuning sets (docs/PROTOCOL.md), only: no frame,
+description or video.

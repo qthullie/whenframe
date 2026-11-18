@@ -16,6 +16,12 @@
   ([docs/RESULTS.md](https://github.com/qthullie/whenframe/blob/main/docs/RESULTS.md)).
 - Every encoder's indexing cost measured the same way: 4.3 (B/32), 7.2 (B/16)
   and 24.9 (So400m) CPU minutes per hour of video with OpenVINO.
+- A search weighs what is said and what is heard as chosen with its library's
+  model on the tuning sets, as the benchmarks measure each mode: sound weight
+  1.5 with whenframe's model, B/32 and So400m, and B/32 counts what is said up
+  to 5 seconds around a frame. Every mode used the standard one's before
+  (sound weight 2). whenframe's model keeps its own in its file
+  (`scripts/temporal.py export --settings`).
 - `scripts/train_data.py`, `scripts/msrvtt.py`, `scripts/temporal.py` and
   `scripts/compare.py` stream the training archives, train the model with JAX
   (`pip install 'whenframe[train]'`) and run the comparison; a head placing

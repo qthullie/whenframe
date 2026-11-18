@@ -840,6 +840,17 @@ through by default; if 24 holds as well, the README says that at the
 standard mode's cost whenframe finds more moments than its large mode. The
 test is run once, after the choices on the tuning sets are recorded here.
 
+**The tool searches as the candidates are measured** (decided during the
+choices, before the test). Each candidate is measured with the speech settings
+and the sound weight chosen for it on the tuning sets; the tool searched every
+mode with the standard one's (what is said within the moment, sound weight
+2). It now uses those chosen with the library's model: B/32's (what is said up
+to 5 seconds around a frame, sound weight 1.5), So400m's (sound weight 1.5),
+and those of whenframe's model, kept in its file (v2's: sound weight 1.5; v3's
+if it replaces v2). On the tuning sets, the standard mode's settings would
+cost v3-noteacher 1.6 points on YouCook2 and 0.8 on UnAV-100, 0.6 of the mean,
+and v2 0.8 on UnAV-100. The test itself is unchanged.
+
 **Licence of the weights.** Charades is licensed for non-commercial research
 (Allen Institute for AI), YouCook2 was published for research, TEMPO's
 sentences are under the BSD 2-Clause licence, and So400m's weights, the
