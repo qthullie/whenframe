@@ -366,6 +366,18 @@ class Benchmarks:
         hits = [x >= 0.5 for x in r["single_iou"]]
         return {"value": r["single"]["R1 IoU>=0.5"], "items": hits, "full": strip(r)}
 
+    # Charades-STA's 500 held-out training videos (seventh round): its tuning set, searched as its test
+    def charades_tuning_score(self, c: Candidate) -> dict:
+        from benchmark import run
+        from temporal import Charades
+
+        assert c.model == "siglip2-base", "the held-out videos are embedded by the standard mode's encoder only"
+        params = self.search_params(c.model, "frame_window_bank")
+        held = self.once("charades-tuning", lambda: Charades(didemo_bank(c.model), "frame_window_bank", params))
+        f = replace(held.f, emb=adapted(c, held.f.emb, held.f.times, held.f.starts, held.f.counts), _offsets={})
+        r = run(f, held.queries, held.text, held.method, held.params, per_query=True)
+        return {"value": r["single"]["R1 IoU>=0.5"], "items": [x >= 0.5 for x in r["single_iou"]], "full": strip(r)}
+
     # YouCook2: repeats skipped, speech added to the adaptive spans; a third of the videos for tuning
     def youcook2(self, c: Candidate):
         import youcook2
@@ -452,25 +464,33 @@ def candidate(spec: str) -> Candidate:
 
 TUNED = ROOT / "results" / "compare_tuned.json"
 TEST = ROOT / "results" / "compare_test.json"
+# the seventh round's: four tuning sets (Charades-STA's held-out videos added), and the test with model v3
+TUNED7 = ROOT / "results" / "round7_tuned.json"
+TEST7 = ROOT / "results" / "round7_test.json"
 
 
 def tune(args) -> None:
-    """Each candidate on the three tuning sets: its speech and sound weights chosen on the third and fourth rounds'
-    grids, and the mean of the three primary metrics (DiDeMo, YouCook2, UnAV-100; Charades-STA has none)."""
+    """Each candidate on the tuning sets: its speech and sound weights chosen on the third and fourth rounds' grids,
+    and the mean of the primary metrics: DiDeMo, YouCook2 and UnAV-100 (sixth round; Charades-STA had none), and
+    Charades-STA's 500 held-out training videos (seventh round, --round 7)."""
     b = Benchmarks(args)
-    out = json.loads(TUNED.read_text()) if TUNED.exists() else {}
+    path = TUNED7 if args.round == 7 else TUNED
+    out = json.loads(path.read_text()) if path.exists() else {}
     for spec in args.candidates.split(","):
         c = candidate(spec)
         d, y, u = b.didemo_score(c, "train"), b.youcook2_score(c, "tuning"), b.unav_score(c, "tuning")
-        out[c.name] = {"spec": spec, "model": c.model, "weights": c.weights, "alpha": c.alpha,
-                       "didemo": d["value"], "youcook2": y["value"], "unav": u["value"],
-                       "mean": float(np.mean([d["value"], y["value"], u["value"]])),
-                       "speech": y["speech"], "sound_weight": u["sound_weight"]}  # fmt: skip
+        values = {"didemo": d["value"], "youcook2": y["value"], "unav": u["value"]}
+        if args.round == 7:
+            values["charades"] = b.charades_tuning_score(c)["value"]
+        out[c.name] = {"spec": spec, "model": c.model, "weights": c.weights, "alpha": c.alpha, **values,
+                       "mean": float(np.mean(list(values.values()))), "speech": y["speech"],
+                       "sound_weight": u["sound_weight"]}  # fmt: skip
         r = out[c.name]
-        print(f"{c.name}: DiDeMo {100 * r['didemo']:.1f}, YouCook2 {100 * r['youcook2']:.1f} (speech "
+        held = f", Charades-STA {100 * r['charades']:.1f}" if "charades" in r else ""
+        print(f"{c.name}: DiDeMo {100 * r['didemo']:.1f}{held}, YouCook2 {100 * r['youcook2']:.1f} (speech "
               f"{r['speech']['weight']:g}), UnAV-100 {100 * r['unav']:.1f} (sound {r['sound_weight']:g}); "
               f"mean {100 * r['mean']:.2f}", flush=True)  # fmt: skip
-        TUNED.write_text(json.dumps(out, indent=1))
+        path.write_text(json.dumps(out, indent=1))
 
 
 def paired(a: dict, b: dict) -> dict:
@@ -487,11 +507,24 @@ def paired(a: dict, b: dict) -> dict:
     return {"wins": win, "losses": loss, "p": sign_test(win, loss)}
 
 
+def adapter_cost(b: Benchmarks, c: Candidate) -> dict:
+    """What whenframe's model adds to indexing, measured as in the fifth round: the CPU time (all threads) of running
+    it over DiDeMo's test frames, per hour of video."""
+    f, _, _ = b.didemo(Candidate("base"), "test")
+    t0 = time.process_time()
+    adapted(c, f.emb, f.times, f.starts, f.counts)
+    cpu, hours = time.process_time() - t0, float(f.durations.sum() / 3600)
+    return {"cpu_min_per_hour": cpu / 60 / hours, "cpu_ms_per_frame": 1000 * cpu / len(f.times),
+            "frames": len(f.times), "hours": hours}  # fmt: skip
+
+
 def evaluate(args) -> None:
     """Once: every candidate on the four test sets, with the weights chosen for it on the tuning sets."""
     from whenframe.speech import SpeechConfig
 
     tuned = json.loads(TUNED.read_text())
+    if args.round == 7:  # the sixth round's candidates keep the weights chosen for them then
+        tuned |= json.loads(TUNED7.read_text())
     b = Benchmarks(args)
     res, items = {"candidates": args.candidates.split(",")}, {}
     for name in res["candidates"]:
@@ -505,14 +538,23 @@ def evaluate(args) -> None:
         res[name] = {k: {"value": v["value"], "full": v["full"]} for k, v in scores.items()}
         res[name]["mean"] = float(np.mean([v["value"] for v in scores.values()]))
         res[name]["tuned"] = t
+        if args.round == 7 and c.weights is not None:
+            res[name]["adapter_cost"] = adapter_cost(b, c)
         print(f"{name}: " + ", ".join(f"{k} {100 * v['value']:.1f}" for k, v in scores.items())
               + f"; mean {100 * res[name]['mean']:.2f}", flush=True)  # fmt: skip
     names = res["candidates"]
     res["ranking"] = sorted(names, key=lambda n: -res[n]["mean"])
     res["pairs"] = {f"{a} vs {b_}": paired(items[a], items[b_]) for a in names for b_ in names if a != b_}
-    TEST.write_text(json.dumps(res, indent=1))
+    out = TEST7 if args.round == 7 else TEST
+    if args.round == 7:  # the sixth round's candidates, measured by the same code: the same numbers
+        before = json.loads(TEST.read_text())
+        res["sixth_round_unchanged"] = {
+            n: all(res[n][k]["value"] == before[n][k]["value"] for k in scores) for n in names if n in before
+        }
+        print(f"the sixth round's numbers again: {res['sixth_round_unchanged']}")
+    out.write_text(json.dumps(res, indent=1))
     print("ranking: " + " > ".join(f"{n} ({100 * res[n]['mean']:.2f})" for n in res["ranking"]))
-    print(f"wrote {TEST.relative_to(ROOT)}")
+    print(f"wrote {out.relative_to(ROOT)}")
 
 
 def cost(args) -> None:
@@ -569,6 +611,14 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("stage", choices=["extract", "assemble", "tune", "evaluate", "cost"])
     ap.add_argument("--cost-videos", type=int, default=100, help="cost: how many of DiDeMo's test videos")
+    ap.add_argument(
+        "--round",
+        type=int,
+        choices=[6, 7],
+        default=6,
+        help="tune, evaluate: the sixth round's or the "
+        "seventh's (Charades-STA's held-out videos among the tuning sets; results/round7_*.json)",
+    )
     ap.add_argument(
         "--candidates",
         default="b32,base,so400m,v1",

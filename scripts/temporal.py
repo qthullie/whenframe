@@ -52,8 +52,18 @@ QUERIES = CACHE / "didemo_all_queries.json"
 OUT = ROOT / "results" / "temporal"
 SEGMENT = 5.0  # DiDeMo's moments are counted in 5-second segments
 FIXED = ("scale", "bias", "lam", "beta")  # SigLIP 2's logit scale and bias, the search's bank correction
-# other training clips (sixth round): frames, description embeddings, descriptions
-SOURCES = {"msrvtt": (CACHE / "msrvtt_openvino.npz", CACHE / "msrvtt_text.npy", CACHE / "msrvtt_queries.json")}
+# the training collections: their frames, their sets of descriptions (NAME_queries.json, NAME_text.npy and, as the
+# teacher reads them, NAME_text_so400m.npy) and the teacher's frames (within the frames' file when None).
+# DiDeMo's (fifth round), MSR-VTT's (sixth), Charades-STA's, YouCook2's and TEMPO-HL's (seventh, on DiDeMo's videos)
+COLLECTIONS = {
+    "didemo": ("didemo_all_openvino", ("didemo_all", "tempo"), "didemo_teacher"),
+    "msrvtt": ("msrvtt_openvino", ("msrvtt",), "msrvtt_teacher"),
+    "charades": ("charades_train_openvino", ("charades_train",), None),
+    "youcook2": ("youcook2_train_openvino", ("youcook2_train",), None),
+}
+# the teacher (seventh round): SigLIP 2 So400m, its logit scale, query bank and the strength the tool gives it
+TEACHER_SCALE, TEACHER_LAM, TEACHER_BETA = 109.8812, 1.0, 50.0
+TEACHER_BANK = CACHE / "didemo_bank_text_siglip2-so400m_lower.npy"
 
 
 def stem(name: str) -> str:
@@ -231,11 +241,37 @@ def bank_offsets(new, bank, beta):
     return (jax.nn.logsumexp(beta * (new @ bank.T), axis=-1) - jnp.log(bank.shape[0])) / beta
 
 
+def distillation(z, teacher):
+    """The teacher's losses (seventh round): Kullback-Leibler divergences from So400m's distributions to the model's
+    (knowledge distillation, Hinton et al., 2015; for text-video retrieval, TeachCLIP, Tian et al., CVPR 2024), both
+    scored as the search scores, over the frames the teacher saw: each description's distribution over the batch's
+    videos, by their smooth best frames, and over the frames of its own video. z: the model's (V, Q, L) logits."""
+    import jax
+    import jax.numpy as jnp
+
+    tx, seen, tq, valid, tbank = teacher
+    off = bank_offsets(tx, tbank, TEACHER_BETA)
+    zt = TEACHER_SCALE * (jnp.einsum("vld,qd->vql", tx, tq) - TEACHER_LAM * off[:, None, :])
+    zt = jax.lax.stop_gradient(jnp.where(seen[:, None, :], zt, -1e9))
+    zs = jnp.where(seen[:, None, :], z, -1e9)
+
+    def kl(a, b, axis):  # from softmax(a) to softmax(b), along the axis
+        return jnp.sum(jax.nn.softmax(a, axis) * (jax.nn.log_softmax(a, axis) - jax.nn.log_softmax(b, axis)), axis)
+
+    only = valid[:, None]  # the videos the teacher saw, for every description
+    best_t = jnp.where(only, jax.nn.logsumexp(zt, -1), -1e9)
+    best_s = jnp.where(only, jax.nn.logsumexp(zs, -1), -1e9)
+    between = kl(best_t, best_s, 0)  # (Q,)
+    within = kl(jnp.diagonal(zt, axis1=0, axis2=1).T, jnp.diagonal(zs, axis1=0, axis2=1).T, -1)
+    n = jnp.maximum(jnp.sum(valid), 1)
+    return jnp.sum(jnp.where(valid, between, 0.0)) / n, jnp.sum(jnp.where(valid, within, 0.0)) / n
+
+
 def loss(p, batch, layers, heads, key, cfg):
     import jax
     import jax.numpy as jnp
 
-    x, t, mask, q, inside, start, end, bank = batch
+    x, t, mask, q, inside, start, end, bank = batch[:8]
     key, sub = jax.random.split(key)
     new = forward(p, x, t, mask, layers, heads, key, cfg["dropout"])
     off = bank_offsets(new, bank, p["beta"])  # (B, L), from a part of the bank drawn for the batch
@@ -257,41 +293,112 @@ def loss(p, batch, layers, heads, key, cfg):
     within = jnp.mean(jax.nn.logsumexp(own, axis=-1) - jax.nn.logsumexp(jnp.where(inside, own, -1e9), axis=-1))
     leash = jnp.sum((1 - jnp.sum(new * x, -1)) * mask) / jnp.sum(mask)
     total = cfg["between"] * between + cfg["within"] * within + cfg["leash"] * leash
+    zero = jnp.float32(0.0)
+    taught = (zero, zero)
+    if cfg["distil"]:  # the teacher's frames and descriptions follow the batch's own
+        taught = distillation(z, batch[8:])
+        total = total + cfg["distil"] * (taught[0] + taught[1])
     if not cfg["head"]:  # the adapter alone
-        zero = jnp.float32(0.0)
-        return total, (between, within, leash, zero, zero, zero)
+        return total, (between, within, leash, zero, zero, zero, *taught)
     sg = jax.lax.stop_gradient  # the head learns from the adapter's output; its losses do not reshape it
     found, parts = head_loss(p, sg(new), t, mask, q, sg(off), inside, start, end, heads, cfg["negatives"], sub)
-    return total + cfg["head"] * found, (between, within, leash, *parts)
+    return total + cfg["head"] * found, (between, within, leash, *parts, *taught)
 
 
 # ---------------------------------------------------------------- data
 class Videos:
-    """Frames of the training videos and their descriptions, in batches."""
+    """Frames of the training videos and their descriptions, in batches.
 
-    def __init__(self, seed: int, bank: np.ndarray, bank_sample: int, extra: tuple[str, ...] = ()):
-        self.bank, self.bank_sample = bank.astype(np.float32), bank_sample
-        sources = [(TRAIN, TEXTS, QUERIES)] + [SOURCES[e] for e in extra]
-        zs = [np.load(f) for f, _, _ in sources]
+    extra: the collections and sets of descriptions besides DiDeMo's (COLLECTIONS; "tempo" for TEMPO-HL's).
+    mix: "videos", a batch's videos drawn alike (fifth and sixth rounds); "sqrt", each item's collection drawn with
+    probability proportional to the square root of its number of descriptions, then one of them (seventh).
+    teacher: the collections whose frames the teacher embedded, for the teacher's losses."""
+
+    def __init__(self, seed: int, bank: np.ndarray, bank_sample: int, extra: tuple[str, ...] = (),
+                 mix: str = "videos", teacher: tuple[str, ...] = ()):  # fmt: skip
+        self.bank, self.bank_sample, self.mix = bank.astype(np.float32), bank_sample, mix
+        names = ["didemo"] + [c for c in COLLECTIONS if c in extra and c != "didemo"]
+        zs = [np.load(CACHE / f"{COLLECTIONS[c][0]}.npz") for c in names]
         self.names = [n for z in zs for n in z["names"].tolist()]
         self.emb = np.concatenate([z["emb"] for z in zs])
         self.times, self.keep = np.concatenate([z["times"] for z in zs]), np.concatenate([z["keep"] for z in zs])
         self.counts = np.concatenate([z["counts"] for z in zs])
         self.starts = np.concatenate([[0], np.cumsum(self.counts)[:-1]])
         self.durations = np.concatenate([z["durations"] for z in zs])
-        index = {n: i for i, n in enumerate(self.names)}
-        self.text = np.concatenate([np.load(t) for _, t, _ in sources])
-        self.queries = [q for _, _, qs in sources for q in json.loads(qs.read_text())]
+        sets = [(i, s) for i, c in enumerate(names) for j, s in enumerate(COLLECTIONS[c][1]) if j == 0 or s in extra]
+        first_video = np.cumsum([0] + [len(z["names"]) for z in zs])
+        index = [{n: first_video[i] + k for k, n in enumerate(z["names"].tolist())} for i, z in enumerate(zs)]
+        self.text = np.concatenate([np.load(CACHE / f"{s}_text.npy") for _, s in sets])
+        self.queries, self.collection = [], []
+        for i, s in sets:
+            qs = json.loads((CACHE / f"{s}_queries.json").read_text())
+            self.queries += qs
+            self.collection += [i] * len(qs)
         self.by_video: dict[int, list[int]] = {}
         for qi, q in enumerate(self.queries):
-            if q["video"] in index:  # the others' videos were not embedded (yet, or could not be read)
-                self.by_video.setdefault(index[q["video"]], []).append(qi)
+            v = index[self.collection[qi]].get(q["video"])
+            if v is not None:  # the others' videos were not embedded (yet, or could not be read)
+                self.by_video.setdefault(int(v), []).append(qi)
         self.videos = sorted(self.by_video)
+        self.video_of = {qi: v for v, qis in self.by_video.items() for qi in qis}
+        found = [qi for qis in self.by_video.values() for qi in qis]
+        self.of_collection = [[qi for qi in found if self.collection[qi] == i] for i in range(len(names))]
+        size = np.array([len(c) for c in self.of_collection], dtype=np.float64)
+        self.weights = list(np.sqrt(size) / np.sqrt(size).sum())
+        self.mixed = {c: (int(n), float(w)) for c, n, w in zip(names, size, self.weights, strict=True)}
+        self.teacher_emb = None
+        if teacher:
+            self.load_teacher(names, zs, sets, first_frame=np.cumsum([0] + [len(z["times"]) for z in zs]),
+                              teacher=teacher)  # fmt: skip
         self.rng = random.Random(seed)
         self.np_rng = np.random.default_rng(seed)
 
+    def load_teacher(self, names, zs, sets, first_frame, teacher) -> None:
+        """So400m's embeddings of the frames it saw, each frame's row among them (-1: unseen), and of the
+        descriptions (zero, and not counted, where the teacher did not read them)."""
+        self.teacher_index = np.full(len(self.times), -1, np.int64)
+        chunks, n = [], 0
+        for i, c in enumerate(names):
+            if c not in teacher:
+                continue
+            z = zs[i] if COLLECTIONS[c][2] is None else np.load(CACHE / f"{COLLECTIONS[c][2]}.npz")
+            rows = first_frame[i] + z["teacher_rows"]
+            self.teacher_index[rows] = n + np.arange(len(rows))
+            chunks.append(z["teacher"])
+            n += len(rows)
+        self.teacher_emb = np.concatenate(chunks)
+        texts, ok = [], []
+        for i, s in sets:
+            path = CACHE / f"{s}_text_so400m.npy"
+            count = len(json.loads((CACHE / f"{s}_queries.json").read_text()))
+            if names[i] in teacher and path.exists():
+                texts.append(np.load(path))
+                ok.append(np.ones(count, bool))
+            else:
+                texts.append(np.zeros((count, self.teacher_emb.shape[1]), np.float16))
+                ok.append(np.zeros(count, bool))
+        self.teacher_text, self.teacher_read = np.concatenate(texts), np.concatenate(ok)
+        self.teacher_bank = np.load(TEACHER_BANK).astype(np.float32)
+        assert len(self.teacher_bank) == len(self.bank), "the teacher's bank holds the same descriptions"
+
+    def draw(self, n: int) -> list[tuple[int, int]]:
+        """n (video, description) pairs, by the mixing weights, no video twice."""
+        out, seen = [], set()
+        while len(out) < n:
+            c = self.rng.choices(range(len(self.weights)), weights=self.weights)[0]
+            qi = self.rng.choice(self.of_collection[c])
+            v = self.video_of[qi]
+            if v not in seen:
+                seen.add(v)
+                out.append((v, qi))
+        return out
+
     def moment(self, qi: int, v: int) -> tuple[float, float]:
-        times = self.queries[qi]["times"]
+        q = self.queries[qi]
+        if "seconds" in q:  # Charades-STA, YouCook2: the moment's start and end, in seconds
+            a, b = q["seconds"]
+            return float(a), min(float(b), max(float(self.durations[v]), float(a) + 1.0))
+        times = q["times"]
         if times is None:  # a description of the whole clip
             return 0.0, max(float(self.durations[v]), 1.0)
         if self.rng.random() < 0.5:
@@ -301,13 +408,19 @@ class Videos:
         return a * SEGMENT, min((b + 1) * SEGMENT, max(float(self.durations[v]), a * SEGMENT + 1.0))
 
     def batch(self, n: int, length: int = temporal.WINDOW):
-        vids = self.rng.sample(self.videos, n)
+        pairs = self.draw(n) if self.mix == "sqrt" else None
+        vids = self.rng.sample(self.videos, n) if pairs is None else [v for v, _ in pairs]
         x = np.zeros((n, length, 768), np.float32)
         t = np.zeros((n, length), np.float32)
         mask = np.zeros((n, length), bool)
         inside = np.zeros((n, length), bool)
         q = np.zeros((n, 768), np.float32)
         ends = np.zeros((n, 2), np.float32)
+        taught = self.teacher_emb is not None
+        if taught:
+            width = self.teacher_emb.shape[1]
+            tx, seen = np.zeros((n, length, width), np.float32), np.zeros((n, length), bool)
+            tq, valid = np.zeros((n, width), np.float32), np.zeros(n, bool)
         for i, v in enumerate(vids):
             s, c = int(self.starts[v]), int(self.counts[v])
             rows = np.arange(s, s + c)
@@ -315,11 +428,16 @@ class Videos:
                 rows = rows[self.keep[s : s + c]]
             if self.rng.random() < 0.3:  # and fewer frames still, sometimes
                 rows = rows[np.sort(self.rng.sample(range(len(rows)), max(1, int(len(rows) * 0.7))))]
-            qi = self.rng.choice(self.by_video[v])
+            qi = self.rng.choice(self.by_video[v]) if pairs is None else pairs[i][1]
             a, b = self.moment(qi, v)
             tt = self.times[rows].astype(np.float32)
             inn = (tt + 0.5 >= a) & (tt + 0.5 < b)
-            if inn.any() and self.rng.random() < 0.5:
+            if len(rows) > length and "seconds" in self.queries[qi]:
+                # a long video (YouCook2): `length` frames around one frame of the moment, placed at random
+                anchor = int(self.rng.choice(np.flatnonzero(inn))) if inn.any() else self.rng.randrange(len(rows))
+                lo = self.rng.randint(max(0, anchor - length + 1), min(anchor, len(rows) - length))
+                rows, tt, inn = rows[lo : lo + length], tt[lo : lo + length], inn[lo : lo + length]
+            elif inn.any() and self.rng.random() < 0.5:
                 # a window that starts or ends elsewhere than the video, as in a long video: no frame of the
                 # moment is cut, so what is learnt of a moment's ends is not where DiDeMo's videos start
                 first, last = np.flatnonzero(inn)[[0, -1]]
@@ -333,8 +451,14 @@ class Videos:
             x[i, :k], t[i, :k], mask[i, :k], inside[i, :k] = self.emb[rows], tt, True, inn
             q[i] = self.text[qi]
             ends[i] = a, b
-        part = self.bank[self.np_rng.choice(len(self.bank), self.bank_sample, replace=False)]
-        return x, t, mask, q, inside, ends[:, 0], ends[:, 1], part
+            if taught and self.teacher_read[qi]:
+                row = self.teacher_index[rows]
+                if (row >= 0).any():
+                    tx[i, :k][row >= 0] = self.teacher_emb[row[row >= 0]]
+                    seen[i, :k], tq[i], valid[i] = row >= 0, self.teacher_text[qi], True
+        drawn = self.np_rng.choice(len(self.bank), self.bank_sample, replace=False)
+        out = (x, t, mask, q, inside, ends[:, 0], ends[:, 1], self.bank[drawn])
+        return out + ((tx, seen, tq, valid, self.teacher_bank[drawn]) if taught else ())
 
 
 # ---------------------------------------------------------------- checking on the tuning videos
@@ -373,6 +497,38 @@ class DiDeMo:
                     "head_single_R1@0.5": h["single"]["R1 IoU>=0.5"], "rescored_R@5": w["corpus"]["R@5 IoU>=0.5"],
                     "rescored_single_R1@0.5": w["single"]["R1 IoU>=0.5"]}  # fmt: skip
         return out
+
+
+class Charades:
+    """Charades-STA's 500 held-out training videos (seventh round), searched as its test: every frame, the moment
+    placed in the given video with DiDeMo's parameters; R1 at IoU >= 0.5."""
+
+    def __init__(self, bank: np.ndarray, method: str, params: dict):
+        from benchmark import Frozen
+
+        z = np.load(CACHE / "charades_tuning_openvino.npz")
+        names = z["names"].tolist()
+        self.f = Frozen(names=names, emb=z["emb"].astype(np.float32), times=z["times"], starts=z["starts"],
+                        counts=z["counts"], durations=z["durations"].astype(np.float64), keep=z["keep"],
+                        cuts=[[] for _ in names])  # fmt: skip
+        self.f.bank = bank
+        index = {n: i for i, n in enumerate(names)}
+        found = [(i, q) for i, q in enumerate(json.loads((CACHE / "charades_tuning_queries.json").read_text()))
+                 if q["video"] in index]  # fmt: skip
+        durations = {n: float(d) for n, d in zip(names, z["durations"], strict=True)}
+        self.queries = [{"text": q["text"], "video": index[q["video"]],
+                         "moment": (max(0.0, q["seconds"][0]), min(q["seconds"][1], durations[q["video"]]))}
+                        for _, q in found]  # fmt: skip
+        self.text = np.load(CACHE / "charades_tuning_text.npy").astype(np.float32)[[i for i, _ in found]]
+        self.method, self.params = method, params
+
+    def score(self, p: dict | None) -> float:
+        from benchmark import run
+
+        f = self.f
+        if p is not None:
+            f = replace(f, emb=adapt(p, f.emb, f.times, f.starts, f.counts), _offsets={})
+        return run(f, self.queries, self.text, self.method, self.params)["single"]["R1 IoU>=0.5"]
 
 
 # ---------------------------------------------------------------- the head in numpy, as the search would run it
@@ -555,7 +711,7 @@ def calibrated_bias(p: dict, batch) -> float:
     and those of other videos' frames, rather than SigLIP 2's own bias, far below both."""
     from whenframe.bank import offsets
 
-    x, _, mask, q, inside, _, _, bank = batch
+    x, _, mask, q, inside, _, _, bank = batch[:8]
     a, lam, beta = float(np.exp(p["scale"])), float(p["lam"]), float(p["beta"])
     off = offsets(x.reshape(-1, x.shape[-1]), bank, beta).reshape(mask.shape)
     own = a * (np.einsum("nld,nd->nl", x, q) - lam * off) + float(p["bias"])
@@ -568,10 +724,13 @@ def train(args) -> None:
     import jax.numpy as jnp
 
     cfg = {"between": args.between, "within": args.within, "leash": args.leash, "dropout": args.dropout,
-           "head": args.head, "negatives": args.negatives, "between_loss": args.between_loss}  # fmt: skip
+           "head": args.head, "negatives": args.negatives, "between_loss": args.between_loss,
+           "distil": args.distil}  # fmt: skip
     tuning = DiDeMo(args)
     extra = tuple(e for e in (args.extra or "").split(",") if e)
-    data = Videos(args.seed, tuning.kept.bank, args.bank_sample, extra)
+    teacher = tuple(e for e in (args.teacher or "").split(",") if e) if args.distil else ()
+    data = Videos(args.seed, tuning.kept.bank, args.bank_sample, extra, args.mix, teacher)
+    charades = Charades(tuning.kept.bank, tuning.method, tuning.params) if args.check_charades else None
     key = jax.random.PRNGKey(args.seed)  # the fifth round's runs: one key for the weights and the training
     init_key = key if args.init_seed is None else jax.random.PRNGKey(args.init_seed)
     params = jax.tree.map(jnp.asarray, init(init_key, args.width, args.layers, args.heads, lam=tuning.params["lam"],
@@ -601,6 +760,8 @@ def train(args) -> None:
         return params, adam_m, adam_v, value, parts
 
     base = tuning.score(None)
+    if charades is not None:
+        base["charades_R1@0.5"] = charades.score(None)
     where = (
         "annotations",
         "train_annotations",
@@ -613,9 +774,10 @@ def train(args) -> None:
         "out",
         "model",
     )  # local paths: not logged
-    log = {"config": {k: v for k, v in vars(args).items() if k not in where}, "tuning_without": base, "checks": []}
+    log = {"config": {k: v for k, v in vars(args).items() if k not in where}, "tuning_without": base, "checks": [],
+           "collections": data.mixed}  # fmt: skip
     print(f"tuning videos without the model: R@5 {100 * base['R@5']:.1f}", flush=True)
-    best, best_params = -1.0, None
+    best, best_params, best_step = -1.0, None, 0
     t0 = time.time()
     for i in range(args.steps):
         warm = min(1.0, (i + 1) / args.warmup) * 0.5 * (1 + math.cos(math.pi * i / args.steps))
@@ -625,20 +787,26 @@ def train(args) -> None:
         if (i + 1) % args.every == 0 or i + 1 == args.steps:
             p = numpy_params(jax.device_get(params), args.layers, args.heads)
             s = tuning.score(p, with_head=args.head > 0)
-            names = ("between", "within", "leash", "frames", "rank", "bounds")
+            if charades is not None:
+                s["charades_R1@0.5"] = charades.score(p)
+            names = ("between", "within", "leash", "frames", "rank", "bounds", "taught_between", "taught_within")
             losses = {k: float(v) for k, v in zip(names, parts, strict=True)}
             log["checks"].append({"step": i + 1, "loss": float(value), **losses, **s, "seconds": time.time() - t0})
             shown = ", ".join(f"{k} {100 * v:.1f}" for k, v in s.items())
             print(f"step {i + 1}: loss {float(value):.3f} ({', '.join(f'{k} {v:.3f}' for k, v in losses.items())}); "
                   f"tuning {shown}; {time.time() - t0:.0f} s", flush=True)  # fmt: skip
             score = max(s[k] for k in ("R@5", "head_R@5", "rescored_R@5") if k in s)
+            if charades is not None:  # the seventh round's check: DiDeMo's and Charades-STA's tuning videos alike
+                score = (s["R@5"] + s["charades_R1@0.5"]) / 2
             if score > best:
-                best, best_params = score, p
+                best, best_params, best_step = score, p, i + 1
     OUT.mkdir(parents=True, exist_ok=True)
     np.savez(OUT / f"{args.name}.npz", **best_params)
     log["best"] = best
+    log["best_step"] = best_step
     (OUT / f"{args.name}.json").write_text(json.dumps(log, indent=1))
-    print(f"best tuning R@5 {100 * best:.1f} (without: {100 * base['R@5']:.1f}); wrote {OUT / args.name}.npz")
+    print(f"best check {100 * best:.1f} at step {best_step} (without the model: R@5 {100 * base['R@5']:.1f}); "
+          f"wrote {OUT / args.name}.npz")  # fmt: skip
 
 
 def versus(a, b) -> dict:
@@ -796,7 +964,24 @@ def main() -> None:
     ap.add_argument("--every", type=int, default=500, help="steps between two checks on the tuning videos")
     ap.add_argument("--seed", type=int, default=0, help="the data's order and draws")
     ap.add_argument("--init-seed", type=int, help="the initial weights' (default: --seed); a soup's runs share it")
-    ap.add_argument("--extra", help="other training clips besides DiDeMo's, comma-separated: msrvtt")
+    ap.add_argument(
+        "--extra",
+        help="other training collections besides DiDeMo's, comma-separated: msrvtt, charades, "
+        "youcook2, tempo (TEMPO-HL's sentences on DiDeMo's videos)",
+    )
+    ap.add_argument(
+        "--mix",
+        choices=["videos", "sqrt"],
+        default="videos",
+        help="a batch's videos drawn alike, or each collection by the square root of its descriptions",
+    )
+    ap.add_argument("--distil", type=float, default=0.0, help="weight of the teacher's losses (So400m)")
+    ap.add_argument("--teacher", default="charades", help="the collections whose frames the teacher saw")
+    ap.add_argument(
+        "--check-charades",
+        action="store_true",
+        help="check on Charades-STA's held-out videos too, the best mean with DiDeMo's kept",
+    )
     ap.add_argument(
         "--between-loss",
         choices=["infonce", "sigmoid"],

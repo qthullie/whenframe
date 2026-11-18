@@ -1,3 +1,4 @@
+import json
 import sys
 from pathlib import Path
 
@@ -161,3 +162,77 @@ def test_numpy_runs_the_model_as_the_training_does():
     fg_np, reach_np = training.numpy_head(p, new, t, q, off)
     assert np.allclose(np.asarray(fg)[0], fg_np, atol=1e-4)
     assert np.allclose(np.asarray(reach)[0], reach_np, atol=1e-4)
+
+
+def unit(x: np.ndarray) -> np.ndarray:
+    return (x / np.linalg.norm(x, axis=-1, keepdims=True)).astype(np.float32)
+
+
+def test_the_teacher_teaches_nothing_to_a_model_that_scores_as_it_does():
+    pytest.importorskip("jax")
+    import jax.numpy as jnp
+
+    training = script()
+    rng = np.random.default_rng(6)
+    tx, tq, tbank = (
+        unit(rng.standard_normal((4, 6, 8))),
+        unit(rng.standard_normal((4, 8))),
+        unit(rng.standard_normal((16, 8))),
+    )
+    seen = np.ones((4, 6), bool)
+    seen[1, 3:] = False  # frames the teacher did not see
+    valid = np.array([True, True, False, True])  # a description it did not read
+    off = np.asarray(training.bank_offsets(jnp.asarray(tx), jnp.asarray(tbank), training.TEACHER_BETA))
+    z = training.TEACHER_SCALE * (np.einsum("vld,qd->vql", tx, tq) - training.TEACHER_LAM * off[:, None, :])
+
+    def taught(z):
+        out = training.distillation(jnp.asarray(z), tuple(jnp.asarray(a) for a in (tx, seen, tq, valid, tbank)))
+        return [float(v) for v in out]
+
+    assert np.allclose(taught(z), 0.0, atol=1e-5)
+    other = z.copy()
+    other[1, :, 3:] += 5.0  # unseen frames
+    other[:, 2, :] -= 3.0  # the description not read
+    other[2] += 2.0  # its video
+    assert np.allclose(taught(other), 0.0, atol=1e-5)
+    best = [np.logaddexp.reduce(z[v, 0][seen[v]]) if valid[v] else -np.inf for v in range(4)]
+    other[int(np.argmax(best)), 0, :] -= 60.0  # the teacher's favourite video for a description, put last
+    between, within = taught(other)
+    assert between > 1e-3 and abs(within) < 1e-5
+    other[0, 0, int(np.argmax(z[0, 0]))] -= 60.0  # the teacher's favourite frame of its own video
+    assert taught(other)[1] > 1e-3
+
+
+def test_a_long_video_is_cut_around_its_moment_and_the_teacher_follows(tmp_path, monkeypatch):
+    training = script()
+    rng = np.random.default_rng(7)
+
+    def collection(name, n, query, teacher=False):
+        arrays = {"names": np.array([name]), "emb": unit(rng.standard_normal((n, 768))).astype(np.float16),
+                  "times": np.arange(n, dtype=np.float32), "keep": np.ones(n, bool), "counts": np.array([n]),
+                  "durations": np.array([float(n)], np.float32)}  # fmt: skip
+        if teacher:
+            arrays |= {"teacher": unit(rng.standard_normal((n // 2, 12))).astype(np.float16),
+                       "teacher_rows": np.arange(0, n, 2)}  # fmt: skip
+            np.save(tmp_path / f"{name}_q_text_so400m.npy", unit(rng.standard_normal((1, 12))).astype(np.float16))
+        np.savez(tmp_path / f"{name}.npz", **arrays)
+        (tmp_path / f"{name}_q_queries.json").write_text(json.dumps([{"video": name, "text": "x", **query}]))
+        np.save(tmp_path / f"{name}_q_text.npy", unit(rng.standard_normal((1, 768))).astype(np.float16))
+
+    collection("short", 20, {"times": [[1, 1]]})
+    collection("long", 300, {"seconds": [200.0, 206.0]}, teacher=True)
+    np.save(tmp_path / "teacher_bank.npy", unit(rng.standard_normal((8, 12))))
+    monkeypatch.setattr(training, "CACHE", tmp_path)
+    monkeypatch.setattr(training, "TEACHER_BANK", tmp_path / "teacher_bank.npy")
+    monkeypatch.setattr(training, "COLLECTIONS", {"didemo": ("short", ("short_q",), None),
+                                                  "youcook2": ("long", ("long_q",), None)})  # fmt: skip
+    data = training.Videos(0, unit(rng.standard_normal((8, 768))), 4, ("youcook2",), "sqrt", ("youcook2",))
+    for _ in range(20):
+        x, t, mask, q, inside, start, end, bank, tx, seen, tq, valid, tbank = data.batch(2)
+        long = int(np.flatnonzero(start == 200.0)[0])
+        assert mask[long].sum() <= temporal.WINDOW and inside[long].any()
+        assert ((t[long] + 0.5 >= 200.0) & (t[long] + 0.5 < 206.0) & mask[long] == inside[long]).all()
+        assert valid[long] and not valid[1 - long]  # the teacher saw the long video only
+        assert (seen[long] == (mask[long] & (t[long] % 2 == 0))).all()  # every second frame
+        assert np.allclose(np.linalg.norm(tx[long][seen[long]], axis=-1), 1.0, atol=1e-2)
+        assert bank.shape == (4, 768) and tbank.shape == (4, 12)
