@@ -725,3 +725,124 @@ same sets). The standard mode: 31.3, 29.4 and 41.0 %, mean 33.92; v1: 34.1,
 v2 is the soup at alpha 1 (no scaling did better), exported in float16 as
 v1 was (`results/temporal/temporal-siglip2-base-v2.npz`), the file the test
 runs. Of the three published ideas, only the soup is kept.
+
+## Seventh round: whenframe's model v3, taught by So400m, trained on more moments
+
+Written before any of its numbers was computed. The sixth round ranked
+SigLIP 2 So400m (`--mode large`) first, 2.0 points of the mean above model v2,
+for 3.4 times v2's cost of indexing. The question: can whenframe's model, at
+the standard mode's cost, find more moments than So400m?
+
+### What changes
+
+**More moments, with their start and end.** v2 learnt where moments are from
+DiDeMo's 5-second segments only (MSR-VTT's clips are described whole). v3 adds
+three sets of training descriptions, each placing a moment in time:
+
+- Charades-STA's 12,408 training sentences (Gao et al., ICCV 2017, as copied
+  with 2D-TAN, microsoft/VideoX), on 5,338 of Charades' training videos
+  (Sigurdsson et al., ECCV 2016), read from the full Charades archive on the
+  Hugging Face Hub (lmms-eval/charades_sta) by byte ranges, one at a time,
+  none kept. 500 of these videos, drawn once (seed 0,
+  `results/charades_tuning_videos.txt`), are held out as Charades-STA's tuning
+  set, which it did not have; none of its 1,334 test videos is a training
+  video;
+- YouCook2's training steps (Zhou et al., AAAI 2018): 8,815 steps of 1,139
+  training videos, 1,106 of them in the copy nguyenminh04/youcook2-videos;
+  none is one of the benchmark's 404 validation videos (tuning and test), and
+  none a UnAV-100 video (by YouTube identifier);
+- TEMPO-HL's sentences on DiDeMo's training videos (Hendricks et al., EMNLP
+  2018, BSD 2-Clause) that are not DiDeMo's own: moments told by what happens
+  before, after or while another, on the same 5-second segments; the 500
+  tuning videos left out.
+
+DiDeMo's training videos and MSR-VTT's clips stay, as in v2. The copy of
+UnAV-100 read for the fourth round holds only its test videos (VGGSound's are
+on YouTube): nothing of UnAV-100 is trained on, and it stays the test of what
+the model has never seen. The frames are those the tool indexes: one a
+second, SigLIP 2 base with OpenVINO; Charades' every frame with repeats
+marked, as DiDeMo's training videos; YouCook2's with repeats skipped, as the
+benchmark's (`scripts/moments_data.py`).
+
+**A teacher.** Knowledge distillation (Hinton et al., 2015), as TeachCLIP
+taught a light text-video retrieval model with stronger ones (Tian et al.,
+CVPR 2024): So400m embeds every second frame of Charades-STA's training
+videos (not the 500 held out), at the base model's instants, and their
+descriptions (lower case, as chosen for it in the fourth round). Two losses
+are added, each the Kullback-Leibler divergence from the teacher's
+distribution to the model's, both scored as the search scores
+(bank-corrected cosine times the encoder's own logit scale; So400m's bank
+strength and beta for the teacher), over the frames the teacher saw:
+
+- between videos: each description's distribution over the batch's videos,
+  by their smooth best frames;
+- within a video: its distribution over the frames of its own video.
+
+If the teacher's losses do better on the tuning sets with Charades-STA's
+frames alone, So400m also embeds every second frame of DiDeMo's training
+videos and of MSR-VTT's clips (their archives read again) and their
+descriptions, and the model trained with them is kept if it does better
+again.
+
+**Mixing.** Each item of a batch comes from one collection (DiDeMo with
+TEMPO-HL, MSR-VTT, Charades-STA, YouCook2) drawn with probability
+proportional to the square root of its number of descriptions (sampling with
+a temperature, as multilingual models mix languages: XLM-R, Conneau et al.,
+2020), then one of its descriptions, one per video in a batch. A moment given
+in seconds holds the frames whose middle is inside it; a long video
+(YouCook2) is cut to 32 frames placed at random around the moment. The
+fifth round's augmentations are kept.
+
+**Checked as it trains.** On DiDeMo's 500 tuning videos (R@5, default
+search) and on Charades-STA's 500 held-out videos (R1 at IoU >= 0.5 in the
+given video, every frame, DiDeMo's parameters, as its test); the check with
+the best mean of the two is kept; 6,000 steps, a check every 500.
+
+### Choices on the tuning sets
+
+Made in this order, each kept only if it raises the rule's mean over the four
+tuning sets: DiDeMo's 500 tuning videos (R@5), Charades-STA's 500 held-out
+videos (R1 at IoU >= 0.5), YouCook2's tuning steps (R@5, speech and spans)
+and UnAV-100's tuning videos (P@10, frames and sound), each candidate's
+speech and sound weights chosen on them as in the sixth round:
+
+1. the teacher's losses (weight 1), and then the teacher's DiDeMo and
+   MSR-VTT frames, as above;
+2. the leash's weight, 100 (v1, v2) or 30;
+3. the adapter's size, width 256 and two layers (v1, v2) or width 512 and four;
+4. a soup of three runs from the same initialisation (data seeds 0, 1, 2);
+5. alpha in {0.25, 0.5, 0.75, 1} (WiSE-FT, as in the sixth round).
+
+Reported beside, deciding nothing: v3's recipe trained without
+Charades-STA's videos, and without YouCook2's, each measured on the test it
+left out. The difference with v3 is the part of v3's gain there that comes
+from having trained on that collection; the rest is what a collection the
+model has never seen, such as a family's videos, can expect.
+
+### Candidates and criteria
+
+The sixth round's five, searched as in the sixth round (their numbers
+recomputed by the same code, and checked equal to the sixth round's), and
+v3; the same four primary metrics and the same rule. Charades-STA and
+YouCook2 are no longer zero-shot for v3: as DiDeMo since the fifth round, it
+has seen their training videos, never their test videos. UnAV-100 stays
+zero-shot for every candidate. v3's cost of indexing is measured as v1's was
+in the fifth round.
+
+24. v3's mean of the four primary metrics is higher than So400m's, with a
+    sign test p < 0.05.
+25. v3's mean is higher than v2's, with p < 0.05.
+26. v3 loses at most 1 point on each of the four tests against SigLIP 2
+    B/16, UnAV-100 among them.
+
+If 25 and 26 hold, v3 replaces v2 as the model a new standard library goes
+through by default; if 24 holds as well, the README says that at the
+standard mode's cost whenframe finds more moments than its large mode. The
+test is run once, after the choices on the tuning sets are recorded here.
+
+**Licence of the weights.** Charades is licensed for non-commercial research
+(Allen Institute for AI), YouCook2 was published for research, TEMPO's
+sentences are under the BSD 2-Clause licence, and So400m's weights, the
+teacher's, under the Apache License 2.0. v3's weights, as v2's, are provided
+for research and non-commercial use; whenframe's code stays under the MIT
+licence.
