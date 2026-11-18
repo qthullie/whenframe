@@ -16,5 +16,14 @@
   "encode_cpu_min_per_hour": 1.6185840652064325,
   "cpu_min_per_hour": 4.294652209409991,
   "encode_ms_per_frame": 31.09360101116499
+ },
+ "siglip2-so400m": {
+  "videos": 100,
+  "hours": 1.5198605494444437,
+  "frames": 4748,
+  "decode_cpu_min_per_hour": 2.583528645507557,
+  "encode_cpu_min_per_hour": 22.318576055590093,
+  "cpu_min_per_hour": 24.90210470109765,
+  "encode_ms_per_frame": 428.6578340353845
  }
 }
