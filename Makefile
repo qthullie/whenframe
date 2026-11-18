@@ -161,15 +161,15 @@ round6:
 # the seventh round (docs/PROTOCOL.md): model v3, taught by So400m, trained on more moments. In $(TRAIN7): Charades-STA's
 # charades_sta_train.txt, YouCook2's youcookii_train.jsonl and TEMPO-HL's tempoHL+didemo_train.json; the videos are
 # read from the Hugging Face Hub one at a time. scripts/round7.py makes the choices on the tuning sets by the rule;
-# the test is run once, after they are recorded in docs/PROTOCOL.md
+# the test is run once, after they are recorded in docs/PROTOCOL.md. So400m's frames of DiDeMo's and MSR-VTT's
+# training videos (moments_data.py teacher, then texts --teacher-texts didemo_all,msrvtt) are needed only if choice 1
+# keeps the teacher; it did not (results/round7_choices.json), and round7.py waits for them if it does
 TRAIN7 ?= data/train-annotations
 round7:
 	$(PY) scripts/moments_data.py charades --annotations $(TRAIN7)/charades_sta_train.txt
 	$(PY) scripts/moments_data.py youcook2 --annotations $(TRAIN7)/youcookii_train.jsonl
 	$(PY) scripts/moments_data.py texts --charades $(TRAIN7)/charades_sta_train.txt \
 		--youcook2 $(TRAIN7)/youcookii_train.jsonl --tempo $(TRAIN7)/tempoHL+didemo_train.json
-	for d in didemo msrvtt; do $(PY) scripts/moments_data.py teacher --dataset $$d; done
-	$(PY) scripts/moments_data.py texts --teacher-texts didemo_all,msrvtt
 	$(PY) scripts/round7.py $(ROUND6)
 	$(PY) scripts/compare.py evaluate --round 7 $(ROUND6) \
 		--candidates b32,base,so400m,v1,v2,v3,v3-no-charades,v3-no-youcook2
