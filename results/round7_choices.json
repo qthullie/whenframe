@@ -91,6 +91,60 @@
    "against": "v3-leash30",
    "against_mean": 0.39633159295051007,
    "kept": false
+  },
+  {
+   "choice": 5,
+   "run": "v3-a0.25",
+   "recipe": {
+    "without": [],
+    "leash": 30.0,
+    "width": 256,
+    "layers": 2,
+    "heads": 4,
+    "distil": 0.0,
+    "teacher": []
+   },
+   "spec": "v3-a0.25=results/temporal/v3-leash30.npz@0.25",
+   "mean": 0.37504570297923895,
+   "against": "v3-leash30",
+   "against_mean": 0.39633159295051007,
+   "kept": false
+  },
+  {
+   "choice": 5,
+   "run": "v3-a0.5",
+   "recipe": {
+    "without": [],
+    "leash": 30.0,
+    "width": 256,
+    "layers": 2,
+    "heads": 4,
+    "distil": 0.0,
+    "teacher": []
+   },
+   "spec": "v3-a0.5=results/temporal/v3-leash30.npz@0.5",
+   "mean": 0.3834538974507503,
+   "against": "v3-leash30",
+   "against_mean": 0.39633159295051007,
+   "kept": false
+  },
+  {
+   "choice": 5,
+   "run": "v3-a0.75",
+   "recipe": {
+    "without": [],
+    "leash": 30.0,
+    "width": 256,
+    "layers": 2,
+    "heads": 4,
+    "distil": 0.0,
+    "teacher": []
+   },
+   "spec": "v3-a0.75=results/temporal/v3-leash30.npz@0.75",
+   "mean": 0.39326790949904944,
+   "against": "v3-leash30",
+   "against_mean": 0.39633159295051007,
+   "kept": false
   }
  ]
 }

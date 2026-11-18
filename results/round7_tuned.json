@@ -117,5 +117,56 @@
    "normalise": "raw"
   },
   "sound_weight": 1.5
+ },
+ "v3-a0.25": {
+  "spec": "v3-a0.25=results/temporal/v3-leash30.npz@0.25",
+  "model": "siglip2-base",
+  "weights": "results/temporal/v3-leash30.npz",
+  "alpha": 0.25,
+  "didemo": 0.3254982115482882,
+  "youcook2": 0.2956381260096931,
+  "unav": 0.4076923076923077,
+  "charades": 0.4713541666666667,
+  "mean": 0.37504570297923895,
+  "speech": {
+   "weight": 0.005,
+   "pad": 0.0,
+   "normalise": "raw"
+  },
+  "sound_weight": 0.75
+ },
+ "v3-a0.5": {
+  "spec": "v3-a0.5=results/temporal/v3-leash30.npz@0.5",
+  "model": "siglip2-base",
+  "weights": "results/temporal/v3-leash30.npz",
+  "alpha": 0.5,
+  "didemo": 0.32856412876852326,
+  "youcook2": 0.3037156704361874,
+  "unav": 0.41282051282051285,
+  "charades": 0.4887152777777778,
+  "mean": 0.3834538974507503,
+  "speech": {
+   "weight": 0.005,
+   "pad": 0.0,
+   "normalise": "raw"
+  },
+  "sound_weight": 1.5
+ },
+ "v3-a0.75": {
+  "spec": "v3-a0.75=results/temporal/v3-leash30.npz@0.75",
+  "model": "siglip2-base",
+  "weights": "results/temporal/v3-leash30.npz",
+  "alpha": 0.75,
+  "didemo": 0.33571793561573837,
+  "youcook2": 0.3134087237479806,
+  "unav": 0.4230769230769232,
+  "charades": 0.5008680555555556,
+  "mean": 0.39326790949904944,
+  "speech": {
+   "weight": 0.005,
+   "pad": 5.0,
+   "normalise": "raw"
+  },
+  "sound_weight": 1.5
  }
 }
