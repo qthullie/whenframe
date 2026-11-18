@@ -73,6 +73,24 @@
    "against": "v3-leash30",
    "against_mean": 0.39633159295051007,
    "kept": false
+  },
+  {
+   "choice": 4,
+   "run": "v3-soup",
+   "recipe": {
+    "without": [],
+    "leash": 30.0,
+    "width": 256,
+    "layers": 2,
+    "heads": 4,
+    "distil": 0.0,
+    "teacher": []
+   },
+   "spec": "v3-soup=results/temporal/v3-soup.npz@1",
+   "mean": 0.3946379413083031,
+   "against": "v3-leash30",
+   "against_mean": 0.39633159295051007,
+   "kept": false
   }
  ]
 }
