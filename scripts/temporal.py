@@ -930,12 +930,16 @@ def soup(args) -> None:
 
 
 def export(args) -> None:
-    """The adapter's weights, as the package ships them (float16; the head's, never trained here, left out)."""
+    """The adapter's weights, as the package ships them (float16; the head's, never trained here, left out), alpha's
+    share of its correction (WiSE-FT, as compare.py's candidates) folded into its last layer."""
     z = np.load(args.model)
     keep = [k for k in z.files if not k.startswith("h_") and k not in FIXED]
+    w = {k: z[k] for k in keep}
+    if args.alpha != 1.0:
+        w["out_w"], w["out_b"] = args.alpha * w["out_w"].astype(np.float32), args.alpha * w["out_b"].astype(np.float32)
     out = Path(args.out or ROOT / "whenframe" / "data" / f"{temporal.MODELS['siglip2-base']}.npz")
-    np.savez(out, **{k: z[k].astype(np.float16) if z[k].ndim else z[k] for k in keep})
-    print(f"wrote {out}: {sum(z[k].size for k in keep if z[k].ndim)} weights")
+    np.savez(out, **{k: v.astype(np.float16) if v.ndim else v for k, v in w.items()})
+    print(f"wrote {out}: {sum(v.size for v in w.values() if v.ndim)} weights, alpha {args.alpha:g}")
 
 
 def main() -> None:
@@ -990,6 +994,7 @@ def main() -> None:
     )
     ap.add_argument("--models", help="soup: the runs' weights to average, comma-separated")
     ap.add_argument("--model", help="export, evaluate: the trained weights (results/temporal/NAME.npz)")
+    ap.add_argument("--alpha", type=float, default=1.0, help="export: the share of the model's correction kept")
     ap.add_argument("--test-annotations", help="evaluate: DiDeMo's didemo_test.json")
     ap.add_argument("--charades-annotations", help="evaluate: Charades-STA's test parquet")
     ap.add_argument("--youcook2-annotations", help="evaluate: YouCook2's validation parquet")

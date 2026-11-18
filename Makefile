@@ -8,7 +8,7 @@ YOUCOOK2 ?= data/youcook2
 UNAV ?= data/unav
 
 .PHONY: install check lint test didemo-extract didemo-tune didemo-eval didemo-explore didemo-round2 tables figures \
-	didemo-rerank charades didemo-round3 youcook2 round4 round5 round6 benchmark-figure demo site
+	didemo-rerank charades didemo-round3 youcook2 round4 round5 round6 round7 benchmark-figure demo site
 
 install:
 	$(PY) -m pip install -e ".[dev]"
@@ -157,6 +157,22 @@ round6:
 	$(PY) scripts/compare.py tune $(ROUND6) --candidates v2-soup-a0.25=results/temporal/v2-soup.npz@0.25,v2-soup-a0.5=results/temporal/v2-soup.npz@0.5,v2-soup-a0.75=results/temporal/v2-soup.npz@0.75,v2=results/temporal/temporal-siglip2-base-v2.npz@1
 	$(PY) scripts/compare.py cost --models siglip2-base,siglip2-b32,siglip2-so400m --videos $(DIDEMO)/test
 	$(PY) scripts/compare.py evaluate $(ROUND6) --candidates b32,base,so400m,v1,v2
+
+# the seventh round (docs/PROTOCOL.md): model v3, taught by So400m, trained on more moments. In $(TRAIN7): Charades-STA's
+# charades_sta_train.txt, YouCook2's youcookii_train.jsonl and TEMPO-HL's tempoHL+didemo_train.json; the videos are
+# read from the Hugging Face Hub one at a time. scripts/round7.py makes the choices on the tuning sets by the rule;
+# the test is run once, after they are recorded in docs/PROTOCOL.md
+TRAIN7 ?= data/train-annotations
+round7:
+	$(PY) scripts/moments_data.py charades --annotations $(TRAIN7)/charades_sta_train.txt
+	$(PY) scripts/moments_data.py youcook2 --annotations $(TRAIN7)/youcookii_train.jsonl
+	$(PY) scripts/moments_data.py texts --charades $(TRAIN7)/charades_sta_train.txt \
+		--youcook2 $(TRAIN7)/youcookii_train.jsonl --tempo $(TRAIN7)/tempoHL+didemo_train.json
+	for d in didemo msrvtt; do $(PY) scripts/moments_data.py teacher --dataset $$d; done
+	$(PY) scripts/moments_data.py texts --teacher-texts didemo_all,msrvtt
+	$(PY) scripts/round7.py $(ROUND6)
+	$(PY) scripts/compare.py evaluate --round 7 $(ROUND6) \
+		--candidates b32,base,so400m,v1,v2,v3,v3-no-charades,v3-no-youcook2
 
 # whenframe beside published numbers and home-tool approaches (docs/figures/benchmark.png)
 benchmark-figure:
