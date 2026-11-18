@@ -83,20 +83,24 @@ whenframe compact    # reclaim space after videos were re-indexed or removed
 
 ### whenframe's own model
 
+In the standard mode, each video's frames go through whenframe's own model
+before they are stored: two transformer layers that add to each frame's
+embedding what the frames around it show, trained on DiDeMo's 7,745 and
+MSR-VTT's 8,998 training videos (the average of three runs). On the DiDeMo
+test it put the right moment among the first five 29.2 % of the time instead
+of 27.6 %, and it did a little better on Charades-STA, YouCook2 and UnAV-100
+too ([RESULTS.md](RESULTS.md), "Sixth round"). It costs about 0.04 CPU minutes
+per hour of video, against some 7 for SigLIP 2's image tower. Photos keep
+their embedding, and the other modes do not use it.
+
 ```bash
-whenframe index ~/Videos --temporal     # the first time the library is indexed
+whenframe index ~/Videos --no-temporal   # SigLIP 2's embeddings as they are, the first time a library is indexed
 ```
 
-runs each video's frames through whenframe's temporal model before they are
-stored: two transformer layers, trained on DiDeMo's 7,745 training videos,
-that add to each frame's embedding what the frames around it show. On the
-DiDeMo test it put the right moment among the first five 29.3 % of the time
-instead of 27.6 %, and a little more often on Charades-STA and YouCook2; on
-UnAV-100's sound events it did 1.1 points worse, which is why it is not the
-default ([RESULTS.md](RESULTS.md), "Fifth round"). It costs about a
-millisecond of CPU per frame, the image encoder some 80. It is for the
-standard mode; photos keep their embedding. A library is built with it or
-without it: use a new folder to change.
+Its weights are for research and non-commercial use, as the videos it was
+trained on (`whenframe/data/NOTICE`). A library is built with it or without
+it: use a new folder to change; a library indexed before it existed keeps its
+embeddings.
 
 ### What is said
 
@@ -328,6 +332,12 @@ videos (25 GB) are read as they download, one video at a time, and nothing of
 them is kept but the embeddings. UnAV-100 is licensed for non-commercial
 research (CC BY-NC-SA 4.0). `make benchmark-figure` draws
 [figures/benchmark.png](figures/benchmark.png) from the results.
+
+The sixth round (`make round6`, after the fifth) reads MSR-VTT's training
+archive on the Hub by byte ranges (`msrvtt_train_9k.json` of
+`friedrichor/MSR-VTT` in `data/msrvtt/`), trains model v2, embeds the four
+benchmarks' frames again with So400m and B/32, measures every encoder's cost
+the same way and tests the five candidates once.
 
 The fifth round (`make round5`, after the others; `pip install -e ".[train]"`
 for JAX) trains whenframe's own model. It reads DiDeMo's training archive

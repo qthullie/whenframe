@@ -2,17 +2,24 @@
 
 ## Unreleased
 
-- `whenframe index --temporal`: whenframe's own model, a temporal adapter of
-  1.45 million weights trained on DiDeMo's 7,745 training videos, rewrites
-  each frame's SigLIP 2 embedding with what the frames around it show (standard
-  mode, fixed for a library). On the DiDeMo test the right moment is among the
-  first five 29.3 % of the time instead of 27.6 % (151 descriptions gained, 87
-  lost); Charades-STA +0.9 points, YouCook2 +0.4, but UnAV-100 -1.1 points of
-  P@10, more than the protocol allowed, so it is not the default
-  ([docs/RESULTS.md](https://github.com/qthullie/whenframe/blob/main/docs/RESULTS.md), fifth round).
-- `scripts/train_data.py` and `scripts/temporal.py` stream DiDeMo's training
-  archive, train the model with JAX (`pip install 'whenframe[train]'`) and
-  evaluate it; a head placing moments was tried and not kept.
+- whenframe's own model: a temporal adapter of 1.45 million weights rewrites
+  each frame's SigLIP 2 embedding with what the frames around it show. A new
+  library in the standard mode goes through it (`whenframe index
+  --no-temporal` leaves it out). Trained on DiDeMo's 7,745 and MSR-VTT's
+  8,998 training videos, the average of three runs; its weights are for
+  research and non-commercial use (`whenframe/data/NOTICE`).
+- The sixth round compares SigLIP 2 B/32, B/16, So400m and B/16 with the
+  model, on the same frames of DiDeMo, Charades-STA, YouCook2 and UnAV-100:
+  mean of the four primary metrics 36.80, 38.07, 40.63 and 38.65, each step
+  significant; on DiDeMo, 29.2 % of the moments among the first five with
+  the model instead of 27.6 %, for 0.04 more CPU minutes per hour of video
+  ([docs/RESULTS.md](https://github.com/qthullie/whenframe/blob/main/docs/RESULTS.md)).
+- Every encoder's indexing cost measured the same way: 4.3 (B/32), 7.2 (B/16)
+  and 24.9 (So400m) CPU minutes per hour of video with OpenVINO.
+- `scripts/train_data.py`, `scripts/msrvtt.py`, `scripts/temporal.py` and
+  `scripts/compare.py` stream the training archives, train the model with JAX
+  (`pip install 'whenframe[train]'`) and run the comparison; a head placing
+  moments, SigLIP's own loss and WiSE-FT's scaling were tried and not kept.
 
 ## 0.1.0
 

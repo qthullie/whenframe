@@ -106,13 +106,20 @@ measured accuracy).
 - Offers a cheaper mode (SigLIP 2 B/32) and a more accurate one (B/16 and B/32
   combined), with their costs measured, and a search page that keeps the model
   loaded.
-- Trains a small model of its own (`--temporal`, 1.45 million weights): a
-  temporal adapter in the spirit of [CLIP4Clip](https://arxiv.org/abs/2104.08860)'s
-  temporal transformer, on DiDeMo's training videos, which rewrites each
-  frame's SigLIP 2 embedding with its neighbours', trained on the search's own
-  scores, query bank included, and leashed to SigLIP 2's embeddings. It adds
-  1.6 points on the DiDeMo test and loses 1.1 on UnAV-100's sound events, so it
-  is an option rather than the default ([RESULTS.md](RESULTS.md), fifth round).
+- Trains a small model of its own (1.45 million weights): a temporal
+  adapter in the spirit of [CLIP4Clip](https://arxiv.org/abs/2104.08860)'s
+  temporal transformer, which rewrites each frame's SigLIP 2 embedding with
+  its neighbours', trained on the search's own scores, query bank included,
+  leashed to SigLIP 2's embeddings, on DiDeMo's and MSR-VTT's training
+  videos, and averaged over three runs (a model soup, [Wortsman et al.,
+  2022](https://arxiv.org/abs/2203.05482)). It is on by default in the
+  standard mode, having found more than SigLIP 2 alone on four benchmarks
+  without losing on any.
+- Compares its ways of embedding frames the same way on four benchmarks
+  (DiDeMo, Charades-STA, YouCook2, UnAV-100), the costs measured alike:
+  So400m finds the most, for 3.4 times the CPU time; whenframe's model gives
+  part of that gain for almost none of the cost ([RESULTS.md](RESULTS.md),
+  sixth round).
 - Measures all of it on DiDeMo, personal Flickr videos, with the protocol fixed
   in advance ([PROTOCOL.md](PROTOCOL.md)), against a shot-based baseline in the
   spirit of current home tools, with the CPU cost of indexing and searching.

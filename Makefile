@@ -149,8 +149,14 @@ round6:
 	$(PY) scripts/msrvtt.py texts --annotations $(MSRVTT)/msrvtt_train_9k.json
 	$(PY) scripts/temporal.py train $(ROUND5) --name v2-infonce --between-loss infonce --seed 0 $(V2)
 	$(PY) scripts/temporal.py train $(ROUND5) --name v2-sigmoid --between-loss sigmoid --seed 0 $(V2)
-	$(PY) scripts/compare.py tune $(ROUND6) --candidates b32,base,so400m,v1,v2-infonce=results/temporal/v2-infonce.npz@1,v2-sigmoid=results/temporal/v2-sigmoid.npz@1
-	@echo "then the soup and alpha, as docs/PROTOCOL.md records them, and: scripts/compare.py evaluate $(ROUND6)"
+	for s in 1 2; do $(PY) scripts/temporal.py train $(ROUND5) --name v2-infonce-s$$s --between-loss infonce --seed $$s $(V2); done
+	$(PY) scripts/temporal.py soup $(ROUND5) --name v2-soup \
+		--models results/temporal/v2-infonce.npz,results/temporal/v2-infonce-s1.npz,results/temporal/v2-infonce-s2.npz
+	$(PY) scripts/temporal.py export $(ROUND5) --model results/temporal/v2-soup.npz --out results/temporal/temporal-siglip2-base-v2.npz
+	$(PY) scripts/compare.py tune $(ROUND6) --candidates b32,base,so400m,v1,v2-infonce=results/temporal/v2-infonce.npz@1,v2-sigmoid=results/temporal/v2-sigmoid.npz@1,v2-soup=results/temporal/v2-soup.npz@1
+	$(PY) scripts/compare.py tune $(ROUND6) --candidates v2-soup-a0.25=results/temporal/v2-soup.npz@0.25,v2-soup-a0.5=results/temporal/v2-soup.npz@0.5,v2-soup-a0.75=results/temporal/v2-soup.npz@0.75,v2=results/temporal/temporal-siglip2-base-v2.npz@1
+	$(PY) scripts/compare.py cost --models siglip2-base,siglip2-b32,siglip2-so400m --videos $(DIDEMO)/test
+	$(PY) scripts/compare.py evaluate $(ROUND6) --candidates b32,base,so400m,v1,v2
 
 # whenframe beside published numbers and home-tool approaches (docs/figures/benchmark.png)
 benchmark-figure:
