@@ -1,28 +1,42 @@
-"""Trains whenframe's temporal model (whenframe/temporal.py) on DiDeMo's training videos (fifth round).
+"""Trains whenframe's temporal model (whenframe/temporal.py): on DiDeMo's training videos (fifth round), with
+MSR-VTT's (sixth), then with Charades-STA's, YouCook2's and TEMPO-HL's descriptions, taught by So400m (seventh).
 
-    python scripts/train_data.py ...                  # the training videos' frames, embedded
+    python scripts/train_data.py ...                  # DiDeMo's training frames, embedded
+    python scripts/msrvtt.py ...                      # MSR-VTT's
+    python scripts/moments_data.py ...                # Charades-STA's, YouCook2's, and the teacher's frames
     python scripts/temporal.py texts --annotations didemo_train.json --model-dir ...
-    python scripts/temporal.py train --annotations didemo_train.json --name base   # on the training videos,
-                                                     # checked on the 500 tuning videos as it goes
+    python scripts/temporal.py train --annotations didemo_train.json --name NAME --extra msrvtt,charades,...
+                                                     # checked on the tuning videos as it goes
+    python scripts/temporal.py soup --annotations ... --name soup --models a.npz,b.npz,c.npz
+    python scripts/temporal.py export --annotations ... --model results/temporal/NAME.npz --alpha 0.5
     python scripts/temporal.py evaluate ...           # once, after docs/PROTOCOL.md says so
+
+scripts/round7.py makes the seventh round's choices with these, one after the other.
 
 The model reads the frames of a video together and adds to each frame's
 SigLIP 2 embedding what its neighbours show (whenframe/temporal.py). It is
-trained with three losses, each after a published idea:
+trained with these losses, each after a published idea:
 
-- between videos, SigLIP's own sigmoid loss (Zhai et al., 2023) on a video's
-  best frame against each description of the batch, so that scores stay
-  absolute and comparable across a library, as whenframe ranks them;
+- between videos, each description's own video among the batch's, by its best
+  frame as the search scores it (InfoNCE, as CLIP4Clip's, Luo et al., 2022), or
+  SigLIP's own sigmoid loss (Zhai et al., 2023; FLYP, Goyal et al., 2023);
 - within a video, the share of the frames' softmax that falls inside the
   described moment, so that the best frame is in it (the saliency losses of
   Moment-DETR and QD-DETR, Lei et al. 2021, Moon et al. 2023; the other moments
   of the same video are the hard negatives of ReLoCLNet, Zhang et al. 2021);
 - a leash, 1 - cos(new, old), that keeps each frame near its SigLIP 2 embedding,
-  so that what DiDeMo's descriptions never mention is still found.
+  so that what the descriptions never mention is still found;
+- with --distil, the teacher's: So400m's distributions over the batch's videos
+  and over a video's frames, on the frames it saw, followed by the model's
+  (knowledge distillation, Hinton et al., 2015; TeachCLIP, Tian et al., 2024).
 
-Frames are dropped at random (the tool skips repeats) and a description's
-moment is, half the time, one of its four annotators' instead of the most
-common one. Needs JAX (pip install jax); the tool runs the model with numpy.
+Frames are dropped at random (the tool skips repeats); a DiDeMo or TEMPO-HL
+description's moment is, half the time, one of its annotators' instead of the
+most common one; a long video is cut to a window of frames around the moment,
+as the tool reads it. With --mix sqrt, each collection is drawn by the square
+root of its number of descriptions. `export --alpha` keeps that share of the
+model's correction (WiSE-FT, Wortsman et al., 2022), as the package ships it.
+Needs JAX (pip install jax); the tool runs the model with numpy.
 """
 
 from __future__ import annotations
