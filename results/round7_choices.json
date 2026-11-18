@@ -1,0 +1,42 @@
+{
+ "steps": [
+  {
+   "choice": 1,
+   "run": "v3-noteacher",
+   "recipe": {
+    "without": [],
+    "leash": 100.0,
+    "width": 256,
+    "layers": 2,
+    "heads": 4,
+    "distil": 0.0,
+    "teacher": []
+   },
+   "spec": "v3-noteacher=results/temporal/v3-noteacher.npz@1",
+   "mean": 0.3891619408546849,
+   "against": "v3-noteacher",
+   "against_mean": 0.3891619408546849,
+   "kept": true
+  },
+  {
+   "choice": 1,
+   "run": "v3-teacher",
+   "recipe": {
+    "without": [],
+    "leash": 100.0,
+    "width": 256,
+    "layers": 2,
+    "heads": 4,
+    "distil": 1.0,
+    "teacher": [
+     "charades"
+    ]
+   },
+   "spec": "v3-teacher=results/temporal/v3-teacher.npz@1",
+   "mean": 0.38605680401028675,
+   "against": "v3-noteacher",
+   "against_mean": 0.3891619408546849,
+   "kept": false
+  }
+ ]
+}

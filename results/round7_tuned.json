@@ -32,5 +32,39 @@
    "normalise": "raw"
   },
   "sound_weight": 1.5
+ },
+ "v3-noteacher": {
+  "spec": "v3-noteacher=results/temporal/v3-noteacher.npz@1",
+  "model": "siglip2-base",
+  "weights": "results/temporal/v3-noteacher.npz",
+  "alpha": 1.0,
+  "didemo": 0.32652018395503324,
+  "youcook2": 0.3182552504038772,
+  "unav": 0.41794871794871796,
+  "charades": 0.4939236111111111,
+  "mean": 0.3891619408546849,
+  "speech": {
+   "weight": 0.005,
+   "pad": 5.0,
+   "normalise": "raw"
+  },
+  "sound_weight": 1.5
+ },
+ "v3-teacher": {
+  "spec": "v3-teacher=results/temporal/v3-teacher.npz@1",
+  "model": "siglip2-base",
+  "weights": "results/temporal/v3-teacher.npz",
+  "alpha": 1.0,
+  "didemo": 0.32447623914154317,
+  "youcook2": 0.3182552504038772,
+  "unav": 0.41538461538461535,
+  "charades": 0.4861111111111111,
+  "mean": 0.38605680401028675,
+  "speech": {
+   "weight": 0.005,
+   "pad": 5.0,
+   "normalise": "raw"
+  },
+  "sound_weight": 1.5
  }
 }
