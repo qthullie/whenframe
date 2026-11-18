@@ -136,9 +136,10 @@ a 7-billion-parameter vision-language model;
 with a language model and vision-language models;
 [VTG-GPT](https://arxiv.org/abs/2403.02076) (Xu et al., 2024) 43.68 %;
 [PSVL](https://arxiv.org/abs/2110.00428) (Nam et al., ICCV 2021) 31.29 %,
-trained on unannotated videos. whenframe places 45.7 % (fixed windows) and
-47.2 % (adaptive spans) with its DiDeMo parameters, on a CPU, from frames it
-embedded once for every search; the first three run language or
+trained on unannotated videos. whenframe places 45.7 % (fixed windows), 46.1 %
+with its own model (trained on DiDeMo and MSR-VTT, not on Charades), 47.2 %
+(adaptive spans) and 50.4 % with SigLIP 2 So400m, with its DiDeMo parameters,
+on a CPU, from frames it embedded once for every search; the first three run language or
 vision-language models over the video for each sentence, and PSVL trains a
 model on Charades videos without their annotations. The home-tool approaches of the same figure (one image per video, one
 keyframe per shot, frames searched without the query bank) are run here, on

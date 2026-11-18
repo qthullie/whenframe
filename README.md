@@ -157,10 +157,11 @@ Second round (two more modes, French descriptions):
 | 8. the precision mode gains at least 1 point | +0.1 points | no |
 <!-- /table -->
 
-On Charades-STA, with the parameters chosen on DiDeMo and nothing tuned, it
-places the moment in a given video 45.7 % of the time at IoU >= 0.5; a
-7-billion-parameter vision-language model, run over the video's frames for each
-sentence, is reported at 56.8 %.
+On Charades-STA, with the parameters chosen on DiDeMo and nothing trained or
+tuned on Charades, it places the moment in a given video 46.1 % of the time at
+IoU >= 0.5 with its own model (45.7 % without it, 50.4 % with SigLIP 2
+So400m); a 7-billion-parameter vision-language model, run over the video's
+frames for each sentence, is reported at 56.8 %.
 
 <!-- table readme-youcook2 -->
 On 252 YouCook2 cooking videos (5 minutes on average, searched all at once), the right step is among the first five moments 19.4 % of the time with adaptive spans (placed by default in a library of long videos), and 25.8 % when what is said is searched too (indexed with `--speech`).
