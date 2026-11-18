@@ -142,5 +142,21 @@
    "normalise": "raw"
   },
   "sound_weight": 1.5
+ },
+ "b32": {
+  "spec": "b32",
+  "model": "siglip2-b32",
+  "weights": null,
+  "alpha": 1.0,
+  "didemo": 0.2912621359223301,
+  "youcook2": 0.26978998384491115,
+  "unav": 0.4333333333333333,
+  "mean": 0.3314618177001915,
+  "speech": {
+   "weight": 0.005,
+   "pad": 5.0,
+   "normalise": "raw"
+  },
+  "sound_weight": 1.5
  }
 }
