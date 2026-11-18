@@ -706,3 +706,22 @@ tuning sets are recorded here.
 for research (DiDeMo: Flickr videos under Creative Commons licences, some of
 them non-commercial; MSR-VTT: YouTube clips); its weights are provided for
 research and non-commercial use. whenframe's code stays under the MIT licence.
+
+**The choices on the tuning sets, before the test** (`results/compare_tuned.json`;
+the mean of DiDeMo's R@5, YouCook2's R@5 with speech and spans, UnAV-100's
+P@10 with sound, each candidate's speech and sound weights chosen on the
+same sets). The standard mode: 31.3, 29.4 and 41.0 %, mean 33.92; v1: 34.1,
+28.9 and 41.0 %, mean 34.68.
+
+| v2, trained on DiDeMo and MSR-VTT (8,998 clips, 44,990 descriptions) | DiDeMo | YouCook2 | UnAV-100 | mean |
+|---|---|---|---|---|
+| InfoNCE between videos, one run | 33.4 | 29.4 | 41.0 | 34.60 |
+| SigLIP's own sigmoid loss (FLYP): not kept | 33.1 | 28.4 | 41.8 | 34.43 |
+| **soup of three InfoNCE runs (data seeds 0, 1, 2): kept** | 33.2 | 29.9 | 41.3 | **34.79** |
+| the soup, alpha 0.25 | 32.1 | 29.2 | 41.0 | 34.14 |
+| the soup, alpha 0.5 | 32.6 | 29.4 | 41.3 | 34.43 |
+| the soup, alpha 0.75 | 33.1 | 29.9 | 41.3 | 34.74 |
+
+v2 is the soup at alpha 1 (no scaling did better), exported in float16 as
+v1 was (`results/temporal/temporal-siglip2-base-v2.npz`), the file the test
+runs. Of the three published ideas, only the soup is kept.
