@@ -477,6 +477,9 @@ def round5_tables() -> dict[str, str]:
     return out
 
 
+BENCH = {"didemo": "DiDeMo", "charades": "Charades-STA", "youcook2": "YouCook2", "unav": "UnAV-100"}
+
+
 def round6_tables() -> dict[str, str]:
     """The sixth round: five ways of embedding frames, compared the same way; whenframe's model v2."""
     out = {}
@@ -497,13 +500,26 @@ def round6_tables() -> dict[str, str]:
     label = {"b32": "SigLIP 2 B/32 (`--mode economy`)", "base": "SigLIP 2 B/16 (standard)",
              "so400m": "SigLIP 2 So400m (`--mode large`)", "v1": "B/16 + whenframe's model v1",
              "v2": "B/16 + whenframe's model v2"}  # fmt: skip
+    cost = json.loads((RESULTS / "compare_cost.json").read_text()) if (RESULTS / "compare_cost.json").exists() else {}
+    adapter = 0.0
+    t = RESULTS / "temporal_test.json"
+    if t.exists():
+        adapter = json.loads(t.read_text())["didemo"]["adapter_cost"]["cpu_min_per_hour"]
+    encoder = {"b32": "siglip2-b32", "base": "siglip2-base", "so400m": "siglip2-so400m", "v1": "siglip2-base",
+               "v2": "siglip2-base"}  # fmt: skip
+
+    def minutes(n: str) -> str:
+        c = cost.get(encoder.get(n, ""), {}).get("cpu_min_per_hour")
+        return "" if c is None else f"{c + (adapter if n in ('v1', 'v2') else 0.0):.1f}"
+
     rows = []
     for n in r["ranking"]:
         x = r[n]
         rows.append([label.get(n, n), pct(x["didemo"]["value"]), pct(x["charades"]["value"]),
-                     pct(x["youcook2"]["value"]), pct(x["unav"]["value"]), f"**{100 * x['mean']:.2f}**"])  # fmt: skip
+                     pct(x["youcook2"]["value"]), pct(x["unav"]["value"]), f"**{100 * x['mean']:.2f}**",
+                     minutes(n)])  # fmt: skip
     out["round6-test"] = table(["test sets, ranked by the mean", "DiDeMo R@5", "Charades-STA R1", "YouCook2 R@5",
-                                "UnAV-100 P@10", "mean"], rows)  # fmt: skip
+                                "UnAV-100 P@10", "mean", "indexing, CPU min per hour"], rows)  # fmt: skip
     pairs = [(a, b) for a in r["ranking"] for b in r["ranking"] if r["ranking"].index(a) < r["ranking"].index(b)]
     out["round6-pairs"] = table(
         ["the first finds more than the second?", "items better", "items worse", "sign test p", "said"],
@@ -524,7 +540,7 @@ def round6_tables() -> dict[str, str]:
             ],
             [
                 "22. v2 loses at most 1 point on each test against B/16",
-                "; ".join(f"{k} {100 * v:+.1f}" for k, v in losses.items()),
+                "; ".join(f"{BENCH[k]} {100 * v:+.1f}" for k, v in losses.items()),
                 min(losses.values()) >= -0.01,
             ],
         ]

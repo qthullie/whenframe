@@ -723,15 +723,64 @@ the same instants of the four benchmarks; and whenframe's model trained again
 (v2) on DiDeMo and MSR-VTT.
 
 <!-- table round6-criteria -->
+| criterion (fixed before its test run) | measured on test | met |
+|---|---|---|
+| 21. v2's mean is higher than SigLIP 2 B/16's, sign test p < 0.05 | +0.57 points, p = 6.5e-05 | yes |
+| 22. v2 loses at most 1 point on each test against B/16 | DiDeMo +1.5; Charades-STA +0.4; YouCook2 +0.2; UnAV-100 +0.2 | yes |
+| 23. v2's mean is higher than v1's | -0.78 points | no |
 <!-- /table -->
+
+Criteria 21 and 22 are met: v2 finds more than SigLIP 2 B/16 alone, on the
+mean of the four benchmarks and significantly, and loses on none of them;
+UnAV-100's loss of the fifth round is gone. As fixed before the test, v2
+replaces v1 and a new library in the standard mode goes through it by
+default (`whenframe index --no-temporal` leaves it out). Criterion 23 is not
+met: v1's mean is higher than v2's.
 
 ### On the test sets
 
 <!-- table round6-test -->
+| test sets, ranked by the mean | DiDeMo R@5 | Charades-STA R1 | YouCook2 R@5 | UnAV-100 P@10 | mean | indexing, CPU min per hour |
+|---|---|---|---|---|---|---|
+| SigLIP 2 So400m (`--mode large`) | 29.5 | 50.4 | 28.5 | 54.1 | **40.63** | 24.9 |
+| B/16 + whenframe's model v1 | 29.3 | 46.6 | 29.6 | 52.2 | **39.43** | 7.3 |
+| B/16 + whenframe's model v2 | 29.2 | 46.1 | 26.0 | 53.3 | **38.65** | 7.3 |
+| SigLIP 2 B/16 (standard) | 27.6 | 45.7 | 25.8 | 53.2 | **38.07** | 7.2 |
+| SigLIP 2 B/32 (`--mode economy`) | 24.3 | 43.5 | 27.6 | 51.7 | **36.80** | 4.3 |
 <!-- /table -->
 
 <!-- table round6-pairs -->
+| the first finds more than the second? | items better | items worse | sign test p | said |
+|---|---|---|---|---|
+| SigLIP 2 So400m (`--mode large`) / B/16 + whenframe's model v1 | 932 | 787 | 0.00051 | yes |
+| SigLIP 2 So400m (`--mode large`) / B/16 + whenframe's model v2 | 926 | 714 | 1.8e-07 | yes |
+| SigLIP 2 So400m (`--mode large`) / SigLIP 2 B/16 (standard) | 962 | 673 | 9.3e-13 | yes |
+| SigLIP 2 So400m (`--mode large`) / SigLIP 2 B/32 (`--mode economy`) | 1182 | 702 | 1.3e-28 | yes |
+| B/16 + whenframe's model v1 / B/16 + whenframe's model v2 | 300 | 235 | 0.0056 | yes |
+| B/16 + whenframe's model v1 / SigLIP 2 B/16 (standard) | 412 | 269 | 4.7e-08 | yes |
+| B/16 + whenframe's model v1 / SigLIP 2 B/32 (`--mode economy`) | 905 | 563 | 3.9e-19 | yes |
+| B/16 + whenframe's model v2 / SigLIP 2 B/16 (standard) | 226 | 148 | 6.5e-05 | yes |
+| B/16 + whenframe's model v2 / SigLIP 2 B/32 (`--mode economy`) | 907 | 631 | 2.1e-12 | yes |
+| SigLIP 2 B/16 (standard) / SigLIP 2 B/32 (`--mode economy`) | 864 | 668 | 6.1e-07 | yes |
 <!-- /table -->
+
+Every step of the ranking is significant. **So400m finds the most** on all
+four benchmarks, for 3.5 times the standard mode's CPU time. **whenframe's
+model** adds 0.6 (v2) to 1.4 (v1) points to the standard mode's mean for
+0.04 CPU minutes per hour of video, a fifth to a half of So400m's gain at
+almost none of its cost. B/32 costs the least and finds the least, except on
+YouCook2.
+
+v1's lead over v2 is on YouCook2 (29.6 against 26.0 %): on its tuning steps,
+v1 drew more from speech padded by 5 seconds, which the tool does not use
+(it keeps the standard mode's speech settings, with which v1 found 26.1 % of
+these steps in the fifth round); B/32 chose the same padding. On the three
+benchmarks without speech the two models are close (DiDeMo 29.3 and 29.2 %,
+Charades-STA 46.6 and 46.1 %), and v2 does better on UnAV-100 (53.3 against
+52.2 %), where v1 lost a point to SigLIP 2 alone. The costs were measured the
+same way for every encoder (`results/compare_cost.json`): the same 100 DiDeMo
+test videos, one after the other, decoded, repeats skipped, embedded with
+OpenVINO.
 
 ### Model v2, chosen on the tuning sets
 
@@ -747,3 +796,9 @@ the same instants of the four benchmarks; and whenframe's model trained again
 | v2 soup, alpha 0.5 | 32.6 | 29.4 | 41.3 | 34.43 |
 | v2 soup, alpha 0.75 | 33.1 | 29.9 | 41.3 | 34.74 |
 <!-- /table -->
+
+Of the three published ideas tried on the tuning sets, only the soup was kept
+(Wortsman et al., ICML 2022): SigLIP's own loss (FLYP) did worse on YouCook2
+than InfoNCE, and scaling the model's correction (WiSE-FT) did worse at every
+alpha below 1. MSR-VTT's clips (`scripts/msrvtt.py`) added the descriptions of
+animals, music, vehicles and sports that DiDeMo's lack.
