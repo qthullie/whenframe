@@ -149,6 +149,11 @@ def extract(args) -> None:
     todo_names = [n for n in names if not all((parts[m] / f"{Path(n).stem}.npz").exists() for m in models)]
     if args.limit:
         todo_names = todo_names[: args.limit]
+    if not todo_names:  # every video done: nothing to read again (UnAV-100's archives are 25 GB)
+        for m in models:
+            if not (CACHE / f"{cache_name(args.dataset, m)}.npz").exists():
+                assemble(args.dataset, m)
+        return
     encoders = {m: Encoder(m, backend="openvino") for m in models}
     for enc in encoders.values():
         enc.images  # noqa: B018 - compiled before the first video
