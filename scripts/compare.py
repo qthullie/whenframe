@@ -515,9 +515,60 @@ def evaluate(args) -> None:
     print(f"wrote {TEST.relative_to(ROOT)}")
 
 
+def cost(args) -> None:
+    """Each encoder's indexing cost, measured the same way: the first videos of DiDeMo's test split (in name
+    order), one after the other on an idle machine, decoded at one frame a second, repeats skipped, embedded
+    with OpenVINO; the process's CPU time (all threads) per hour of video."""
+    import resource
+
+    from whenframe.video import drop_repeats, probe
+
+    def cpu() -> float:
+        r = resource.getrusage(resource.RUSAGE_SELF)
+        return (
+            r.ru_utime
+            + r.ru_stime
+            + sum(getattr(resource.getrusage(resource.RUSAGE_CHILDREN), k) for k in ("ru_utime", "ru_stime"))
+        )  # ffmpeg
+
+    names = sorted(str(n) for n in np.load(CACHE / f"{BASE['didemo-test']}.npz")["names"])[: args.cost_videos]
+    out = json.loads(COST.read_text()) if COST.exists() else {}
+    for m in args.models.split(","):
+        enc = Encoder(m, backend="openvino")
+        enc.encode_images(np.zeros((1, enc.size, enc.size, 3), np.uint8))  # compiled before the clock starts
+        decode = encode = seconds = 0.0
+        frames_kept = 0
+        for name in names:
+            path = Path(args.videos) / name
+            c0 = cpu()
+            _, frames = sample_frames(path, 1.0, enc.size)
+            keep = drop_repeats(frames)
+            c1 = cpu()
+            enc.encode_images(frames[keep])
+            c2 = cpu()
+            decode, encode = decode + c1 - c0, encode + c2 - c1
+            seconds += probe(path).duration or len(frames)
+            frames_kept += len(keep)
+        hours = seconds / 3600
+        out[m] = {"videos": len(names), "hours": hours, "frames": frames_kept,
+                  "decode_cpu_min_per_hour": decode / 60 / hours, "encode_cpu_min_per_hour": encode / 60 / hours,
+                  "cpu_min_per_hour": (decode + encode) / 60 / hours,
+                  "encode_ms_per_frame": 1000 * encode / frames_kept}  # fmt: skip
+        print(
+            f"{m}: {out[m]['cpu_min_per_hour']:.1f} CPU minutes per hour of video "
+            f"({out[m]['encode_ms_per_frame']:.0f} ms per frame embedded)",
+            flush=True,
+        )
+        COST.write_text(json.dumps(out, indent=1))
+
+
+COST = ROOT / "results" / "compare_cost.json"
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("stage", choices=["extract", "assemble", "tune", "evaluate"])
+    ap.add_argument("stage", choices=["extract", "assemble", "tune", "evaluate", "cost"])
+    ap.add_argument("--cost-videos", type=int, default=100, help="cost: how many of DiDeMo's test videos")
     ap.add_argument(
         "--candidates",
         default="b32,base,so400m,v1",
@@ -540,7 +591,7 @@ def main() -> None:
         for m in args.models.split(","):
             assemble(args.dataset, m)
         return
-    {"extract": extract, "tune": tune, "evaluate": evaluate}[args.stage](args)
+    {"extract": extract, "tune": tune, "evaluate": evaluate, "cost": cost}[args.stage](args)
 
 
 if __name__ == "__main__":
