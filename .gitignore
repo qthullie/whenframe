@@ -11,3 +11,4 @@ results/cache/
 /dist/
 /site/videos/
 results/temporal/*.npz
+results/temporal/logs/
