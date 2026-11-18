@@ -158,5 +158,21 @@
    "normalise": "raw"
   },
   "sound_weight": 1.5
+ },
+ "so400m": {
+  "spec": "so400m",
+  "model": "siglip2-so400m",
+  "weights": null,
+  "alpha": 1.0,
+  "didemo": 0.35053653551354114,
+  "youcook2": 0.3166397415185784,
+  "unav": 0.41538461538461546,
+  "mean": 0.3608536308055783,
+  "speech": {
+   "weight": 0.005,
+   "pad": 0.0,
+   "normalise": "raw"
+  },
+  "sound_weight": 1.5
  }
 }
