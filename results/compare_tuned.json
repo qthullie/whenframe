@@ -94,5 +94,21 @@
    "normalise": "raw"
   },
   "sound_weight": 2.0
+ },
+ "v2-soup-a0.5": {
+  "spec": "v2-soup-a0.5=results/temporal/v2-soup.npz@0.5",
+  "model": "siglip2-base",
+  "weights": "results/temporal/v2-soup.npz",
+  "alpha": 0.5,
+  "didemo": 0.3260091977516607,
+  "youcook2": 0.2940226171243942,
+  "unav": 0.41282051282051285,
+  "mean": 0.3442841092321893,
+  "speech": {
+   "weight": 0.005,
+   "pad": 0.0,
+   "normalise": "raw"
+  },
+  "sound_weight": 2.0
  }
 }
