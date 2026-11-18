@@ -46,5 +46,21 @@
    "normalise": "raw"
   },
   "sound_weight": 1.5
+ },
+ "v2-sigmoid": {
+  "spec": "v2-sigmoid=results/temporal/v2-sigmoid.npz@1",
+  "model": "siglip2-base",
+  "weights": "results/temporal/v2-sigmoid.npz",
+  "alpha": 1.0,
+  "didemo": 0.3306080735820133,
+  "youcook2": 0.284329563812601,
+  "unav": 0.41794871794871796,
+  "mean": 0.34429545178111076,
+  "speech": {
+   "weight": 0.005,
+   "pad": 0.0,
+   "normalise": "raw"
+  },
+  "sound_weight": 2.0
  }
 }
