@@ -300,8 +300,8 @@ def teacher(args) -> None:
     base model's frames (the caches of the fifth and sixth rounds), their archives read again."""
     cache = {"didemo": "didemo_all_openvino", "msrvtt": "msrvtt_openvino"}[args.dataset]
     z = np.load(CACHE / f"{cache}.npz")
-    names = z["names"].tolist()
-    want = {n: z["times"][s : s + c] for n, s, c in zip(names, z["starts"], z["counts"], strict=True)}
+    names, times = z["names"].tolist(), z["times"]  # read once: each z["times"] reads a copy, which a slice keeps
+    want = {n: times[s : s + c] for n, s, c in zip(names, z["starts"], z["counts"], strict=True)}
     parts = CACHE / f"{args.dataset}_teacher_parts"
     parts.mkdir(parents=True, exist_ok=True)
     enc = Encoder(TEACHER, backend="openvino")
