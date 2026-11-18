@@ -162,13 +162,17 @@ def youcook2_videos(names: list[str], work: Path):
 
 
 def pipeline(source, handle, decoders: int = 2, seconds: float | None = None) -> int:
-    """Videos read by one thread, decoded by `decoders` threads, handled (embedded, written) by this one."""
+    """Videos read by one thread, decoded by `decoders` threads, handled (embedded, written) by this one. If the
+    reading fails, so does this, once the videos read so far are handled: nothing is assembled from a part."""
     todo, ready = queue.Queue(maxsize=6), queue.Queue(maxsize=6)
+    failed = []
 
     def read():
         try:
             for item in source:
                 todo.put(item)
+        except Exception as ex:  # noqa: BLE001 - raised again in the caller's thread, below
+            failed.append(ex)
         finally:
             todo.put(DONE)
 
@@ -203,6 +207,8 @@ def pipeline(source, handle, decoders: int = 2, seconds: float | None = None) ->
         n += 1
         if n % 100 == 0:
             print(f"{n} videos this run, {time.time() - t0:.0f} s", flush=True)
+    if failed:  # the videos handled are kept: run the stage again to go on
+        raise RuntimeError(f"reading the videos failed after {n} this run") from failed[0]
     return n
 
 
@@ -257,8 +263,10 @@ def charades(args) -> None:
             out |= {"teacher": teacher.encode_images(frames[rows]).astype(np.float16), "teacher_rows": rows}
         save(parts / f"{name}.npz", **out)
 
-    pipeline(charades_videos(todo, work), handle)
-    shutil.rmtree(work, ignore_errors=True)
+    try:
+        pipeline(charades_videos(todo, work), handle)
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
     if not args.limit:
         assemble(parts, CACHE / "charades_train_openvino.npz", sorted(set(names) - tuning))
         assemble(parts, CACHE / "charades_tuning_openvino.npz", sorted(tuning))
@@ -279,8 +287,10 @@ def youcook2(args) -> None:
              times=t[kept].astype(np.float32), keep=np.ones(len(kept), bool),
              duration=duration or float(len(frames)))  # fmt: skip
 
-    pipeline(youcook2_videos(todo, work), handle)
-    shutil.rmtree(work, ignore_errors=True)
+    try:
+        pipeline(youcook2_videos(todo, work), handle)
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
     if not args.limit:
         assemble(parts, CACHE / "youcook2_train_openvino.npz")
 
@@ -311,8 +321,10 @@ def teacher(args) -> None:
         source, seconds = didemo_stream(left, work), 30.0
     else:
         source, seconds = msrvtt_stream(left, work), None
-    pipeline(source, handle, seconds=seconds)
-    shutil.rmtree(work, ignore_errors=True)
+    try:
+        pipeline(source, handle, seconds=seconds)
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
     done = [n for n in names if (parts / f"{n}.npz").exists()]
     starts = dict(zip(names, z["starts"], strict=True))
     rows = [np.load(parts / f"{n}.npz") for n in done]

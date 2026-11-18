@@ -17,6 +17,7 @@ results/cache/didemo_all_openvino.npz.
 from __future__ import annotations
 
 import argparse
+import http.client
 import io
 import json
 import queue
@@ -48,17 +49,21 @@ DONE = object()
 
 
 class Archive(io.RawIOBase):
-    """The parts, read one after the other as one file, from byte `start` of the whole."""
+    """The parts, read one after the other as one file, from byte `start` of the whole. A connection that drops
+    or ends before its part does is opened again where it stopped, after a pause, up to `retries` times in a row."""
 
-    def __init__(self, start: int = 0, url: str = f"https://huggingface.co/datasets/{REPO}/resolve/main/"):
+    def __init__(self, start: int = 0, url: str = f"https://huggingface.co/datasets/{REPO}/resolve/main/",
+                 parts: list[tuple[str, int]] = PARTS, retries: int = 8, pause: float = 5.0):  # fmt: skip
         self.url, self.position, self.response = url, start, None
+        self.parts, self.retries, self.pause = parts, retries, pause
+        self.ends = set(np.cumsum([size for _, size in parts]).tolist())
 
     def readable(self) -> bool:
         return True
 
     def _open(self):
         first = 0
-        for name, size in PARTS:
+        for name, size in self.parts:
             if self.position < first + size:
                 req = urllib.request.Request(self.url + name, headers={"Range": f"bytes={self.position - first}-"})
                 return urllib.request.urlopen(req, timeout=120)  # noqa: S310 (fixed host)
@@ -66,17 +71,33 @@ class Archive(io.RawIOBase):
         return None
 
     def readinto(self, buffer) -> int:
+        failed = 0
         while True:
-            if self.response is None:
-                self.response = self._open()
+            n = 0
+            try:
                 if self.response is None:
-                    return 0  # past the last part
-            n = self.response.readinto(buffer)
-            if n:
-                self.position += n
-                return n
-            self.response.close()  # the end of a part: the next one goes on
-            self.response = None
+                    self.response = self._open()
+                    if self.response is None:
+                        return 0  # past the last part
+                n = self.response.readinto(buffer)
+            except (OSError, http.client.HTTPException) as ex:
+                error = ex
+            else:
+                if n:
+                    self.position += n
+                    return n
+                error = None
+            if self.response is not None:
+                self.response.close()
+                self.response = None
+            if error is None and self.position in self.ends:
+                continue  # the end of a part: the next one goes on
+            failed += 1  # dropped, or ended early (http.client then reads 0 bytes): opened again where it stopped
+            if failed > self.retries:
+                raise OSError(f"the archive stopped at byte {self.position}: {error or 'ended early'}")
+            print(f"the archive stopped at byte {self.position} ({error or 'ended early'}): read again",
+                  file=sys.stderr, flush=True)  # fmt: skip
+            time.sleep(self.pause * failed)
 
 
 def stem(name: str) -> str:
