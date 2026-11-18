@@ -146,5 +146,23 @@
    "against_mean": 0.39633159295051007,
    "kept": false
   }
- ]
+ ],
+ "final": {
+  "run": "v3-leash30",
+  "single": "v3-leash30",
+  "recipe": {
+   "without": [],
+   "leash": 30.0,
+   "width": 256,
+   "layers": 2,
+   "heads": 4,
+   "distil": 0.0,
+   "teacher": []
+  },
+  "soup": false,
+  "alpha": 1.0,
+  "weights": "results/temporal/v3-leash30.npz",
+  "v3": "results/temporal/temporal-siglip2-base-v3.npz",
+  "mean": 0.39633159295051007
+ }
 }

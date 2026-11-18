@@ -168,5 +168,22 @@
    "normalise": "raw"
   },
   "sound_weight": 1.5
+ },
+ "v3": {
+  "spec": "v3=results/temporal/temporal-siglip2-base-v3.npz@1",
+  "model": "siglip2-base",
+  "weights": "results/temporal/temporal-siglip2-base-v3.npz",
+  "alpha": 1.0,
+  "didemo": 0.3372508942258559,
+  "youcook2": 0.32148626817447495,
+  "unav": 0.4205128205128206,
+  "charades": 0.5060763888888888,
+  "mean": 0.39633159295051007,
+  "speech": {
+   "weight": 0.005,
+   "pad": 5.0,
+   "normalise": "raw"
+  },
+  "sound_weight": 2.0
  }
 }
