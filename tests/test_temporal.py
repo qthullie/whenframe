@@ -236,3 +236,22 @@ def test_a_long_video_is_cut_around_its_moment_and_the_teacher_follows(tmp_path,
         assert (seen[long] == (mask[long] & (t[long] % 2 == 0))).all()  # every second frame
         assert np.allclose(np.linalg.norm(tx[long][seen[long]], axis=-1), 1.0, atol=1e-2)
         assert bank.shape == (4, 768) and tbank.shape == (4, 12)
+
+
+def test_the_export_keeps_alpha_of_the_correction(tmp_path):
+    """Exported at alpha, the model moves the frames as the trained one does with alpha's share of its correction
+    (compare.py's candidates, WiSE-FT), in the package's float16; the head's weights are left out."""
+    import types
+
+    s = script()
+    rng = np.random.default_rng(5)
+    p = params(rng)
+    p["out_b"] = (rng.standard_normal(DIM) * 0.1).astype(np.float32)
+    np.savez(tmp_path / "run.npz", **p)
+    s.export(types.SimpleNamespace(model=str(tmp_path / "run.npz"), out=str(tmp_path / "v3.npz"), alpha=0.5))
+    exported = temporal.load(tmp_path / "v3.npz")
+    x, t = frames(rng, 40)
+    half = dict(p, out_w=0.5 * p["out_w"], out_b=0.5 * p["out_b"])
+    np.testing.assert_allclose(temporal.apply(exported, x, t), temporal.apply(half, x, t), atol=2e-3)
+    assert not np.allclose(temporal.apply(exported, x, t), temporal.apply(p, x, t), atol=2e-3)
+    assert not any(k.startswith("h_") or k in s.FIXED for k in np.load(tmp_path / "v3.npz").files)
