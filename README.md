@@ -21,7 +21,7 @@ it happens.
 </p>
 
 <!-- table readme-headline -->
-Searching 979 personal videos at once (DiDeMo test) for 3,902 descriptions written by people, whenframe puts the right moment among its first five results **29.2 %** of the time with its own model (27.6 % without it; 29.5 % with SigLIP 2 So400m, for 3.4 times the CPU time). Indexing one keyframe per shot, as some home video tools do, finds it 2.3 % of the time.
+Searching 979 personal videos at once (DiDeMo test) for 3,902 descriptions written by people, whenframe puts the right moment among its first five results **29.4 %** of the time with its own model (27.6 % without it; 29.5 % with SigLIP 2 So400m, for 3.4 times the CPU time). At the standard mode's cost, it finds more moments than its large mode over four benchmarks (mean 41.90 against 40.63, sign test p = 0.00086). Its lead is on Charades-STA and YouCook2, whose training videos it learnt from: trained without each one's videos, it finds 46.5 and 26.1 % of their moments, against 50.4 and 28.5 % for So400m. Indexing one keyframe per shot, as some home video tools do, finds it 2.3 % of the time.
 <!-- /table -->
 
 ## Use
@@ -51,19 +51,20 @@ video from the moment found:
 
 The first run downloads the SigLIP 2 model (1.5 GB). A library is indexed in
 one of four modes, chosen the first time (`--mode`); measured the same way on
-four benchmarks (sixth round, below):
+four benchmarks (seventh round, below):
 
 <!-- table readme-models -->
 | `--mode` | right moment in the first five (DiDeMo) | mean of the four benchmarks | indexing, CPU min per hour of video (OpenVINO) |
 |---|---|---|---|
-| `standard`, with whenframe's model (the default) | 29.2 % | 38.65 | 7.3 |
+| `standard`, with whenframe's model (the default) | 29.4 % | 41.90 | 7.3 |
 | `standard --no-temporal` | 27.6 % | 38.07 | 7.2 |
 | `economy` | 24.3 % | 36.80 | 4.3 |
 | `large` | 29.5 % | 40.63 | 24.9 |
 <!-- /table -->
 
 The `precision` mode (B/16 and B/32 combined) found as many moments as
-`standard` on DiDeMo in the second round and was not part of the sixth.
+`standard` on DiDeMo in the second round and was not part of the sixth and
+seventh.
 
 <!-- table readme-openvino -->
 With OpenVINO (`pip install 'whenframe[fast]'`) on a processor that computes in bfloat16, as this one does, the standard mode indexes for 6.5 CPU minutes per hour of video instead of 24.9, and finds 27.5 % of the moments instead of 27.2 % (DiDeMo test).
@@ -77,8 +78,9 @@ said as well as what is seen. `whenframe index --sounds` also listens to the
 sound tracks (CLAP), to find laughter, applause, a dog barking or a siren.
 In a library of long videos, a moment lasts as long as the frames match
 (`--moments`). In the standard mode, each video's frames go through
-whenframe's own model, trained on DiDeMo and MSR-VTT (`--no-temporal` leaves
-it out; its weights are for research and non-commercial use). `serve
+whenframe's own model, trained on DiDeMo, MSR-VTT, Charades-STA and YouCook2
+(`--no-temporal` leaves it out; its weights are for research and
+non-commercial use). `serve
 --jellyfin` and `serve --immich` link each moment to the video in a Jellyfin
 or Immich server.
 
@@ -95,12 +97,11 @@ logging every outbound connection of an indexing and search run). More in
 2. [SigLIP 2](https://arxiv.org/abs/2502.14786) embeds the frames and the
    description (ONNX Runtime, CPU). Its sigmoid gives each frame an absolute
    match score, so frames from different videos compare directly. Then a
-   small transformer of whenframe's own, trained on DiDeMo's and MSR-VTT's
-   training videos, rewrites each frame's embedding with what the frames
-   around it show (in the spirit of
-   [CLIP4Clip](https://arxiv.org/abs/2104.08860)'s temporal transformer; the
-   average of three runs, a model soup), for about 0.04 CPU minutes per hour
-   of video.
+   small transformer of whenframe's own, trained on the training videos of
+   DiDeMo, MSR-VTT, Charades-STA and YouCook2, rewrites each frame's
+   embedding with what the frames around it show (in the spirit of
+   [CLIP4Clip](https://arxiv.org/abs/2104.08860)'s temporal transformer), for
+   about 0.03 CPU minutes per hour of video.
 3. Frames that match almost any description are marked down, using a bank of
    4,096 unrelated descriptions: query-bank normalisation
    ([Bogolin et al., CVPR 2022](https://arxiv.org/abs/2112.12777)), applied to
@@ -118,7 +119,7 @@ logging every outbound connection of an indexing and search run). More in
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/qthullie/whenframe/main/docs/figures/benchmark-dark.png">
-    <img src="https://raw.githubusercontent.com/qthullie/whenframe/main/docs/figures/benchmark.png" alt="whenframe against what exists: on Charades-STA it places 45.7 to 50.4 % of the moments, between VTG-GPT (43.7 %) and a 7-billion-parameter vision-language model (56.8 %); on DiDeMo it finds the right video among the first five 46.4 % of the time against 28 to 31 % for one image per video, and the right moment 29.2 % with its own model (the default), 27.6 % without it, 29.5 % with SigLIP 2 So400m for 3.4 times the CPU time, against 2.3 % for one keyframe per shot; on YouCook2, speech and adaptive spans reach 26.0 to 28.5 %; on UnAV-100, frames and sound 53.2 to 54.1 %" width="800">
+    <img src="https://raw.githubusercontent.com/qthullie/whenframe/main/docs/figures/benchmark.png" alt="whenframe against what exists: on Charades-STA, without training on it, it places 45.7 to 50.4 % of the moments, between VTG-GPT (43.7 %) and a 7-billion-parameter vision-language model (56.8 %); on DiDeMo it finds the right video among the first five 46.4 % of the time against 28 to 31 % for one image per video, and the right moment 29.4 % with its own model (the default), 27.6 % without it, 29.5 % with SigLIP 2 So400m for 3.4 times the CPU time, against 2.3 % for one keyframe per shot; on YouCook2, speech and adaptive spans reach 25.8 to 32.0 %, the most with its own model, which learnt from YouCook2's training videos (26.1 % trained without them); on UnAV-100, frames and sound 52.9 to 54.1 %" width="800">
   </picture>
 </p>
 
@@ -157,11 +158,13 @@ Second round (two more modes, French descriptions):
 | 8. the precision mode gains at least 1 point | +0.1 points | no |
 <!-- /table -->
 
-On Charades-STA, with the parameters chosen on DiDeMo and nothing trained or
-tuned on Charades, it places the moment in a given video 46.1 % of the time at
-IoU >= 0.5 with its own model (45.7 % without it, 50.4 % with SigLIP 2
-So400m); a 7-billion-parameter vision-language model, run over the video's
-frames for each sentence, is reported at 56.8 %.
+On Charades-STA, with the parameters chosen on DiDeMo and nothing trained on
+Charades, it places the moment in a given video 45.7 % of the time at IoU >=
+0.5 (50.4 % with SigLIP 2 So400m, 46.5 % with its own model trained without
+Charades-STA's videos); a 7-billion-parameter vision-language model, run over
+the video's frames for each sentence, is reported at 56.8 %. Its own model,
+which learnt from Charades-STA's training videos (none of the test's), places
+53.3 %.
 
 <!-- table readme-youcook2 -->
 On 252 YouCook2 cooking videos (5 minutes on average, searched all at once), the right step is among the first five moments 19.4 % of the time with adaptive spans (placed by default in a library of long videos), and 25.8 % when what is said is searched too (indexed with `--speech`).
@@ -213,6 +216,18 @@ primary metrics, each step significant):
 | 23. v2's mean is higher than v1's | -0.78 points | no |
 <!-- /table -->
 
+Seventh round (whenframe's model trained again, v3, on moments placed in time
+in Charades-STA, YouCook2 and TEMPO-HL as well; tested once beside the sixth
+round's five):
+
+<!-- table round7-criteria -->
+| criterion (fixed before its test run) | measured on test | met |
+|---|---|---|
+| 24. v3's mean is higher than So400m's, sign test p < 0.05 | +1.28 points, p = 0.00086 | yes |
+| 25. v3's mean is higher than v2's, p < 0.05 | +3.26 points, p = 2.6e-27 | yes |
+| 26. v3 loses at most 1 point on each test against B/16 | DiDeMo +1.8; Charades-STA +7.6; YouCook2 +6.2; UnAV-100 -0.3 | yes |
+<!-- /table -->
+
 All tables, the costs and the figures: [docs/RESULTS.md](https://github.com/qthullie/whenframe/blob/main/docs/RESULTS.md).
 
 ## Limits
@@ -234,9 +249,12 @@ All tables, the costs and the figures: [docs/RESULTS.md](https://github.com/qthu
 - Indexing is slow on a small machine without OpenVINO (see the modes above,
   measured on 4 vCPUs); OpenVINO's speed-up was measured on one processor only.
 - Descriptions in French were measured through machine translation only.
-- whenframe's own model learnt from DiDeMo's and MSR-VTT's descriptions; it
-  gains most on personal videos like DiDeMo's (+1.5 points) and little
-  elsewhere (+0.2 to +0.4), and was not measured on videos of an hour or more.
+- whenframe's own model learnt from the training videos of DiDeMo, MSR-VTT,
+  Charades-STA and YouCook2. Most of its gain on Charades-STA and YouCook2
+  comes from those videos: trained without them, it adds 0.8 and 0.3 points
+  to SigLIP 2 B/16 alone there, instead of 7.6 and 6.2. On UnAV-100, which it
+  never saw, it loses 0.3 points, and So400m finds more. It was not measured
+  on videos of an hour or more.
 - Several criteria set in advance were not met; the results page says which and
   why.
 
@@ -269,9 +287,12 @@ All tables, the costs and the figures: [docs/RESULTS.md](https://github.com/qthu
 - The query banks hold embeddings of DiDeMo training descriptions (BSD 2-Clause);
   see [whenframe/data/NOTICE](https://github.com/qthullie/whenframe/blob/main/whenframe/data/NOTICE).
 - whenframe's own model was trained on DiDeMo's training videos (Flickr,
-  Creative Commons licences, some non-commercial) and MSR-VTT's training clips
-  (Xu et al., CVPR 2016; YouTube), both published for research; its weights
-  are for research and non-commercial use (same NOTICE).
+  Creative Commons licences, some non-commercial) with TEMPO-HL's sentences
+  (Hendricks et al., EMNLP 2018, BSD 2-Clause), MSR-VTT's training clips (Xu
+  et al., CVPR 2016; YouTube), Charades-STA's training videos (Charades,
+  licensed for non-commercial research by the Allen Institute for AI) and
+  YouCook2's training videos (YouTube), all published for research; its
+  weights are for research and non-commercial use (same NOTICE).
 - The benchmark also measures MobileCLIP-S2 (Apple, research-only licence) and
   translates descriptions with Opus-MT (Helsinki-NLP, Apache 2.0); the tool uses
   neither.

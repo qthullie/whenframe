@@ -705,6 +705,15 @@ def round7_tables() -> dict[str, str]:
             f" At the standard mode's cost, it finds more moments than its large mode over four benchmarks (mean "
             f"{100 * v3['mean']:.2f} against {100 * r['so400m']['mean']:.2f}, sign test p = {p_large['p']:.2g})."
         )
+        # where that lead is: on the benchmarks whose training videos v3 learnt from, and without them
+        so, left = r["so400m"], {c: r[k][c]["value"] for k, c in LEFT_OUT.items() if k in r}
+        lead = [k for k in ("didemo", "charades", "youcook2", "unav") if v3[k]["value"] > so[k]["value"]]
+        if lead == ["charades", "youcook2"] and set(left) == set(lead):
+            headline += (
+                f" Its lead is on Charades-STA and YouCook2, whose training videos it learnt from: trained without "
+                f"each one's videos, it finds {pct(left['charades'])} and {pct(left['youcook2'])} % of their moments, "
+                f"against {pct(so['charades']['value'])} and {pct(so['youcook2']['value'])} % for So400m."
+            )
     if shots is not None:
         headline += f" Indexing one keyframe per shot, as some home video tools do, finds it {pct(shots)} % of the "
         headline += "time."

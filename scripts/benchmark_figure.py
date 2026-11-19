@@ -41,17 +41,26 @@ def load(name: str) -> dict | None:
 def panels() -> list[dict]:
     """Each panel: a title, a subtitle, and rows (label, note, value in %, is whenframe)."""
     out = []
-    six = load("compare_test.json")  # the sixth round: the encoders and whenframe's model, measured the same way
+    seven = load("round7_test.json")  # the seventh round: the encoders and whenframe's models, measured the same way
 
     def ours(key: str) -> list[tuple]:
-        """The default (with whenframe's model), --no-temporal and --mode large on one benchmark, sixth round."""
-        if not six:
+        """The default (with whenframe's model v3), --no-temporal and --mode large on one benchmark; where v3
+        learnt from the benchmark's training videos, also its recipe trained without them (seventh round)."""
+        if not seven:
             return []
+        default = {"didemo": "its own model, trained on DiDeMo's training videos",
+                   "youcook2": "its own model, trained on YouCook2's training videos",
+                   "unav": "its own model, never trained on UnAV-100"}  # fmt: skip
         rows = [
-            ("whenframe, default", "with its own model, trained on DiDeMo and MSR-VTT", six["v2"][key]["value"]),
-            ("whenframe, --no-temporal", "SigLIP 2 B/16 alone", six["base"][key]["value"]),
-            ("whenframe, --mode large", "SigLIP 2 So400m, 3.4 times the CPU", six["so400m"][key]["value"]),
+            ("whenframe, --no-temporal", "SigLIP 2 B/16 alone", seven["base"][key]["value"]),
+            ("whenframe, --mode large", "SigLIP 2 So400m, 3.4 times the CPU", seven["so400m"][key]["value"]),
         ]
+        if key in default:  # on Charades-STA, beside zero-shot methods, the model trained without its videos only
+            rows.insert(0, ("whenframe, default", default[key], seven["v3"][key]["value"]))
+        left = {"charades": ("v3-no-charades", "whenframe, its model without Charades-STA"),
+                "youcook2": ("v3-no-youcook2", "its model without YouCook2")}.get(key)  # fmt: skip
+        if left and left[0] in seven:
+            rows.append((left[1], "the default's recipe, never trained on these videos", seven[left[0]][key]["value"]))
         return [(a, b, 100 * c, True) for a, b, c in rows]
 
     ch = load("charades_test.json")
@@ -122,14 +131,14 @@ def panels() -> list[dict]:
 def cost_points() -> list[tuple[str, float, float]]:
     """(label, CPU minutes per hour of video, R@5 on DiDeMo test) of each way of indexing."""
     pts = []
-    six, cost, model = load("compare_test.json"), load("compare_cost.json"), load("temporal_test.json")
-    if six and cost:  # the sixth round, OpenVINO, every encoder's cost measured the same way
-        adapter = model["didemo"]["adapter_cost"]["cpu_min_per_hour"] if model else 0.0
-        for label, name, enc, extra in (("standard (with its own model)", "v2", "siglip2-base", adapter),
+    seven, cost = load("round7_test.json"), load("compare_cost.json")
+    if seven and cost:  # the seventh round, OpenVINO, every encoder's cost measured the same way
+        adapter = seven["v3"]["adapter_cost"]["cpu_min_per_hour"]
+        for label, name, enc, extra in (("standard (with its own model)", "v3", "siglip2-base", adapter),
                                         ("--no-temporal", "base", "siglip2-base", 0.0),
                                         ("economy", "b32", "siglip2-b32", 0.0),
                                         ("large", "so400m", "siglip2-so400m", 0.0)):  # fmt: skip
-            pts.append((label, cost[enc]["cpu_min_per_hour"] + extra, 100 * six[name]["didemo"]["value"]))
+            pts.append((label, cost[enc]["cpu_min_per_hour"] + extra, 100 * seven[name]["didemo"]["value"]))
     return pts
 
 
@@ -144,9 +153,9 @@ def draw(theme: str):
     fig.text(0.02, y / total, "whenframe against what exists", color=t["ink"], fontsize=17 * PX, fontweight="bold",
              va="top")  # fmt: skip
     intro = (
-        "On a 4-vCPU machine without a GPU; zero-shot but for whenframe's own model, trained on DiDeMo's and "
-        "MSR-VTT's\ntraining videos. Published numbers are as their authors report them; the other references "
-        "are run here, on the same videos."
+        "On a 4-vCPU machine without a GPU; zero-shot but for whenframe's own model, which learnt from the training "
+        "videos of DiDeMo,\nMSR-VTT, Charades-STA and YouCook2. Published numbers are as their authors report them; "
+        "the other references are run here."
     )
     fig.text(0.02, (y - 0.32) / total, intro, color=t["ink2"], fontsize=12 * PX, va="top", linespacing=1.5)
     key = 10 * PX / 72  # inches

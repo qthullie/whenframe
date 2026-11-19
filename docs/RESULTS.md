@@ -802,3 +802,133 @@ Of the three published ideas tried on the tuning sets, only the soup was kept
 than InfoNCE, and scaling the model's correction (WiSE-FT) did worse at every
 alpha below 1. MSR-VTT's clips (`scripts/msrvtt.py`) added the descriptions of
 animals, music, vehicles and sports that DiDeMo's lack.
+
+## Seventh round: whenframe's model v3
+
+The seventh round of the protocol ([PROTOCOL.md](PROTOCOL.md)): whenframe's
+model trained again (v3) with three more sets of descriptions that place a
+moment in time (Charades-STA's, YouCook2's and TEMPO-HL's), chosen on the
+tuning sets, then tested once beside the sixth round's five candidates, whose
+numbers came out the same.
+
+<!-- table round7-criteria -->
+| criterion (fixed before its test run) | measured on test | met |
+|---|---|---|
+| 24. v3's mean is higher than So400m's, sign test p < 0.05 | +1.28 points, p = 0.00086 | yes |
+| 25. v3's mean is higher than v2's, p < 0.05 | +3.26 points, p = 2.6e-27 | yes |
+| 26. v3 loses at most 1 point on each test against B/16 | DiDeMo +1.8; Charades-STA +7.6; YouCook2 +6.2; UnAV-100 -0.3 | yes |
+<!-- /table -->
+
+The three criteria are met. v3 finds more than SigLIP 2 So400m (`--mode
+large`) on the mean of the four benchmarks, significantly, for under a third
+of its CPU time; more than v2; and it loses on none of the four against
+SigLIP 2 B/16 alone (0.3 points on UnAV-100, within the point allowed). As
+fixed before the test, v3 replaces v2: a new library in the standard mode
+goes through it by default, searched with the speech settings and the sound
+weight chosen with it on the tuning sets
+(`whenframe/data/temporal-siglip2-base.npz` holds both).
+
+### On the test sets
+
+<!-- table round7-test -->
+| test sets, ranked by the mean | DiDeMo R@5 | Charades-STA R1 | YouCook2 R@5 | UnAV-100 P@10 | mean | indexing, CPU min per hour |
+|---|---|---|---|---|---|---|
+| B/16 + whenframe's model v3 | 29.4 | 53.3 | 32.0 | 52.9 | **41.90** | 7.3 |
+| SigLIP 2 So400m (`--mode large`) | 29.5 | 50.4 | 28.5 | 54.1 | **40.63** | 24.9 |
+| B/16 + whenframe's model v1 | 29.3 | 46.6 | 29.6 | 52.2 | **39.43** | 7.3 |
+| B/16 + whenframe's model v2 | 29.2 | 46.1 | 26.0 | 53.3 | **38.65** | 7.3 |
+| SigLIP 2 B/16 (standard) | 27.6 | 45.7 | 25.8 | 53.2 | **38.07** | 7.2 |
+| SigLIP 2 B/32 (`--mode economy`) | 24.3 | 43.5 | 27.6 | 51.7 | **36.80** | 4.3 |
+<!-- /table -->
+
+<!-- table round7-pairs -->
+| the first finds more than the second? | items better | items worse | sign test p | said |
+|---|---|---|---|---|
+| B/16 + whenframe's model v3 / SigLIP 2 So400m (`--mode large`) | 994 | 850 | 0.00086 | yes |
+| B/16 + whenframe's model v3 / B/16 + whenframe's model v1 | 626 | 335 | 4.2e-21 | yes |
+| B/16 + whenframe's model v3 / B/16 + whenframe's model v2 | 722 | 367 | 2.6e-27 | yes |
+| B/16 + whenframe's model v3 / SigLIP 2 B/16 (standard) | 817 | 383 | 1.3e-36 | yes |
+| B/16 + whenframe's model v3 / SigLIP 2 B/32 (`--mode economy`) | 1174 | 544 | 3.4e-53 | yes |
+| SigLIP 2 So400m (`--mode large`) / B/16 + whenframe's model v1 | 932 | 787 | 0.00051 | yes |
+| SigLIP 2 So400m (`--mode large`) / B/16 + whenframe's model v2 | 926 | 714 | 1.8e-07 | yes |
+| SigLIP 2 So400m (`--mode large`) / SigLIP 2 B/16 (standard) | 962 | 673 | 9.3e-13 | yes |
+| SigLIP 2 So400m (`--mode large`) / SigLIP 2 B/32 (`--mode economy`) | 1182 | 702 | 1.3e-28 | yes |
+| B/16 + whenframe's model v1 / B/16 + whenframe's model v2 | 300 | 235 | 0.0056 | yes |
+| B/16 + whenframe's model v1 / SigLIP 2 B/16 (standard) | 412 | 269 | 4.7e-08 | yes |
+| B/16 + whenframe's model v1 / SigLIP 2 B/32 (`--mode economy`) | 905 | 563 | 3.9e-19 | yes |
+| B/16 + whenframe's model v2 / SigLIP 2 B/16 (standard) | 226 | 148 | 6.5e-05 | yes |
+| B/16 + whenframe's model v2 / SigLIP 2 B/32 (`--mode economy`) | 907 | 631 | 2.1e-12 | yes |
+| SigLIP 2 B/16 (standard) / SigLIP 2 B/32 (`--mode economy`) | 864 | 668 | 6.1e-07 | yes |
+<!-- /table -->
+
+**Where v3's lead comes from.** It is on Charades-STA (53.3 against 50.4 %)
+and YouCook2 (32.0 against 28.5 %), the two benchmarks whose training videos
+v3 learnt from. On DiDeMo, whose training videos every version of the model
+learnt from, v3 and So400m are level (29.4 and 29.5 %); on UnAV-100, which
+no candidate trained on, So400m finds more (54.1 against 52.9 %), and so does
+SigLIP 2 B/16 alone (53.2 %).
+
+### What v3 owes to the collections it trained on
+
+<!-- table round7-left-out -->
+| the test of a collection left out of training | B/16 (never trained on it) | v3 trained without it | v3 |
+|---|---|---|---|
+| Charades-STA, R1 at IoU >= 0.5 | 45.7 | 46.5 | 53.3 |
+| YouCook2, R@5, speech + spans | 25.8 | 26.1 | 32.0 |
+<!-- /table -->
+
+Reported beside, deciding nothing. Trained without Charades-STA's videos,
+v3's recipe places 46.5 % of Charades-STA's test moments, 0.8 points above
+SigLIP 2 B/16 alone and 6.8 below v3; trained without YouCook2's, it finds
+26.1 % of YouCook2's test steps, 0.3 points above B/16 and 5.9 below v3.
+Nearly all of v3's gain on these two benchmarks comes from having trained on
+their videos. On a collection the model has never seen, the gain to expect
+is that of the runs that left it out, under a point over SigLIP 2 B/16 alone,
+with So400m ahead; on personal videos like DiDeMo's, whose training videos it
+learnt from, v3 finds as much as So400m. Each of the two runs still finds
+more than v2 over the four benchmarks (means 40.21 and 40.46, against 38.65),
+from the collection it did not leave out.
+
+### Model v3, chosen on the tuning sets
+
+<!-- table round7-tuning -->
+| tuning sets | DiDeMo R@5 | Charades-STA R1 | YouCook2 R@5 | UnAV-100 P@10 | mean | kept |
+|---|---|---|---|---|---|---|
+| SigLIP 2 B/16 (standard) | 31.3 | 44.9 | 29.4 | 41.0 | 36.66 |  |
+| B/16 + whenframe's model v2 | 33.2 | 45.4 | 29.9 | 41.3 | 37.45 |  |
+| v3: all five sets of descriptions, no teacher | 32.7 | 49.4 | 31.8 | 41.8 | 38.92 | yes |
+| + So400m's losses, on Charades-STA's frames | 32.4 | 48.6 | 31.8 | 41.5 | 38.61 | no |
+| the leash's weight 30, not 100 | 33.7 | 50.6 | 32.1 | 42.1 | 39.63 | yes |
+| width 512 and four layers, not 256 and two | 34.4 | 49.7 | 31.7 | 42.1 | 39.47 | no |
+| a soup of three runs (data seeds 0, 1, 2) | 33.5 | 50.3 | 32.0 | 42.1 | 39.46 | no |
+| alpha 0.25 | 32.5 | 47.1 | 29.6 | 40.8 | 37.50 | no |
+| alpha 0.5 | 32.9 | 48.9 | 30.4 | 41.3 | 38.35 | no |
+| alpha 0.75 | 33.6 | 50.1 | 31.3 | 42.3 | 39.33 | no |
+| *v3 without Charades-STA's videos (beside)* | 34.0 | 46.4 | 32.6 | 42.1 | 38.79 |  |
+| *v3 without YouCook2's videos (beside)* | 34.0 | 51.6 | 29.1 | 41.5 | 39.04 |  |
+<!-- /table -->
+
+Of the round's five choices, only the leash's lighter weight was kept (30
+instead of 100, which lets the frames move further from SigLIP 2's). So400m's
+losses (knowledge distillation, Hinton et al., 2015, as TeachCLIP taught a
+light model with stronger ones, Tian et al., CVPR 2024) did worse on three of
+the four tuning sets and as well on YouCook2, so its frames of DiDeMo and
+MSR-VTT were not computed; the larger adapter found more on DiDeMo's tuning
+videos (34.4 against 33.7 %) and less on Charades-STA's and YouCook2's; the
+soup of three runs, kept in the sixth round, and a smaller alpha did worse.
+What made v3 is its data: before any choice, the descriptions of
+Charades-STA, YouCook2 and TEMPO-HL, each placing a moment in time, took
+Charades-STA's held-out R1 from 45.4 % (v2) to 49.4 % and YouCook2's tuning
+steps from 29.9 to 31.8 %.
+
+### The tool searches as the candidates are measured
+
+Each candidate is measured with the speech settings and the sound weight
+chosen for it on the tuning sets; until this round, the tool searched every
+mode with the standard one's (what is said within the moment, sound weight
+2). It now uses those chosen with its library's model (decided during the
+choices, before the test): v3 counts what is said up to 5 seconds around a
+frame, with weight 0.005, and the sound with weight 2; B/32 what is said up
+to 5 seconds around a frame, sound weight 1.5; So400m sound weight 1.5. The
+sixth round's numbers above are unchanged: its candidates were measured with
+their own settings then too.

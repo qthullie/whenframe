@@ -110,16 +110,18 @@ measured accuracy).
   adapter in the spirit of [CLIP4Clip](https://arxiv.org/abs/2104.08860)'s
   temporal transformer, which rewrites each frame's SigLIP 2 embedding with
   its neighbours', trained on the search's own scores, query bank included,
-  leashed to SigLIP 2's embeddings, on DiDeMo's and MSR-VTT's training
-  videos, and averaged over three runs (a model soup, [Wortsman et al.,
-  2022](https://arxiv.org/abs/2203.05482)). It is on by default in the
-  standard mode, having found more than SigLIP 2 alone on four benchmarks
-  without losing on any.
+  leashed to SigLIP 2's embeddings, on the moments described in the training
+  videos of DiDeMo (with TEMPO-HL's sentences), MSR-VTT, Charades-STA and
+  YouCook2, each collection drawn with a temperature as multilingual models
+  mix languages. It is on by default in the standard mode, having found more
+  than SigLIP 2 alone on the mean of four benchmarks while losing at most 0.3
+  points on any.
 - Compares its ways of embedding frames the same way on four benchmarks
-  (DiDeMo, Charades-STA, YouCook2, UnAV-100), the costs measured alike:
-  So400m finds the most, for 3.4 times the CPU time; whenframe's model gives
-  part of that gain for almost none of the cost ([RESULTS.md](RESULTS.md),
-  sixth round).
+  (DiDeMo, Charades-STA, YouCook2, UnAV-100), the costs measured alike: with
+  its own model, the standard mode finds more than So400m on their mean, for
+  under a third of its CPU time, its lead being on the two benchmarks whose
+  training videos the model learnt from; on the others, So400m finds as much
+  (DiDeMo) or more (UnAV-100) ([RESULTS.md](RESULTS.md), seventh round).
 - Measures all of it on DiDeMo, personal Flickr videos, with the protocol fixed
   in advance ([PROTOCOL.md](PROTOCOL.md)), against a shot-based baseline in the
   spirit of current home tools, with the CPU cost of indexing and searching.
@@ -136,9 +138,9 @@ a 7-billion-parameter vision-language model;
 with a language model and vision-language models;
 [VTG-GPT](https://arxiv.org/abs/2403.02076) (Xu et al., 2024) 43.68 %;
 [PSVL](https://arxiv.org/abs/2110.00428) (Nam et al., ICCV 2021) 31.29 %,
-trained on unannotated videos. whenframe places 45.7 % (fixed windows), 46.1 %
-with its own model (trained on DiDeMo and MSR-VTT, not on Charades), 47.2 %
-(adaptive spans) and 50.4 % with SigLIP 2 So400m, with its DiDeMo parameters,
+trained on unannotated videos. whenframe places 45.7 % (fixed windows), 46.5 %
+with its own model trained without Charades-STA's videos, 47.2 % (adaptive
+spans) and 50.4 % with SigLIP 2 So400m, with its DiDeMo parameters,
 on a CPU, from frames it embedded once for every search; the first three run language or
 vision-language models over the video for each sentence, and PSVL trains a
 model on Charades videos without their annotations. The home-tool approaches of the same figure (one image per video, one
@@ -151,3 +153,8 @@ the same videos and descriptions as whenframe.
   one above.
 - A frame-level encoder cannot see motion: descriptions like "the camera pans
   left" are out of its reach, and DiDeMo has many of them.
+- whenframe's model is not zero-shot on Charades-STA and YouCook2: it learnt
+  from their training videos (never their test videos), and its lead over
+  So400m on the four benchmarks' mean is on those two. Trained without each
+  one's videos, it adds under a point to SigLIP 2 alone on that benchmark; on
+  a collection it has never seen, expect that rather than its gain on them.

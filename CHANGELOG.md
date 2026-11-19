@@ -5,9 +5,17 @@
 - whenframe's own model: a temporal adapter of 1.45 million weights rewrites
   each frame's SigLIP 2 embedding with what the frames around it show. A new
   library in the standard mode goes through it (`whenframe index
-  --no-temporal` leaves it out). Trained on DiDeMo's 7,745 and MSR-VTT's
-  8,998 training videos, the average of three runs; its weights are for
-  research and non-commercial use (`whenframe/data/NOTICE`).
+  --no-temporal` leaves it out). Model v3, trained on the moments described
+  in the training videos of DiDeMo (with TEMPO-HL's sentences), MSR-VTT,
+  Charades-STA and YouCook2; its weights are for research and non-commercial
+  use (`whenframe/data/NOTICE`).
+- The seventh round tests v3 once beside the sixth round's five: mean of the
+  four primary metrics 41.90, against 40.63 for So400m (`--mode large`, sign
+  test p = 0.00086), 38.65 for v2 and 38.07 for B/16 alone; on DiDeMo, the
+  right moment among the first five 29.4 % of the time, against 29.5 % with
+  So400m for 3.4 times the CPU time. Its lead is on Charades-STA and YouCook2,
+  whose training videos it learnt from: trained without each one's videos,
+  46.5 and 26.1 %, against 50.4 and 28.5 % for So400m.
 - The sixth round compares SigLIP 2 B/32, B/16, So400m and B/16 with the
   model, on the same frames of DiDeMo, Charades-STA, YouCook2 and UnAV-100:
   mean of the four primary metrics 36.80, 38.07, 40.63 and 38.65, each step
@@ -18,14 +26,17 @@
   and 24.9 (So400m) CPU minutes per hour of video with OpenVINO.
 - A search weighs what is said and what is heard as chosen with its library's
   model on the tuning sets, as the benchmarks measure each mode: sound weight
-  1.5 with whenframe's model, B/32 and So400m, and B/32 counts what is said up
-  to 5 seconds around a frame. Every mode used the standard one's before
+  1.5 with B/32 and So400m, and whenframe's model and B/32 count what is said
+  up to 5 seconds around a frame. Every mode used the standard one's before
   (sound weight 2). whenframe's model keeps its own in its file
   (`scripts/temporal.py export --settings`).
-- `scripts/train_data.py`, `scripts/msrvtt.py`, `scripts/temporal.py` and
-  `scripts/compare.py` stream the training archives, train the model with JAX
-  (`pip install 'whenframe[train]'`) and run the comparison; a head placing
-  moments, SigLIP's own loss and WiSE-FT's scaling were tried and not kept.
+- `scripts/train_data.py`, `scripts/msrvtt.py`, `scripts/moments_data.py`,
+  `scripts/temporal.py`, `scripts/round7.py` and `scripts/compare.py` stream
+  the training archives, train the model with JAX (`pip install
+  'whenframe[train]'`), make the choices on the tuning sets and run the
+  comparison; a head placing moments, SigLIP's own loss, WiSE-FT's scaling,
+  So400m's losses as a teacher, a larger adapter and, in the seventh round, a
+  soup of three runs were tried and not kept.
 
 ## 0.1.0
 

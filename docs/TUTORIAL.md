@@ -85,13 +85,17 @@ whenframe compact    # reclaim space after videos were re-indexed or removed
 
 In the standard mode, each video's frames go through whenframe's own model
 before they are stored: two transformer layers that add to each frame's
-embedding what the frames around it show, trained on DiDeMo's 7,745 and
-MSR-VTT's 8,998 training videos (the average of three runs). On the DiDeMo
-test it put the right moment among the first five 29.2 % of the time instead
-of 27.6 %, and it did a little better on Charades-STA, YouCook2 and UnAV-100
-too ([RESULTS.md](RESULTS.md), "Sixth round"). It costs about 0.04 CPU minutes
-per hour of video, against some 7 for SigLIP 2's image tower. Photos keep
-their embedding, and the other modes do not use it.
+embedding what the frames around it show, trained on the moments described
+in the training videos of DiDeMo (with TEMPO-HL's sentences), MSR-VTT,
+Charades-STA and YouCook2. On the DiDeMo test it put the right moment among
+the first five 29.4 % of the time instead of 27.6 %, as often as SigLIP 2
+So400m (29.5 %), and over four benchmarks it found more than the large mode
+([RESULTS.md](RESULTS.md), "Seventh round"). Most of its gain on Charades-STA
+and YouCook2 comes from their training videos: on videos unlike any it
+learnt from, expect less (on UnAV-100, which it never saw, it finds 0.3
+points fewer than SigLIP 2 alone). It costs about 0.03 CPU minutes per hour
+of video, against some 7 for SigLIP 2's image tower. Photos keep their
+embedding, and the other modes do not use it.
 
 ```bash
 whenframe index ~/Videos --no-temporal   # SigLIP 2's embeddings as they are, the first time a library is indexed
@@ -141,7 +145,7 @@ long home videos.
 
 How much what is said and what is heard count was chosen with each mode's
 model on tuning videos, and a search uses its library's: what is heard weighs
-1.5 with whenframe's model and in the economy and large modes, 2 otherwise; in
+1.5 in the economy and large modes, 2 otherwise; with whenframe's model and in
 the economy mode, what is said counts up to 5 seconds around a frame.
 
 ### Long moments
@@ -343,6 +347,16 @@ archive on the Hub by byte ranges (`msrvtt_train_9k.json` of
 `friedrichor/MSR-VTT` in `data/msrvtt/`), trains model v2, embeds the four
 benchmarks' frames again with So400m and B/32, measures every encoder's cost
 the same way and tests the five candidates once.
+
+The seventh round (`make round7`, after the sixth) embeds the frames of
+Charades-STA's training videos (the full Charades archive of
+`lmms-eval/charades_sta` on the Hub) and YouCook2's
+(`nguyenminh04/youcook2-videos`), read by byte ranges one video at a time and
+none kept, and the training descriptions of Charades-STA, YouCook2 and
+TEMPO-HL (`charades_sta_train.txt`, `youcookii_train.jsonl` and
+`tempoHL+didemo_train.json` in `data/train-annotations/`). `scripts/round7.py`
+then trains model v3 and makes the choices on the tuning sets by the rule
+(about eight hours on four cores), and the test runs once.
 
 The fifth round (`make round5`, after the others; `pip install -e ".[train]"`
 for JAX) trains whenframe's own model. It reads DiDeMo's training archive

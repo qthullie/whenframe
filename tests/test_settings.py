@@ -12,7 +12,8 @@ from whenframe.speech import SpeechConfig
 
 ROOT = Path(__file__).resolve().parents[1]
 TUNED = json.loads((ROOT / "results" / "compare_tuned.json").read_text())
-SHIPPED = TUNED["v2"]  # what was chosen for the temporal model the package ships
+# what was chosen for the temporal model the package ships: v3, the seventh round's
+SHIPPED = json.loads((ROOT / "results" / "round7_tuned.json").read_text())["v3"]
 
 
 def library(folder: Path, model: str, temporal_model: str = "") -> Library:
