@@ -163,6 +163,10 @@
   "alpha": 1.0,
   "weights": "results/temporal/v3-leash30.npz",
   "v3": "results/temporal/temporal-siglip2-base-v3.npz",
-  "mean": 0.39633159295051007
+  "mean": 0.39633159295051007,
+  "left_out": [
+   "v3-no-charades=results/temporal/v3-no-charades.npz@1",
+   "v3-no-youcook2=results/temporal/v3-no-youcook2.npz@1"
+  ]
  }
 }

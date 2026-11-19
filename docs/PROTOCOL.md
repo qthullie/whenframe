@@ -893,4 +893,6 @@ of the round's five choices, only the leash's lighter weight is kept. Every
 choice was judged on the same tuning sets, so v3's gain on the tests is
 likely smaller than on them. Beside, deciding nothing: v3's recipe without
 Charades-STA's videos (checked as it trains on DiDeMo's tuning videos alone)
-and without YouCook2's, one run each, as v3.
+and without YouCook2's, one run each, as v3. On the tuning sets, without
+Charades-STA's videos: 34.0, 46.4, 32.6 and 42.1 %, mean 38.79; without
+YouCook2's: 34.0, 51.6, 29.1 and 41.5 %, mean 39.04.

@@ -185,5 +185,39 @@
    "normalise": "raw"
   },
   "sound_weight": 2.0
+ },
+ "v3-no-charades": {
+  "spec": "v3-no-charades=results/temporal/v3-no-charades.npz@1",
+  "model": "siglip2-base",
+  "weights": "results/temporal/v3-no-charades.npz",
+  "alpha": 1.0,
+  "didemo": 0.34031681144609094,
+  "youcook2": 0.3263327948303716,
+  "unav": 0.42051282051282046,
+  "charades": 0.4644097222222222,
+  "mean": 0.38789303725287627,
+  "speech": {
+   "weight": 0.005,
+   "pad": 5.0,
+   "normalise": "raw"
+  },
+  "sound_weight": 1.5
+ },
+ "v3-no-youcook2": {
+  "spec": "v3-no-youcook2=results/temporal/v3-no-youcook2.npz@1",
+  "model": "siglip2-base",
+  "weights": "results/temporal/v3-no-youcook2.npz",
+  "alpha": 1.0,
+  "didemo": 0.33980582524271846,
+  "youcook2": 0.29079159935379645,
+  "unav": 0.41538461538461535,
+  "charades": 0.515625,
+  "mean": 0.3904017599952826,
+  "speech": {
+   "weight": 0.005,
+   "pad": 0.0,
+   "normalise": "raw"
+  },
+  "sound_weight": 0.75
  }
 }
