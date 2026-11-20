@@ -737,6 +737,49 @@ def round7_tables() -> dict[str, str]:
     return out
 
 
+def round8_tables() -> dict[str, str]:
+    """The eighth round: each library learnt from Florence-2's descriptions of its own frames."""
+    out, cols = {}, ("didemo", "charades", "youcook2", "unav")
+    head = ["DiDeMo R@5", "Charades-STA R1", "YouCook2 R@5", "UnAV-100 P@10", "mean"]
+    f, fc = RESULTS / "round8_tuned.json", RESULTS / "round8_choices.json"
+    if f.exists() and fc.exists():
+        t, steps = json.loads(f.read_text()), json.loads(fc.read_text())["steps"]
+        rows = [["the starting models, as they are", *(pct(t["start"][c]) for c in cols),
+                 f"{100 * t['start']['mean']:.2f}", ""]] if "start" in t else []  # fmt: skip
+        what = {1: lambda r: "1. each library learnt, 10 passes over its descriptions",
+                2: lambda r: f"2. {r['passes']:g} passes instead",
+                3: lambda r: "3. half of each batch from the starting model's own collections"}  # fmt: skip
+        rows += [[what[x["choice"]](x["recipe"]), *(pct(t[x["run"]][c]) for c in cols), f"{100 * x['mean']:.2f}",
+                  "yes" if x["kept"] else "no"] for x in steps]  # fmt: skip
+        out["round8-tuning"] = table(["tuning sets", *head, "kept"], rows)
+    f = RESULTS / "round8_test.json"
+    if not f.exists():
+        return out
+    r = json.loads(f.read_text())
+    ref, new = r["candidates"][:2]
+    names = {ref: "the starting models, as they are", new: "each library learnt, with the recipe chosen"}
+    rows = [[names[n], *(pct(r[n][c]["value"]) for c in cols), f"**{100 * r[n]['mean']:.2f}**"] for n in (ref, new)]
+    out["round8-test"] = table(["test libraries", *head], rows)
+    pair = r["pairs"][f"{new} vs {ref}"]
+    out["round8-pairs"] = table(["over the four tests", "items better", "items worse", "sign test p"],
+                                [["learnt / as they are", str(pair["wins"]), str(pair["losses"]),
+                                  f"{pair['p']:.2g}"]])  # fmt: skip
+    u, ch, cost, met = r["unseen"], r["changes"], r["cost"], r["criteria"]
+    rows = [
+        ["27. on Charades-STA and YouCook2, the mean rises by at least 2 points, sign test p < 0.05",
+         f"{100 * u['gain']:+.2f} points (Charades-STA {100 * u['charades']:+.1f}, YouCook2 "
+         f"{100 * u['youcook2']:+.1f}); {u['wins']} items better, {u['losses']} worse, p = {u['p']:.2g}", met["27"]],
+        ["28. at most 1 point lost on each test", "; ".join(f"{BENCH[k]} {100 * v:+.1f}" for k, v in ch.items()),
+         met["28"]],
+        ["29. describing and learning cost at most 30 CPU min per hour of video",
+         f"{cost['total']:.1f} (decoding {cost['decode']:.1f}, describing {cost['describe']:.1f}, embedding the "
+         f"descriptions {cost.get('embed', 0.0):.2f}, learning {cost['learn']:.2f})", met["29"]],
+    ]  # fmt: skip
+    out["round8-criteria"] = table(["criterion (fixed before its test run)", "measured on test", "met"],
+                                   [[n, m, "yes" if ok else "no"] for n, m, ok in rows])  # fmt: skip
+    return out
+
+
 def published_tables() -> dict[str, str]:
     """whenframe beside published systems trained to search a whole library of DiDeMo's test videos (added after
     the test runs: results/published_didemo.json, as their authors report them)."""
@@ -840,6 +883,7 @@ def main() -> int:
     tables.update(round5_tables())
     tables.update(round6_tables())
     tables.update(round7_tables())  # after the sixth round's: replaces the README's tables if v3 is the default
+    tables.update(round8_tables())
     tables.update(published_tables())
     f2 = RESULTS / "didemo_test_round2.json"
     if f2.exists():
