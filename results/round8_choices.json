@@ -12,11 +12,5 @@
    "against_mean": 0.3782412590786738,
    "kept": false
   }
- ],
- "final": {
-  "run": "start",
-  "recipe": null,
-  "mean": 0.3782412590786738,
-  "start_mean": 0.3782412590786738
- }
+ ]
 }
