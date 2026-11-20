@@ -982,3 +982,46 @@ If 27, 28 and 29 hold, `whenframe learn` is added: it describes a library's
 frames, teaches v3 the library, and the library is searched through the
 model it learnt; a library not learnt keeps v3. The test is run once, after
 the choices on the tuning sets are recorded here.
+
+**The choices on the tuning sets** (`scripts/round8.py`;
+`results/round8_tuned.json`, `results/round8_choices.json`). Each is scored
+by the mean of four metrics:
+
+- DiDeMo's R@5;
+- Charades-STA's held-out R1 at IoU >= 0.5;
+- YouCook2's R@5 with speech and spans;
+- UnAV-100's P@10 with sound.
+
+Each candidate's speech and sound weights were chosen on the same sets. The
+starting models as they are: 33.7, 46.4, 29.1 and 42.1 %, mean 37.82.
+
+| each library learnt from Florence-2's descriptions of its frames | DiDeMo | Charades-STA | YouCook2 | UnAV-100 | mean |
+|---|---|---|---|---|---|
+| 1. 10 passes over its descriptions: not kept | 32.2 | 45.5 | 29.7 | 42.1 | 37.38 |
+| 2. 3 passes: not kept | 33.0 | 46.1 | 29.6 | 41.3 | 37.49 |
+| 2. 30 passes: not kept | 31.5 | 44.0 | 28.9 | 41.3 | 36.42 |
+| 3. half of each batch from the starting model's own collections, 10 passes: not kept | 32.7 | 45.4 | 28.9 | 41.5 | 37.13 |
+
+No choice is kept.
+
+A first version of `scripts/round8.py` stopped once choice 1 was not kept,
+although the choices are made in a set order. The script was corrected
+before choice 2 was measured, and choices 2 and 3 were then made as written:
+
+- each was judged against the starting models, the run kept so far;
+- choice 3 used choice 1's 10 passes, as neither 3 nor 30 was kept.
+
+**No test.** The test compares each test library learnt with the recipe
+chosen against its starting model. With no recipe chosen, it would compare
+the starting models with themselves, so the round ends on the tuning sets:
+criteria 27 to 29 are not judged, and `whenframe learn` is not added.
+
+The test libraries were described ahead of the choices, to save time, from
+their frames alone. DiDeMo's and UnAV-100's were described entirely, and
+Charades-STA's (1,188 of 1,334 videos) and YouCook2's (244 of 252) until
+the choices ended. None was learnt or searched.
+
+On DiDeMo's test library, measured as criterion 29 measures it, decoding,
+describing and embedding the descriptions cost 22.9 CPU minutes per hour of
+video before learning: decoding 1.9, describing 20.3 and embedding 0.67
+(`results/round8_cost.json`).

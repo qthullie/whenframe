@@ -21,6 +21,13 @@
   among its first five 48.1 % of the time, against 25.4 % for the best of
   them (EventFormer, 2024), and first 25.3 % against 8.5 %
   (`results/published_didemo.json`, as their authors report them).
+- The eighth round tried teaching whenframe's model a library from automatic
+  descriptions of its own frames (Florence-2-base, one frame in each 10
+  seconds; `scripts/learn.py`, `scripts/round8.py`). None of its three
+  recipes found more than the starting models on the tuning sets (mean 37.49
+  at best, against 37.82), so it was not tested and the tool is unchanged.
+  Describing costs about 20 CPU minutes per hour of video
+  ([docs/RESULTS.md](https://github.com/qthullie/whenframe/blob/main/docs/RESULTS.md)).
 - The sixth round compares SigLIP 2 B/32, B/16, So400m and B/16 with the
   model, on the same frames of DiDeMo, Charades-STA, YouCook2 and UnAV-100:
   mean of the four primary metrics 36.80, 38.07, 40.63 and 38.65, each step

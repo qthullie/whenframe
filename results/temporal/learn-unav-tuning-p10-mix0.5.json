@@ -1,0 +1,68 @@
+{
+ "config": {
+  "stage": "train",
+  "name": "learn-unav-tuning-p10-mix0.5",
+  "steps": 74,
+  "batch": 128,
+  "lr": 0.0001,
+  "head_lr": 0.0003,
+  "bank_sample": 1024,
+  "warmup": 7,
+  "decay": 0.01,
+  "width": 256,
+  "layers": 2,
+  "heads": 4,
+  "between": 1.0,
+  "within": 2.0,
+  "leash": 30.0,
+  "dropout": 0.1,
+  "head": 0.0,
+  "negatives": 4,
+  "every": 0,
+  "seed": 0,
+  "init_seed": null,
+  "extra": "msrvtt,charades,youcook2,tempo",
+  "mix": "sqrt",
+  "distil": 0.0,
+  "teacher": "charades",
+  "check_charades": false,
+  "between_loss": "infonce",
+  "init": "/home/user/whenframe/results/temporal/v3-leash30.npz",
+  "library": "unav-tuning",
+  "library_share": 0.5,
+  "passes": 10.0,
+  "models": null,
+  "alpha": 1.0,
+  "settings": null,
+  "split": "train"
+ },
+ "tuning_without": {},
+ "checks": [],
+ "collections": {
+  "didemo": [
+   46338,
+   0.17193449459068652
+  ],
+  "msrvtt": [
+   44990,
+   0.16941519902474897
+  ],
+  "charades": [
+   11256,
+   0.08473960122894465
+  ],
+  "youcook2": [
+   8563,
+   0.07391070515561984
+  ],
+  "library": [
+   471,
+   0.5
+  ]
+ },
+ "seconds": 57.02989172935486,
+ "cpu_seconds": 73.51711934000001,
+ "final_loss": 2.6208913326263428,
+ "best": -1.0,
+ "best_step": 74
+}

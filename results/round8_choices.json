@@ -35,6 +35,24 @@
    "against": "start",
    "against_mean": 0.3782412590786738,
    "kept": false
+  },
+  {
+   "choice": 3,
+   "run": "learn-p10-mix0.5",
+   "recipe": {
+    "passes": 10.0,
+    "share": 0.5
+   },
+   "mean": 0.37126848634092546,
+   "against": "start",
+   "against_mean": 0.3782412590786738,
+   "kept": false
   }
- ]
+ ],
+ "final": {
+  "run": "start",
+  "recipe": null,
+  "mean": 0.3782412590786738,
+  "start_mean": 0.3782412590786738
+ }
 }

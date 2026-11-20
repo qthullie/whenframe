@@ -253,9 +253,12 @@ All tables, the costs and the figures: [docs/RESULTS.md](https://github.com/qthu
 - whenframe's own model learnt from the training videos of DiDeMo, MSR-VTT,
   Charades-STA and YouCook2. Most of its gain on Charades-STA and YouCook2
   comes from those videos: trained without them, it adds 0.8 and 0.3 points
-  to SigLIP 2 B/16 alone there, instead of 7.6 and 6.2. On UnAV-100, which it
-  never saw, it loses 0.3 points, and So400m finds more. It was not measured
-  on videos of an hour or more.
+  to SigLIP 2 B/16 alone there, instead of 7.6 and 6.2. Learning a library
+  from automatic descriptions of its own frames (Florence-2-base) did not make
+  up for it: every recipe tried found less than the model as it is, on the
+  mean of the four tuning sets. On UnAV-100, which it never saw, it loses 0.3
+  points, and So400m finds more. It was not measured on videos of an hour or
+  more.
 - Several criteria set in advance were not met; the results page says which and
   why.
 

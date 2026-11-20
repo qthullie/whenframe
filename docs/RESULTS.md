@@ -982,3 +982,79 @@ puts it first more often (3.1 %, against 1.6 and 2.1 %), but XML and HERO
 find more among their first hundred: whenframe's moments last 10 seconds, so
 they overlap DiDeMo's 5-second segments at IoU 0.5 at most, a length chosen
 to play a moment rather than to mark its boundaries.
+
+## Eighth round: whenframe learns a library
+
+The eighth round of the protocol ([PROTOCOL.md](PROTOCOL.md)) asked whether
+whenframe's model can learn a library nobody has described, from automatic
+descriptions of its own frames. Florence-2-base (Xiao et al., CVPR 2024;
+Microsoft, MIT licence) described one frame in each 10 seconds of every
+video, and the model went on training from its own weights, each description
+a query whose moment is its 10 seconds. Each tuning set was learnt by the
+model it starts from: v3 for DiDeMo and UnAV-100; for Charades-STA and
+YouCook2, the seventh round's runs trained without their videos, which have
+never seen them, as no model has seen a family's videos.
+
+<!-- table round8-tuning -->
+| tuning sets | DiDeMo R@5 | Charades-STA R1 | YouCook2 R@5 | UnAV-100 P@10 | mean | kept |
+|---|---|---|---|---|---|---|
+| the starting models, as they are | 33.7 | 46.4 | 29.1 | 42.1 | 37.82 |  |
+| 1. each library learnt, 10 passes over its descriptions | 32.2 | 45.5 | 29.7 | 42.1 | 37.38 | no |
+| 2. 3 passes instead | 33.0 | 46.1 | 29.6 | 41.3 | 37.49 | no |
+| 2. 30 passes instead | 31.5 | 44.0 | 28.9 | 41.3 | 36.42 | no |
+| 3. half of each batch from the starting model's own collections, 10 passes | 32.7 | 45.4 | 28.9 | 41.5 | 37.13 | no |
+<!-- /table -->
+
+No recipe found more than the starting models on the tuning sets. So none
+was chosen, the test was not run, and `whenframe learn` is not added: every
+library keeps v3. DiDeMo and Charades-STA lose under every recipe, and more
+the longer the model learns:
+
+- DiDeMo: 33.0, 32.2 and 31.5 % after 3, 10 and 30 passes, against 33.7 %.
+- Charades-STA: 46.1, 45.5 and 44.0 %, against 46.4 %.
+
+YouCook2 gains 0.5 and 0.6 points after 3 and 10 passes, and loses 0.2
+after 30. UnAV-100 holds after 10 passes and loses 0.8 after 3 and 30.
+
+Choice 3 drew half of each batch from the collections the starting model
+trained on. This softens DiDeMo's loss (32.7 %) but not Charades-STA's
+(45.4 %), and takes YouCook2's gain away (28.9 %).
+
+What the model was taught, from one of Charades-STA's held-out videos (a
+tuning video):
+
+- Florence-2 wrote "A person in a yellow shirt is walking down a hallway.",
+  then "A person in a yellow shirt is standing on a set of stairs."
+- A person described 10.2 to 22.9 seconds of the same video as "person is
+  closing the door."
+
+A likely reason for the losses, not tested: the automatic descriptions say
+what a frame shows, and the benchmarks' descriptions say what someone does.
+The further the model follows the first, the less it finds of the second.
+Ventura et al. (IJCV 2024), whose captioner's descriptions did help, started
+from CLIP and searched whole clips. CLIP had learnt from no description of a
+video; v3 has already learnt from people's descriptions of moments.
+
+What learning a library costs, in CPU minutes per hour of video
+(`results/round8_cost.json`, the process CPU time on the four cores, as the
+indexing costs are measured):
+
+<!-- table round8-cost -->
+| library | hours of video | descriptions | decoding again | describing (Florence-2-base) | embedding the descriptions | learning, 10 passes |
+|---|---|---|---|---|---|---|
+| DiDeMo, 500 tuning videos | 4.0 | 1,446 | 2.1 | 20.5 | 0.99 | 0.51 |
+| Charades-STA, 500 held-out videos | 4.3 | 1,551 | 1.2 | 20.4 | 0.90 | 0.49 |
+| YouCook2, 84 tuning videos | 7.0 | 2,534 | 1.3 | 21.5 | 0.96 | 0.55 |
+| UnAV-100, 130 tuning videos | 1.3 | 471 | 1.2 | 20.3 | 1.00 | 0.54 |
+| DiDeMo, 979 test videos (described, never searched) | 7.9 | 2,846 | 1.9 | 20.3 | 0.67 |  |
+<!-- /table -->
+
+Describing is the cost. Florence-2-base takes about 20 CPU minutes per hour
+of video, nearly three times what indexing takes with SigLIP 2 B/16 (7.2).
+Decoding the frames again, embedding the descriptions and learning 10 passes
+add 2.6 to 3.6 more.
+
+On DiDeMo's test library, the one criterion 29 names, decoding, describing
+and embedding came to 22.9 CPU minutes per hour of video. Learning (about
+0.5 on the tuning sets) would have kept it under the 30 the criterion
+allowed. No criterion was judged, since the test was not run.

@@ -8,6 +8,7 @@ metrics. results/round8_choices.json records every step.
 
     python scripts/round8.py choose     --annotations didemo_train.json ... (compare.py's)   # once described
     python scripts/round8.py learn-test --annotations didemo_train.json ... (compare.py's)   # then, before the test
+    python scripts/round8.py cost                                                            # what each step costs
 
 A stopped run resumes: a library learnt with the same recipe is not learnt again, a candidate already measured with
 the same weights is not measured again.
@@ -27,6 +28,7 @@ OUT = ROOT / "results" / "temporal"
 CACHE = ROOT / "results" / "cache"
 TUNED8 = ROOT / "results" / "round8_tuned.json"
 CHOICES = ROOT / "results" / "round8_choices.json"
+COST = ROOT / "results" / "round8_cost.json"
 BENCHES = ("didemo", "charades", "youcook2", "unav")
 # each library's starting model (the seventh round's), and the collections it was trained on, for choice 3's mix
 START = {"didemo": ("v3-leash30", "msrvtt,charades,youcook2,tempo"),
@@ -156,14 +158,45 @@ class Round:
             f"--candidates '{start}~start,{learnt}~{final['run']}'")  # fmt: skip
 
 
+def cost() -> None:
+    """results/round8_cost.json: each step's process CPU time, in minutes per hour of video, for the tuning libraries
+    and DiDeMo's test library (criterion 29's): decoding the frames again and describing them (scripts/learn.py
+    describe), embedding the descriptions (prepare), and learning each library with each recipe tried (temporal.py
+    train), as the indexing costs are measured."""
+    runs = [s["run"] for s in json.loads(CHOICES.read_text())["steps"]]
+    out = {}
+    for lib in [f"{b}-tuning" for b in BENCHES] + ["didemo-test"]:
+        c = json.loads((CACHE / f"learn_{lib}_cost.json").read_text())
+        assert c["described"] == c["videos"], f"{lib}: {c['videos'] - c['described']} videos not described"
+        x = {"videos": c["videos"], "hours": c["hours"], "descriptions": c["descriptions"],
+             "decode": c["decode_cpu_min_per_hour"], "describe": c["describe_cpu_min_per_hour"],
+             "embed": c["embed_cpu_min_per_hour"]}  # fmt: skip
+        learnt = {r: OUT / f"{r.replace('learn-', f'learn-{lib}-', 1)}.json" for r in runs}
+        if lib.endswith("-tuning"):
+            x["learn"] = {r: json.loads(f.read_text())["cpu_seconds"] / 60 / c["hours"] for r, f in learnt.items()}
+        out[lib] = x
+    COST.write_text(json.dumps({"libraries": out}, indent=1))
+    for lib, x in out.items():
+        learn = f", learning 10 passes {x['learn']['learn-p10']:.2f}" if "learn" in x else ""
+        print(f"{lib}: decoding {x['decode']:.1f}, describing {x['describe']:.1f}, embedding {x['embed']:.2f}{learn} "
+              f"CPU min per hour of video")  # fmt: skip
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("stage", choices=["choose", "learn-test"])
-    for k in ("annotations", "test-annotations", "charades-annotations", "youcook2-annotations", "unav-annotations"):
-        ap.add_argument(f"--{k}", required=True, help="as scripts/compare.py's")
+    ap.add_argument("stage", choices=["choose", "learn-test", "cost"])
+    paths = ("annotations", "test-annotations", "charades-annotations", "youcook2-annotations", "unav-annotations")
+    for k in paths:
+        ap.add_argument(f"--{k}", help="as scripts/compare.py's (choose and learn-test)")
     ap.add_argument("--model-dir", help="folder of SigLIP 2 base's files (default: the usual download cache)")
     ap.add_argument("--clap-dir", help="folder of CLAP's files (default: the usual download cache)")
     args = ap.parse_args()
+    if args.stage == "cost":
+        cost()
+        return
+    missing = [f"--{k}" for k in paths if not getattr(args, k.replace("-", "_"))]
+    if missing:
+        ap.error(f"{args.stage} needs {', '.join(missing)}")
     r = Round(args)
     r.choose() if args.stage == "choose" else r.learn_test()
 

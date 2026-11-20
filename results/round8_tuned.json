@@ -90,5 +90,28 @@
    "normalise": "raw"
   },
   "sound_weight": 2.0
+ },
+ "learn-p10-mix0.5": {
+  "spec": "learn-p10-mix0.5=didemo:results/temporal/learn-didemo-tuning-p10-mix0.5.npz+charades:results/temporal/learn-charades-tuning-p10-mix0.5.npz+youcook2:results/temporal/learn-youcook2-tuning-p10-mix0.5.npz+unav:results/temporal/learn-unav-tuning-p10-mix0.5.npz",
+  "model": "siglip2-base",
+  "weights": null,
+  "alpha": 1.0,
+  "per": {
+   "didemo": "results/temporal/learn-didemo-tuning-p10-mix0.5.npz",
+   "charades": "results/temporal/learn-charades-tuning-p10-mix0.5.npz",
+   "youcook2": "results/temporal/learn-youcook2-tuning-p10-mix0.5.npz",
+   "unav": "results/temporal/learn-unav-tuning-p10-mix0.5.npz"
+  },
+  "didemo": 0.32652018395503324,
+  "youcook2": 0.28917609046849757,
+  "unav": 0.41538461538461546,
+  "charades": 0.4539930555555556,
+  "mean": 0.37126848634092546,
+  "speech": {
+   "weight": 0.005,
+   "pad": 5.0,
+   "normalise": "raw"
+  },
+  "sound_weight": 2.0
  }
 }

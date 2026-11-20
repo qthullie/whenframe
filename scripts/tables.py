@@ -748,10 +748,22 @@ def round8_tables() -> dict[str, str]:
                  f"{100 * t['start']['mean']:.2f}", ""]] if "start" in t else []  # fmt: skip
         what = {1: lambda r: "1. each library learnt, 10 passes over its descriptions",
                 2: lambda r: f"2. {r['passes']:g} passes instead",
-                3: lambda r: "3. half of each batch from the starting model's own collections"}  # fmt: skip
+                3: lambda r: f"3. half of each batch from the starting model's own collections, "
+                             f"{r['passes']:g} passes"}  # fmt: skip
         rows += [[what[x["choice"]](x["recipe"]), *(pct(t[x["run"]][c]) for c in cols), f"{100 * x['mean']:.2f}",
                   "yes" if x["kept"] else "no"] for x in steps]  # fmt: skip
         out["round8-tuning"] = table(["tuning sets", *head, "kept"], rows)
+    f = RESULTS / "round8_cost.json"
+    if f.exists():
+        c = json.loads(f.read_text())["libraries"]
+        which = {"tuning": "tuning videos", "test": "test videos (described, never searched)"}
+        rows = [[f"{BENCH[k.split('-')[0]]}, {x['videos']:,} "
+                 f"{'held-out videos' if k == 'charades-tuning' else which[k.split('-')[1]]}", f"{x['hours']:.1f}",
+                 f"{x['descriptions']:,}", f"{x['decode']:.1f}", f"{x['describe']:.1f}", f"{x['embed']:.2f}",
+                 f"{x['learn']['learn-p10']:.2f}" if "learn" in x else ""] for k, x in c.items()]  # fmt: skip
+        out["round8-cost"] = table(["library", "hours of video", "descriptions", "decoding again",
+                                    "describing (Florence-2-base)", "embedding the descriptions",
+                                    "learning, 10 passes"], rows)  # fmt: skip
     f = RESULTS / "round8_test.json"
     if not f.exists():
         return out
