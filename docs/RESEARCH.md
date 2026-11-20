@@ -122,6 +122,12 @@ measured accuracy).
   under a third of its CPU time, its lead being on the two benchmarks whose
   training videos the model learnt from; on the others, So400m finds as much
   (DiDeMo) or more (UnAV-100) ([RESULTS.md](RESULTS.md), seventh round).
+- Finds the right video in a whole library of DiDeMo's test videos 1.9 times
+  as often as the systems published for this search, trained on DiDeMo on a
+  GPU (among the first five: 48.1 % against 25.4 % for EventFormer, 2024),
+  most of the gap being SigLIP 2's; at the level of the moment, the papers
+  disagree about the same systems, and only theirs are quoted
+  ([RESULTS.md](RESULTS.md), "Beside published systems").
 - Measures all of it on DiDeMo, personal Flickr videos, with the protocol fixed
   in advance ([PROTOCOL.md](PROTOCOL.md)), against a shot-based baseline in the
   spirit of current home tools, with the CPU cost of indexing and searching.

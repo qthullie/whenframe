@@ -75,16 +75,24 @@ def panels() -> list[dict]:
                     "subtitle": f"Charades-STA test, {ch['queries']:,} sentences: right moment first (R1, IoU ≥ 0.5),"
                                 " no training on Charades-STA",
                     "rows": sorted(rows, key=lambda r: -r[2]), "unit": "%"})  # fmt: skip
-    th = load("didemo_test_thumbnail.json")
+    th, pub = load("didemo_test_thumbnail.json"), load("published_didemo.json")
     if th:
-        rows = [("whenframe", "every second of every video", 100 * th["default_search"]["R@5"], True),
-                ("one image per video, its middle", "as photo libraries index videos", 100 * th["middle"]["R@5"],
-                 False),
-                ("one image per video, its first", "", 100 * th["first"]["R@5"], False)]  # fmt: skip
+        rows = [("whenframe", "every second of every video", 100 * th["default_search"]["R@5"], True)]
+        if seven:  # the seventh round's test: with whenframe's own model (the default) and without it
+            video = {n: 100 * seven[n]["didemo"]["full"]["video"]["R@5"] for n in ("v3", "base")}
+            rows = [("whenframe, default", "its own model, trained on DiDeMo's training videos", video["v3"], True),
+                    ("whenframe, --no-temporal", "SigLIP 2 B/16 alone", video["base"], True)]  # fmt: skip
+        rows += [("one image per video, its middle", "as photo libraries index videos", 100 * th["middle"]["R@5"],
+                  False),
+                 ("one image per video, its first", "", 100 * th["first"]["R@5"], False)]  # fmt: skip
+        subtitle = f"DiDeMo test, {th['videos']:,} personal videos"
+        if pub:  # the three best systems published for this search, trained on DiDeMo, as their authors report them
+            best = sorted(pub["video_retrieval"].items(), key=lambda kv: -kv[1]["R@5"])[:3]
+            rows += [(name, "trained on DiDeMo, ResNet and SlowFast, on a GPU", x["R@5"], False) for name, x in best]
+            subtitle += f" ({pub['videos']:,} for the published systems)"
         out.append({"title": "Finding the video among a whole library",
-                    "subtitle": f"DiDeMo test, {th['videos']:,} personal videos, {th['queries']:,} descriptions: "
-                                "right video among the first five",
-                    "rows": rows, "unit": "%"})  # fmt: skip
+                    "subtitle": f"{subtitle}, {th['queries']:,} descriptions: right video among the first five",
+                    "rows": sorted(rows, key=lambda r: -r[2]), "unit": "%"})  # fmt: skip
     d = load("didemo_test.json")
     if d:
         rows = ours("didemo") or [
@@ -153,9 +161,9 @@ def draw(theme: str):
     fig.text(0.02, y / total, "whenframe against what exists", color=t["ink"], fontsize=17 * PX, fontweight="bold",
              va="top")  # fmt: skip
     intro = (
-        "On a 4-vCPU machine without a GPU; zero-shot but for whenframe's own model, which learnt from the training "
-        "videos of DiDeMo,\nMSR-VTT, Charades-STA and YouCook2. Published numbers are as their authors report them; "
-        "the other references are run here."
+        "On a 4-vCPU machine without a GPU. whenframe's own model learnt from the training videos of DiDeMo, "
+        "MSR-VTT,\nCharades-STA and YouCook2. Published numbers are as their authors report them; the other "
+        "references are run here."
     )
     fig.text(0.02, (y - 0.32) / total, intro, color=t["ink2"], fontsize=12 * PX, va="top", linespacing=1.5)
     key = 10 * PX / 72  # inches

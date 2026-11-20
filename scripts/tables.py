@@ -700,6 +700,14 @@ def round7_tables() -> dict[str, str]:
         f"whenframe puts the right moment among its first five results **{pct(v3['didemo']['value'])} %** of the "
         f"time with its own model ({pct(r['base']['didemo']['value'])} % without it{large})."
     )
+    pub = RESULTS / "published_didemo.json"
+    if pub.exists():  # the right video too, beside the best system published for this search
+        best = max(x["R@5"] for x in json.loads(pub.read_text())["video_retrieval"].values())
+        video = 100 * v3["didemo"]["full"]["video"]["R@5"]
+        headline = headline[:-1] + (
+            f", and the right video among its first five **{video:.1f} %** of the time, {video / best:.1f} times as "
+            f"often as the best published system trained for this search on a GPU ({best:.1f} %)."
+        )
     if met[24]:  # the protocol's sentence, when criterion 24 is met
         headline += (
             f" At the standard mode's cost, it finds more moments than its large mode over four benchmarks (mean "
@@ -726,6 +734,38 @@ def round7_tables() -> dict[str, str]:
         [[m, f"{pct(r[n]['didemo']['value'])} %", f"{100 * r[n]['mean']:.2f}",
           "" if minutes(n) is None else f"{minutes(n):.1f}"] for m, n in modes if n in r],
     )  # fmt: skip
+    return out
+
+
+def published_tables() -> dict[str, str]:
+    """whenframe beside published systems trained to search a whole library of DiDeMo's test videos (added after
+    the test runs: results/published_didemo.json, as their authors report them)."""
+    f, f7, th = RESULTS / "published_didemo.json", RESULTS / "round7_test.json", RESULTS / "didemo_test_thumbnail.json"
+    if not (f.exists() and f7.exists()):
+        return {}
+    pub, r = json.loads(f.read_text()), json.loads(f7.read_text())
+    ks = ("R@1", "R@5", "R@10", "R@100")
+    rows = [[f"**whenframe, {m}**", *(pct(r[n]["didemo"]["full"]["video"][k]) for k in ks), seen, "CPU"]
+            for m, n, seen in (("with its own model (the default)", "v3", "yes"),
+                               ("`--no-temporal` (SigLIP 2 B/16)", "base", "no"))]  # fmt: skip
+    if th.exists():
+        t = json.loads(th.read_text())
+        rows.append(["one image per video, its middle (SigLIP 2 B/16)", pct(t["middle"]["R@1"]),
+                     pct(t["middle"]["R@5"]), pct(t["middle"]["R@10"]), "", "no", "CPU"])  # fmt: skip
+    rows += [[name, *(f"{x[k]:.1f}" for k in ks), "yes", "GPU"]
+             for name, x in sorted(pub["video_retrieval"].items(), key=lambda kv: -kv[1]["R@5"])]  # fmt: skip
+    out = {"didemo-published": table(["the right video among the first k (DiDeMo test)", "R@1", "R@5", "R@10",
+                                      "R@100", "trained on DiDeMo", "runs on"], rows)}  # fmt: skip
+    c = r["v3"]["didemo"]["full"]["corpus"]
+    moments = [["**whenframe, with its own model**", *(pct(c[f"R@{k} IoU>=0.5"]) for k in (1, 10, 100)),
+                *(pct(c[f"R@{k} IoU>=0.7"]) for k in (1, 10, 100))]]  # fmt: skip
+    for name, x in pub["moment_retrieval_original"].items():
+        if name != "about":
+            moments.append([name, *(f"{x[i][f'R@{k}']:.1f}" if i in x else "" for i in ("IoU 0.5", "IoU 0.7")
+                                    for k in (1, 10, 100))])  # fmt: skip
+    out["didemo-published-moments"] = table(["the right moment among the first k of the whole test set",
+                                             "R@1, IoU 0.5", "R@10", "R@100", "R@1, IoU 0.7", "R@10", "R@100"],
+                                            moments)  # fmt: skip
     return out
 
 
@@ -800,6 +840,7 @@ def main() -> int:
     tables.update(round5_tables())
     tables.update(round6_tables())
     tables.update(round7_tables())  # after the sixth round's: replaces the README's tables if v3 is the default
+    tables.update(published_tables())
     f2 = RESULTS / "didemo_test_round2.json"
     if f2.exists():
         tables.update(round2_tables(json.loads(f2.read_text()), json.loads(f.read_text()) if f.exists() else None))

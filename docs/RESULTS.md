@@ -932,3 +932,53 @@ frame, with weight 0.005, and the sound with weight 2; B/32 what is said up
 to 5 seconds around a frame, sound weight 1.5; So400m sound weight 1.5. The
 sixth round's numbers above are unchanged: its candidates were measured with
 their own settings then too.
+
+## Beside published systems: finding the video in a whole library
+
+Added after the test runs, deciding nothing. Finding, for a description, the
+right moment among all the videos of a library is a published task, video
+corpus moment retrieval (Escorcia et al., 2019; Lei et al., ECCV 2020). Its
+systems are trained for it on DiDeMo's training set, with the benchmark's
+standard features (ResNet and SlowFast frames, RoBERTa descriptions), on a
+GPU; their papers report the right video among the first k for each
+description of DiDeMo's 1,004 test videos (`results/published_didemo.json`,
+as their authors report them). whenframe's numbers are the seventh round's
+test, on the 979 of those videos that could still be downloaded (2.5 % fewer
+to tell apart).
+
+<!-- table didemo-published -->
+| the right video among the first k (DiDeMo test) | R@1 | R@5 | R@10 | R@100 | trained on DiDeMo | runs on |
+|---|---|---|---|---|---|---|
+| **whenframe, with its own model (the default)** | 25.3 | 48.1 | 57.7 | 79.5 | yes | CPU |
+| **whenframe, `--no-temporal` (SigLIP 2 B/16)** | 25.1 | 46.3 | 55.8 | 77.7 | no | CPU |
+| one image per video, its middle (SigLIP 2 B/16) | 14.6 | 30.7 | 38.6 |  | no | CPU |
+| EventFormer (2024) | 8.4 | 25.4 | 35.8 | 77.7 | yes | GPU |
+| PREM (2024) | 8.0 | 23.7 | 34.6 | 75.8 | yes | GPU |
+| HERO (EMNLP 2020) | 8.5 | 23.4 | 34.9 | 75.4 | yes | GPU |
+| XML (ECCV 2020) | 6.2 | 19.4 | 29.9 | 74.2 | yes | GPU |
+| ReLoCLNet (SIGIR 2021) | 5.5 | 18.2 | 28.0 | 71.4 | yes | GPU |
+<!-- /table -->
+
+whenframe puts the right video first 25.3 % of the time, three times as
+often as the best of them, and among the first five 48.1 %, 1.9 times as
+often. Most of that gap is SigLIP 2's: one image of each video, embedded by
+SigLIP 2 and searched alone, already does better than each of them (30.7 %
+among the first five). By the hundredth result they come close (75 to 78 %,
+against 79.5 %).
+
+<!-- table didemo-published-moments -->
+| the right moment among the first k of the whole test set | R@1, IoU 0.5 | R@10 | R@100 | R@1, IoU 0.7 | R@10 | R@100 |
+|---|---|---|---|---|---|---|
+| **whenframe, with its own model** | 14.6 | 36.6 | 57.4 | 3.1 | 7.0 | 10.4 |
+| XML (ECCV 2020) | 2.3 | 10.4 | 34.5 | 1.6 | 6.7 | 25.4 |
+| HERO (EMNLP 2020) |  |  |  | 2.1 | 11.4 | 36.1 |
+<!-- /table -->
+
+At the level of the moment, the papers disagree about the same systems
+(CONQUER's first moment at IoU 0.5: 13.57 % in one, 3.31 % in another), so
+only the systems' own papers are quoted. At IoU 0.5, whenframe puts the right
+moment first 14.6 % of the time, against 2.3 % for XML. At IoU 0.7, it still
+puts it first more often (3.1 %, against 1.6 and 2.1 %), but XML and HERO
+find more among their first hundred: whenframe's moments last 10 seconds, so
+they overlap DiDeMo's 5-second segments at IoU 0.5 at most, a length chosen
+to play a moment rather than to mark its boundaries.

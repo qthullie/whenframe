@@ -21,7 +21,7 @@ it happens.
 </p>
 
 <!-- table readme-headline -->
-Searching 979 personal videos at once (DiDeMo test) for 3,902 descriptions written by people, whenframe puts the right moment among its first five results **29.4 %** of the time with its own model (27.6 % without it; 29.5 % with SigLIP 2 So400m, for 3.4 times the CPU time). At the standard mode's cost, it finds more moments than its large mode over four benchmarks (mean 41.90 against 40.63, sign test p = 0.00086). Its lead is on Charades-STA and YouCook2, whose training videos it learnt from: trained without each one's videos, it finds 46.5 and 26.1 % of their moments, against 50.4 and 28.5 % for So400m. Indexing one keyframe per shot, as some home video tools do, finds it 2.3 % of the time.
+Searching 979 personal videos at once (DiDeMo test) for 3,902 descriptions written by people, whenframe puts the right moment among its first five results **29.4 %** of the time with its own model (27.6 % without it; 29.5 % with SigLIP 2 So400m, for 3.4 times the CPU time), and the right video among its first five **48.1 %** of the time, 1.9 times as often as the best published system trained for this search on a GPU (25.4 %). At the standard mode's cost, it finds more moments than its large mode over four benchmarks (mean 41.90 against 40.63, sign test p = 0.00086). Its lead is on Charades-STA and YouCook2, whose training videos it learnt from: trained without each one's videos, it finds 46.5 and 26.1 % of their moments, against 50.4 and 28.5 % for So400m. Indexing one keyframe per shot, as some home video tools do, finds it 2.3 % of the time.
 <!-- /table -->
 
 ## Use
@@ -119,13 +119,14 @@ logging every outbound connection of an indexing and search run). More in
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/qthullie/whenframe/main/docs/figures/benchmark-dark.png">
-    <img src="https://raw.githubusercontent.com/qthullie/whenframe/main/docs/figures/benchmark.png" alt="whenframe against what exists: on Charades-STA, without training on it, it places 45.7 to 50.4 % of the moments, between VTG-GPT (43.7 %) and a 7-billion-parameter vision-language model (56.8 %); on DiDeMo it finds the right video among the first five 46.4 % of the time against 28 to 31 % for one image per video, and the right moment 29.4 % with its own model (the default), 27.6 % without it, 29.5 % with SigLIP 2 So400m for 3.4 times the CPU time, against 2.3 % for one keyframe per shot; on YouCook2, speech and adaptive spans reach 25.8 to 32.0 %, the most with its own model, which learnt from YouCook2's training videos (26.1 % trained without them); on UnAV-100, frames and sound 52.9 to 54.1 %" width="800">
+    <img src="https://raw.githubusercontent.com/qthullie/whenframe/main/docs/figures/benchmark.png" alt="whenframe against what exists: on Charades-STA, without training on it, it places 45.7 to 50.4 % of the moments, between VTG-GPT (43.7 %) and a 7-billion-parameter vision-language model (56.8 %); on DiDeMo it finds the right video among the first five 48.1 % of the time with its own model, against 23.4 to 25.4 % for the best published systems trained on DiDeMo for this search and 28 to 31 % for one image per video, and the right moment 29.4 % with its own model (the default), 27.6 % without it, 29.5 % with SigLIP 2 So400m for 3.4 times the CPU time, against 2.3 % for one keyframe per shot; on YouCook2, speech and adaptive spans reach 25.8 to 32.0 %, the most with its own model, which learnt from YouCook2's training videos (26.1 % trained without them); on UnAV-100, frames and sound 52.9 to 54.1 %" width="800">
   </picture>
 </p>
 
 Beside published zero-shot methods, on the one benchmark and metric they
-share, and beside the ways home tools index videos, run here on the same
-videos ([docs/RESEARCH.md](https://github.com/qthullie/whenframe/blob/main/docs/RESEARCH.md) gives the sources).
+share; beside published systems trained on DiDeMo to search a whole library
+of its videos; and beside the ways home tools index videos, run here on the
+same videos ([docs/RESEARCH.md](https://github.com/qthullie/whenframe/blob/main/docs/RESEARCH.md) and [docs/RESULTS.md](https://github.com/qthullie/whenframe/blob/main/docs/RESULTS.md) give the sources).
 
 DiDeMo test split, with the protocol fixed in advance and every change to it
 listed ([docs/PROTOCOL.md](https://github.com/qthullie/whenframe/blob/main/docs/PROTOCOL.md)). The numbers on this page are

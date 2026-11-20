@@ -1,0 +1,16 @@
+{
+ "about": "Published results on DiDeMo's test set for video corpus moment retrieval (VCMR), as their authors report them: the video retrieval subtask, the right video among the first k for each description of the test set's 1,004 videos (TVR's release of DiDeMo, Lei et al., ECCV 2020). Every system was trained on DiDeMo's training set, with the benchmark's standard features (ResNet and SlowFast frames, RoBERTa descriptions). Values in %. Moment-level numbers are left out: the papers disagree about the same systems (CONQUER at IoU 0.5: 13.57 in arXiv 2402.13576, 3.31 in arXiv 2402.13566).",
+ "videos": 1004,
+ "video_retrieval": {
+  "XML (ECCV 2020)": {"R@1": 6.23, "R@5": 19.35, "R@10": 29.95, "R@100": 74.16, "source": "arXiv 2402.13576 table 1; arXiv 2402.13566 table 1"},
+  "ReLoCLNet (SIGIR 2021)": {"R@1": 5.53, "R@5": 18.25, "R@10": 27.96, "R@100": 71.42, "source": "arXiv 2402.13576 table 1; arXiv 2402.13566 table 1"},
+  "HERO (EMNLP 2020)": {"R@1": 8.46, "R@5": 23.43, "R@10": 34.86, "R@100": 75.36, "source": "arXiv 2402.13576 table 1 (pre-trained); arXiv 2402.13566 table 1"},
+  "PREM (2024)": {"R@1": 8.03, "R@5": 23.68, "R@10": 34.59, "R@100": 75.75, "source": "arXiv 2402.13576 table 1"},
+  "EventFormer (2024)": {"R@1": 8.39, "R@5": 25.39, "R@10": 35.76, "R@100": 77.72, "source": "arXiv 2402.13566 table 1, the best of its four variants (window events)"}
+ },
+ "moment_retrieval_original": {
+  "about": "The whole task (the right moment among the first k of the whole test set), from the systems' own papers.",
+  "XML (ECCV 2020)": {"IoU 0.5": {"R@1": 2.26, "R@10": 10.42, "R@100": 34.49}, "IoU 0.7": {"R@1": 1.59, "R@10": 6.71, "R@100": 25.44}, "source": "arXiv 2001.09099 table 12"},
+  "HERO (EMNLP 2020)": {"IoU 0.7": {"R@1": 2.14, "R@10": 11.43, "R@100": 36.09}, "source": "arXiv 2005.00200 table 3b"}
+ }
+}

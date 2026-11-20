@@ -16,6 +16,11 @@
   So400m for 3.4 times the CPU time. Its lead is on Charades-STA and YouCook2,
   whose training videos it learnt from: trained without each one's videos,
   46.5 and 26.1 %, against 50.4 and 28.5 % for So400m.
+- Beside the systems published for searching a whole library of DiDeMo's
+  test videos, trained on DiDeMo on a GPU: whenframe puts the right video
+  among its first five 48.1 % of the time, against 25.4 % for the best of
+  them (EventFormer, 2024), and first 25.3 % against 8.5 %
+  (`results/published_didemo.json`, as their authors report them).
 - The sixth round compares SigLIP 2 B/32, B/16, So400m and B/16 with the
   model, on the same frames of DiDeMo, Charades-STA, YouCook2 and UnAV-100:
   mean of the four primary metrics 36.80, 38.07, 40.63 and 38.65, each step
