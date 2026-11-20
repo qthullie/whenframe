@@ -896,3 +896,89 @@ Charades-STA's videos (checked as it trains on DiDeMo's tuning videos alone)
 and without YouCook2's, one run each, as v3. On the tuning sets, without
 Charades-STA's videos: 34.0, 46.4, 32.6 and 42.1 %, mean 38.79; without
 YouCook2's: 34.0, 51.6, 29.1 and 41.5 %, mean 39.04.
+
+## Eighth round: whenframe learns a library
+
+Written before any of its numbers was computed. The seventh round's
+left-out runs show where whenframe's model gains: trained without a
+collection's videos, v3's recipe adds 0.8 points to SigLIP 2 B/16 alone on
+Charades-STA and 0.3 on YouCook2; trained with them, 7.6 and 6.2. A user's
+library is a collection the model has never seen, and nobody has described
+it. The question: can the model learn a library from automatic descriptions
+of its own frames, as text-video retrieval models learn a collection from an
+image captioner's (Ventura et al., IJCV 2024: 50 to 80 % of the gain of
+human descriptions on MSR-VTT, MSVD and ActivityNet)?
+
+### What changes
+
+**Automatic descriptions.** Florence-2-base (Xiao et al., CVPR 2024;
+Microsoft, MIT licence; the ONNX export of onnx-community/Florence-2-base-ft,
+its image encoder run by OpenVINO and the rest by ONNX Runtime) describes one
+frame in each 10 seconds of every video of a library: the video is cut into
+blocks of 10 seconds from its start (a last block shorter than 5 seconds is
+joined to the one before), and the frame the index holds nearest to a
+block's middle is decoded again and described (task `<CAPTION>`, greedy
+decoding without a repeated 3-gram, at most 60 tokens). Nothing else about
+the library is used: no description, label or annotation of it.
+
+**Learning.** The model goes on training from its own weights on the
+library's indexed frames, each automatic description as a query whose moment
+is its block, embedded by SigLIP 2's text tower as the tool embeds a query.
+The seventh round's settings are kept (the losses between and within videos,
+the leash's weight 30, learning rate 1e-4, its warm-up a tenth of the steps
+up to 200, the cosine decay, the augmentations), with two differences: a
+batch holds at most one description of each video, so a library of fewer
+than 128 videos makes smaller batches; and there is no check: a library has
+nothing to check against, so the number of steps is fixed, a number of
+passes over its descriptions chosen on the tuning sets, and the last weights
+are kept.
+
+**Libraries.** Each benchmark's test videos are learnt as a library from
+their frames alone, then searched with the benchmark's descriptions, as the
+tool searches a learnt library:
+
+- Charades-STA's 1,334 test videos, from v3-no-charades (the seventh round's
+  run that never saw Charades' videos);
+- YouCook2's 252 test videos, from v3-no-youcook2;
+- UnAV-100's 262 test videos, from v3 (no candidate trained on UnAV-100);
+- DiDeMo's 979 test videos, from v3 (which learnt from DiDeMo's training
+  videos, not these).
+
+The tuning sets are learnt the same way, each from the same starting model,
+for the choices: DiDeMo's 500 tuning videos, Charades-STA's 500 held-out
+training videos, YouCook2's 84 tuning videos and UnAV-100's tuning videos.
+The videos are read again as in their rounds (Charades' and YouCook2's from
+the Hugging Face Hub by byte ranges, UnAV-100's archives as they download),
+one at a time, and only the descriptions are kept.
+
+### Choices on the tuning sets
+
+Made in this order, each kept only if it raises the mean of the four tuning
+metrics (DiDeMo R@5, Charades-STA R1 at IoU >= 0.5, YouCook2 R@5 with speech
+and spans, UnAV-100 P@10 with sound; each candidate's speech and sound
+weights chosen on the same sets, as in the seventh round), the reference
+being the starting models as they are:
+
+1. learning each library, 10 passes over its descriptions;
+2. 3 or 30 passes instead (the better of the two, if better);
+3. half of each batch from the starting model's own training collections,
+   drawn as in the seventh round, the other half from the library.
+
+### Test and criteria
+
+Once, each test library learnt with the recipe chosen, against its starting
+model, on its benchmark: the four primary metrics, the sign test over their
+items as in the sixth and seventh rounds.
+
+27. On Charades-STA and YouCook2, learning the library raises the mean of
+    their two primary metrics by at least 2 points, with a sign test p < 0.05
+    over their items.
+28. Learning the library loses at most 1 point on each of the four tests.
+29. Describing the frames and learning cost at most 30 CPU minutes per hour of
+    video together (the process CPU time on DiDeMo's test library, decoding
+    included, as the indexing costs are measured).
+
+If 27, 28 and 29 hold, `whenframe learn` is added: it describes a library's
+frames, teaches v3 the library, and the library is searched through the
+model it learnt; a library not learnt keeps v3. The test is run once, after
+the choices on the tuning sets are recorded here.
