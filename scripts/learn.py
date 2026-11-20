@@ -163,9 +163,10 @@ def library(name: str, b: compare.Benchmarks) -> Library:
     if dataset == "youcook2":
         import youcook2
 
+        # the tuning library: the 84 tuning videos; the test's: the 252 videos its steps are searched among
         g, _, _, _, _ = b.youcook2(base)
         tuning = youcook2.split(g.names)
-        return subset(g, tuning if part == "tuning" else set(g.names) - tuning, name)
+        return subset(g, tuning if part == "tuning" else set(g.names), name)
     if dataset == "unav":
         import unav
 
