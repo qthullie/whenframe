@@ -632,6 +632,7 @@ def evaluate8(args) -> None:
     cost = json.loads((CACHE / "learn_didemo-test_cost.json").read_text())
     learnt = json.loads(Path(dict(cands[new].per)["didemo"]).with_suffix(".json").read_text())  # its learning's log
     res["cost"] = {"decode": cost["decode_cpu_min_per_hour"], "describe": cost["describe_cpu_min_per_hour"],
+                   "embed": cost["embed_cpu_min_per_hour"],
                    "learn": learnt["cpu_seconds"] / 60 / cost["hours"]}  # fmt: skip
     res["cost"]["total"] = float(sum(res["cost"].values()))
     res["criteria"] = {"27": res["unseen"]["gain"] >= 0.02 and res["unseen"]["p"] < 0.05,

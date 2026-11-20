@@ -322,19 +322,24 @@ def prepare(args) -> None:
                  times=lib.times.astype(np.float32), keep=np.ones(len(lib.times), bool), counts=lib.counts,
                  durations=lib.durations.astype(np.float32))  # fmt: skip
         (CACHE / f"learn_{name}_queries.json").write_text(json.dumps(queries))
-        enc = enc or Encoder("siglip2-base", folder=args.model_dir, backend="openvino")
+        if enc is None:
+            enc = Encoder("siglip2-base", folder=args.model_dir, backend="openvino")
+            enc.encode_texts(["a warm-up"])  # compiled before the clock starts, as the indexing costs are measured
         texts = [q["text"] for q in queries]
+        c0 = time.process_time()
         emb = np.concatenate([enc.encode_texts(texts[i : i + 64]) for i in range(0, len(texts), 64)])
+        embed_cpu = time.process_time() - c0  # embedding the descriptions is part of learning the library
         np.save(CACHE / f"learn_{name}_text.npy", emb.astype(np.float16))
         described = [v for v, n in enumerate(lib.names) if parts[n].exists()]
         hours = float(lib.durations[described].sum() / 3600)  # of the videos described
         cost = {"videos": len(lib.names), "described": len(lib.names) - len(missing), "descriptions": len(queries),
                 "hours": hours, "decode_cpu_min_per_hour": decode_cpu / 60 / hours,
-                "describe_cpu_min_per_hour": describe_cpu / 60 / hours}  # fmt: skip
+                "describe_cpu_min_per_hour": describe_cpu / 60 / hours,
+                "embed_cpu_min_per_hour": embed_cpu / 60 / hours}  # fmt: skip
         (CACHE / f"learn_{name}_cost.json").write_text(json.dumps(cost, indent=1))
         print(f"{name}: {len(queries)} descriptions of {cost['described']} videos; decoding "
-              f"{cost['decode_cpu_min_per_hour']:.1f} and describing {cost['describe_cpu_min_per_hour']:.1f} CPU "
-              f"min per hour of video")  # fmt: skip
+              f"{cost['decode_cpu_min_per_hour']:.1f}, describing {cost['describe_cpu_min_per_hour']:.1f} and "
+              f"embedding the descriptions {cost['embed_cpu_min_per_hour']:.2f} CPU min per hour of video")  # fmt: skip
 
 
 def main() -> None:
