@@ -1,0 +1,22 @@
+{
+ "steps": [
+  {
+   "choice": 1,
+   "run": "learn-p10",
+   "recipe": {
+    "passes": 10.0,
+    "share": 1.0
+   },
+   "mean": 0.3737649652117442,
+   "against": "start",
+   "against_mean": 0.3782412590786738,
+   "kept": false
+  }
+ ],
+ "final": {
+  "run": "start",
+  "recipe": null,
+  "mean": 0.3782412590786738,
+  "start_mean": 0.3782412590786738
+ }
+}

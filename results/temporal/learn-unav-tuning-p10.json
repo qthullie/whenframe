@@ -1,0 +1,52 @@
+{
+ "config": {
+  "stage": "train",
+  "name": "learn-unav-tuning-p10",
+  "steps": 37,
+  "batch": 128,
+  "lr": 0.0001,
+  "head_lr": 0.0003,
+  "bank_sample": 1024,
+  "warmup": 3,
+  "decay": 0.01,
+  "width": 256,
+  "layers": 2,
+  "heads": 4,
+  "between": 1.0,
+  "within": 2.0,
+  "leash": 30.0,
+  "dropout": 0.1,
+  "head": 0.0,
+  "negatives": 4,
+  "every": 0,
+  "seed": 0,
+  "init_seed": null,
+  "extra": "msrvtt,charades,youcook2,tempo",
+  "mix": "sqrt",
+  "distil": 0.0,
+  "teacher": "charades",
+  "check_charades": false,
+  "between_loss": "infonce",
+  "init": "/home/user/whenframe/results/temporal/v3-leash30.npz",
+  "library": "unav-tuning",
+  "library_share": 1.0,
+  "passes": 10.0,
+  "models": null,
+  "alpha": 1.0,
+  "settings": null,
+  "split": "train"
+ },
+ "tuning_without": {},
+ "checks": [],
+ "collections": {
+  "library": [
+   471,
+   1.0
+  ]
+ },
+ "seconds": 26.910163164138794,
+ "cpu_seconds": 42.239525137,
+ "final_loss": 2.1256465911865234,
+ "best": -1.0,
+ "best_step": 37
+}
