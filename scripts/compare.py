@@ -250,6 +250,11 @@ class Candidate:
     model: str = "siglip2-base"
     weights: str | None = None  # whenframe's model (a .npz of results/temporal or whenframe/data)
     alpha: float = 1.0  # how much of its correction is added (WiSE-FT's mixing)
+    per: tuple = ()  # eighth round: ((benchmark, weights), ...), each library searched through its own model
+
+    def on(self, bench: str) -> Candidate:
+        """The candidate as it searches one benchmark's library."""
+        return replace(self, weights=dict(self.per)[bench], per=()) if self.per else self
 
     def adapter(self) -> dict | None:
         if self.weights is None:
@@ -343,6 +348,7 @@ class Benchmarks:
     def didemo_score(self, c: Candidate, split: str) -> dict:
         from benchmark import run
 
+        c = c.on("didemo")
         f, queries, text = self.didemo(c, split)
         r = run(f, queries, text, "frame_window_bank", self.search_params(c.model, "frame_window_bank"),
                 per_query=True)  # fmt: skip
@@ -353,6 +359,7 @@ class Benchmarks:
         import charades
         from benchmark import run
 
+        c = c.on("charades")
         frozen, queries, base_text = self.once("charades", lambda: charades.load(self.ns(
             annotations=self.args.charades_annotations, **self.shared)))  # fmt: skip
         z = self.once(("charades", c.model), lambda: np.load(CACHE / f"{cache_name('charades', c.model)}.npz"))
@@ -371,6 +378,7 @@ class Benchmarks:
         from benchmark import run
         from temporal import Charades
 
+        c = c.on("charades")
         assert c.model == "siglip2-base", "the held-out videos are embedded by the standard mode's encoder only"
         params = self.search_params(c.model, "frame_window_bank")
         held = self.once("charades-tuning", lambda: Charades(didemo_bank(c.model), "frame_window_bank", params))
@@ -382,6 +390,7 @@ class Benchmarks:
     def youcook2(self, c: Candidate):
         import youcook2
 
+        c = c.on("youcook2")
         f, queries, base_text, db, _, _ = self.once("youcook2", lambda: youcook2.load(self.ns(
             annotations=self.args.youcook2_annotations, **self.shared)))  # fmt: skip
         z = self.once(("youcook2", c.model), lambda: np.load(CACHE / f"{cache_name('youcook2', c.model)}.npz"))
@@ -418,6 +427,7 @@ class Benchmarks:
     def unav_score(self, c: Candidate, part: str, weight: float | None = None) -> dict:
         import unav
 
+        c = c.on("unav")
         a = self.args
         z, labels, events, base_siglip, clap, _ = self.once("unav", lambda: unav.prepare(self.ns(
             annotations=a.unav_annotations, model_dir=a.model_dir, clap_dir=a.clap_dir)))  # fmt: skip
@@ -468,12 +478,17 @@ def shipped(path: Path, commit: str) -> Path:
 
 
 def candidate(spec: str) -> Candidate:
-    """b32, base, so400m, v1, or NAME=WEIGHTS@ALPHA (whenframe's model on the base encoder)."""
+    """b32, base, so400m, v1, NAME=WEIGHTS@ALPHA (whenframe's model on the base encoder), or, in the eighth round,
+    NAME=didemo:WEIGHTS+charades:WEIGHTS+youcook2:WEIGHTS+unav:WEIGHTS (each library through its own model)."""
     if spec == "v1":
         return Candidate("v1", weights=str(shipped(V1, V1_COMMIT)))
     if spec in NAMED:
         return NAMED[spec]
     name, rest = spec.split("=", 1)
+    if "+" in rest:
+        per = tuple(tuple(x.split(":", 1)) for x in rest.split("+"))
+        assert {b for b, _ in per} == {"didemo", "charades", "youcook2", "unav"}, spec
+        return Candidate(name, per=per)
     weights, _, alpha = rest.partition("@")
     return Candidate(name, weights=weights, alpha=float(alpha or 1.0))
 
@@ -483,6 +498,9 @@ TEST = ROOT / "results" / "compare_test.json"
 # the seventh round's: four tuning sets (Charades-STA's held-out videos added), and the test with model v3
 TUNED7 = ROOT / "results" / "round7_tuned.json"
 TEST7 = ROOT / "results" / "round7_test.json"
+# the eighth round's: each library searched through the model it learnt (scripts/learn.py, temporal.py --library)
+TUNED8 = ROOT / "results" / "round8_tuned.json"
+TEST8 = ROOT / "results" / "round8_test.json"
 
 
 def tune(args) -> None:
@@ -490,15 +508,16 @@ def tune(args) -> None:
     and the mean of the primary metrics: DiDeMo, YouCook2 and UnAV-100 (sixth round; Charades-STA had none), and
     Charades-STA's 500 held-out training videos (seventh round, --round 7)."""
     b = Benchmarks(args)
-    path = TUNED7 if args.round == 7 else TUNED
+    path = {7: TUNED7, 8: TUNED8}.get(args.round, TUNED)
     out = json.loads(path.read_text()) if path.exists() else {}
     for spec in args.candidates.split(","):
         c = candidate(spec)
         d, y, u = b.didemo_score(c, "train"), b.youcook2_score(c, "tuning"), b.unav_score(c, "tuning")
         values = {"didemo": d["value"], "youcook2": y["value"], "unav": u["value"]}
-        if args.round == 7:
+        if args.round >= 7:
             values["charades"] = b.charades_tuning_score(c)["value"]
-        out[c.name] = {"spec": spec, "model": c.model, "weights": c.weights, "alpha": c.alpha, **values,
+        out[c.name] = {"spec": spec, "model": c.model, "weights": c.weights, "alpha": c.alpha, "per": dict(c.per),
+                       **values,
                        "mean": float(np.mean(list(values.values()))), "speech": y["speech"],
                        "sound_weight": u["sound_weight"]}  # fmt: skip
         r = out[c.name]
@@ -573,6 +592,57 @@ def evaluate(args) -> None:
     print(f"wrote {out.relative_to(ROOT)}")
 
 
+def evaluate8(args) -> None:
+    """Once (eighth round): each test library searched through the model it learnt from automatic descriptions,
+    against the model it started from; each with the speech and sound weights chosen for its recipe on the tuning
+    sets. --candidates: NAME=didemo:W+charades:W+youcook2:W+unav:W~TUNED, TUNED the tuning sets' entry whose
+    weights it takes; the first is the reference."""
+    from whenframe.speech import SpeechConfig
+
+    tuned = json.loads(TUNED8.read_text())
+    b = Benchmarks(args)
+    res, items, names, cands = {}, {}, [], {}
+    for entry in args.candidates.split(","):
+        spec, _, which = entry.partition("~")
+        c, t = candidate(spec), tuned[which]
+        sp = t["speech"]
+        scores = {"didemo": b.didemo_score(c, "test"), "charades": b.charades_score(c),
+                  "youcook2": b.youcook2_score(c, "test", SpeechConfig(sp["weight"], sp["pad"], sp["normalise"])),
+                  "unav": b.unav_score(c, "test", t["sound_weight"])}  # fmt: skip
+        names.append(c.name)
+        items[c.name], cands[c.name] = scores, c
+        res[c.name] = {k: {"value": v["value"], "full": v["full"]} for k, v in scores.items()}
+        res[c.name] |= {"mean": float(np.mean([v["value"] for v in scores.values()])), "per": dict(c.per),
+                        "settings_of": which, "speech": sp, "sound_weight": t["sound_weight"]}  # fmt: skip
+        print(f"{c.name}: " + ", ".join(f"{k} {100 * v['value']:.1f}" for k, v in scores.items())
+              + f"; mean {100 * res[c.name]['mean']:.2f}", flush=True)  # fmt: skip
+    ref, new = names[0], names[1]
+    res["candidates"], res["pairs"] = names, {f"{new} vs {ref}": paired(items[new], items[ref])}
+    from explore import sign_test
+
+    win = loss = 0
+    for k in ("charades", "youcook2"):  # criterion 27: the two collections never seen by their starting models
+        x, y = np.asarray(items[new][k]["items"], bool), np.asarray(items[ref][k]["items"], bool)
+        win, loss = win + int((x & ~y).sum()), loss + int((~x & y).sum())
+    unseen = {k: res[new][k]["value"] - res[ref][k]["value"] for k in ("charades", "youcook2")}
+    res["unseen"] = {"gain": float(np.mean(list(unseen.values()))), **unseen, "wins": win, "losses": loss,
+                     "p": sign_test(win, loss)}  # fmt: skip
+    res["changes"] = {k: res[new][k]["value"] - res[ref][k]["value"] for k in ("didemo", "charades", "youcook2",
+                                                                             "unav")}  # fmt: skip
+    cost = json.loads((CACHE / "learn_didemo-test_cost.json").read_text())
+    learnt = json.loads(Path(dict(cands[new].per)["didemo"]).with_suffix(".json").read_text())  # its learning's log
+    res["cost"] = {"decode": cost["decode_cpu_min_per_hour"], "describe": cost["describe_cpu_min_per_hour"],
+                   "learn": learnt["cpu_seconds"] / 60 / cost["hours"]}  # fmt: skip
+    res["cost"]["total"] = float(sum(res["cost"].values()))
+    res["criteria"] = {"27": res["unseen"]["gain"] >= 0.02 and res["unseen"]["p"] < 0.05,
+                       "28": min(res["changes"].values()) >= -0.01, "29": res["cost"]["total"] <= 30.0}  # fmt: skip
+    TEST8.write_text(json.dumps(res, indent=1))
+    print(f"unseen collections: {100 * res['unseen']['gain']:+.2f} points, p = {res['unseen']['p']:.2g}; changes "
+          + ", ".join(f"{k} {100 * v:+.1f}" for k, v in res["changes"].items())
+          + f"; cost {res['cost']['total']:.1f} CPU min per hour; criteria {res['criteria']}")  # fmt: skip
+    print(f"wrote {TEST8.relative_to(ROOT)}")
+
+
 def cost(args) -> None:
     """Each encoder's indexing cost, measured the same way: the first videos of DiDeMo's test split (in name
     order), one after the other on an idle machine, decoded at one frame a second, repeats skipped, embedded
@@ -630,7 +700,7 @@ def main() -> None:
     ap.add_argument(
         "--round",
         type=int,
-        choices=[6, 7],
+        choices=[6, 7, 8],
         default=6,
         help="tune, evaluate: the sixth round's or the "
         "seventh's (Charades-STA's held-out videos among the tuning sets; results/round7_*.json)",
@@ -656,6 +726,9 @@ def main() -> None:
     if args.stage == "assemble":
         for m in args.models.split(","):
             assemble(args.dataset, m)
+        return
+    if args.stage == "evaluate" and args.round == 8:
+        evaluate8(args)
         return
     {"extract": extract, "tune": tune, "evaluate": evaluate, "cost": cost}[args.stage](args)
 

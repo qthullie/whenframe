@@ -326,12 +326,16 @@ class Videos:
     extra: the collections and sets of descriptions besides DiDeMo's (COLLECTIONS; "tempo" for TEMPO-HL's).
     mix: "videos", a batch's videos drawn alike (fifth and sixth rounds); "sqrt", each item's collection drawn with
     probability proportional to the square root of its number of descriptions, then one of them (seventh).
-    teacher: the collections whose frames the teacher embedded, for the teacher's losses."""
+    teacher: the collections whose frames the teacher embedded, for the teacher's losses.
+    share: with a library to learn (eighth round, COLLECTIONS["library"]), its share of each batch's items; 1, the
+    library alone."""
 
     def __init__(self, seed: int, bank: np.ndarray, bank_sample: int, extra: tuple[str, ...] = (),
-                 mix: str = "videos", teacher: tuple[str, ...] = ()):  # fmt: skip
+                 mix: str = "videos", teacher: tuple[str, ...] = (), share: float | None = None):  # fmt: skip
         self.bank, self.bank_sample, self.mix = bank.astype(np.float32), bank_sample, mix
-        names = ["didemo"] + [c for c in COLLECTIONS if c in extra and c != "didemo"]
+        names = ["didemo"] + [c for c in COLLECTIONS if c in extra and c not in ("didemo", "library")]
+        if share is not None:
+            names = ["library"] if share >= 1.0 else names + ["library"]
         zs = [np.load(CACHE / f"{COLLECTIONS[c][0]}.npz") for c in names]
         self.names = [n for z in zs for n in z["names"].tolist()]
         self.emb = np.concatenate([z["emb"] for z in zs])
@@ -359,6 +363,9 @@ class Videos:
         self.of_collection = [[qi for qi in found if self.collection[qi] == i] for i in range(len(names))]
         size = np.array([len(c) for c in self.of_collection], dtype=np.float64)
         self.weights = list(np.sqrt(size) / np.sqrt(size).sum())
+        if share is not None and share < 1.0:  # the library's share, the others' as they were mixed, scaled
+            others = np.sqrt(size[:-1]) / np.sqrt(size[:-1]).sum()
+            self.weights = [*(float(w) * (1.0 - share) for w in others), share]
         self.mixed = {c: (int(n), float(w)) for c, n, w in zip(names, size, self.weights, strict=True)}
         self.teacher_emb = None
         if teacher:
@@ -743,13 +750,27 @@ def train(args) -> None:
     tuning = DiDeMo(args)
     extra = tuple(e for e in (args.extra or "").split(",") if e)
     teacher = tuple(e for e in (args.teacher or "").split(",") if e) if args.distil else ()
-    data = Videos(args.seed, tuning.kept.bank, args.bank_sample, extra, args.mix, teacher)
-    charades = Charades(tuning.kept.bank, tuning.method, tuning.params) if args.check_charades else None
+    share = None
+    if args.library:  # the eighth round: a library learnt from automatic descriptions (scripts/learn.py prepare)
+        COLLECTIONS["library"] = (f"learn_{args.library}_frames", (f"learn_{args.library}",), None)
+        share = args.library_share
+    data = Videos(args.seed, tuning.kept.bank, args.bank_sample, extra, args.mix, teacher, share)
+    if args.library:  # no check (a library has nothing to check against): the steps from the passes, the last kept
+        args.batch = min(args.batch, len(data.videos))  # at most one description of a video in a batch
+        args.steps = max(1, math.ceil(args.passes * len(data.of_collection[-1]) / (args.batch * share)))
+        args.warmup, args.every = max(1, min(200, args.steps // 10)), 0
+    check = args.check_charades and not args.library
+    charades = Charades(tuning.kept.bank, tuning.method, tuning.params) if check else None
     key = jax.random.PRNGKey(args.seed)  # the fifth round's runs: one key for the weights and the training
-    init_key = key if args.init_seed is None else jax.random.PRNGKey(args.init_seed)
-    params = jax.tree.map(jnp.asarray, init(init_key, args.width, args.layers, args.heads, lam=tuning.params["lam"],
-                                            beta=tuning.params["beta"]))  # fmt: skip
-    params["h_s_b"] = jnp.float32(calibrated_bias(params, data.batch(args.batch)))
+    if args.init:  # going on from trained weights (results/temporal/NAME.npz)
+        z = np.load(args.init)
+        args.layers, args.heads, args.width = int(z["layers"]), int(z["heads"]), int(z["in_w"].shape[1])
+        params = {k: jnp.asarray(z[k]) for k in z.files if k not in ("layers", "heads")}
+    else:
+        init_key = key if args.init_seed is None else jax.random.PRNGKey(args.init_seed)
+        params = jax.tree.map(jnp.asarray, init(init_key, args.width, args.layers, args.heads,
+                                                lam=tuning.params["lam"], beta=tuning.params["beta"]))  # fmt: skip
+        params["h_s_b"] = jnp.float32(calibrated_bias(params, data.batch(args.batch)))
     adam_m = jax.tree.map(jnp.zeros_like, params)
     adam_v = jax.tree.map(jnp.zeros_like, params)
     decayed = {k: k.endswith("_w") for k in params}
@@ -773,7 +794,7 @@ def train(args) -> None:
         params = {k: update(k, params[k], adam_m[k], adam_v[k]) for k in params}
         return params, adam_m, adam_v, value, parts
 
-    base = tuning.score(None)
+    base = tuning.score(None) if args.every else {}
     if charades is not None:
         base["charades_R1@0.5"] = charades.score(None)
     where = (
@@ -790,15 +811,16 @@ def train(args) -> None:
     )  # local paths: not logged
     log = {"config": {k: v for k, v in vars(args).items() if k not in where}, "tuning_without": base, "checks": [],
            "collections": data.mixed}  # fmt: skip
-    print(f"tuning videos without the model: R@5 {100 * base['R@5']:.1f}", flush=True)
+    if base:
+        print(f"tuning videos without the model: R@5 {100 * base['R@5']:.1f}", flush=True)
     best, best_params, best_step = -1.0, None, 0
-    t0 = time.time()
+    t0, c0 = time.time(), time.process_time()
     for i in range(args.steps):
         warm = min(1.0, (i + 1) / args.warmup) * 0.5 * (1 + math.cos(math.pi * i / args.steps))
         key, sub = jax.random.split(key)
         batch = tuple(jnp.asarray(b) for b in data.batch(args.batch))
         params, adam_m, adam_v, value, parts = step(params, adam_m, adam_v, batch, sub, warm, i)
-        if (i + 1) % args.every == 0 or i + 1 == args.steps:
+        if args.every and ((i + 1) % args.every == 0 or i + 1 == args.steps):
             p = numpy_params(jax.device_get(params), args.layers, args.heads)
             s = tuning.score(p, with_head=args.head > 0)
             if charades is not None:
@@ -814,11 +836,19 @@ def train(args) -> None:
                 score = (s["R@5"] + s["charades_R1@0.5"]) / 2
             if score > best:
                 best, best_params, best_step = score, p, i + 1
+    log["seconds"], log["cpu_seconds"] = time.time() - t0, time.process_time() - c0  # every thread's CPU time
+    if not args.every:  # no check: the last weights
+        best_params, best_step = numpy_params(jax.device_get(params), args.layers, args.heads), args.steps
+        log["final_loss"] = float(value)
     OUT.mkdir(parents=True, exist_ok=True)
     np.savez(OUT / f"{args.name}.npz", **best_params)
     log["best"] = best
     log["best_step"] = best_step
     (OUT / f"{args.name}.json").write_text(json.dumps(log, indent=1))
+    if not args.every:
+        print(f"{args.steps} steps of {args.batch} on {len(data.videos)} videos, {log['seconds']:.0f} s; "
+              f"wrote {OUT / args.name}.npz", flush=True)  # fmt: skip
+        return
     print(f"best check {100 * best:.1f} at step {best_step} (without the model: R@5 {100 * base['R@5']:.1f}); "
           f"wrote {OUT / args.name}.npz")  # fmt: skip
 
@@ -1010,6 +1040,10 @@ def main() -> None:
         default="infonce",
         help="between videos: InfoNCE on the search's scores, or SigLIP's own sigmoid loss (FLYP)",
     )
+    ap.add_argument("--init", help="train: go on from these weights (results/temporal/NAME.npz)")
+    ap.add_argument("--library", help="train: a library to learn, as scripts/learn.py prepared it (eighth round)")
+    ap.add_argument("--library-share", type=float, default=1.0, help="train: the library's share of a batch")
+    ap.add_argument("--passes", type=float, default=10.0, help="train: passes over the library's descriptions")
     ap.add_argument("--models", help="soup: the runs' weights to average, comma-separated")
     ap.add_argument("--model", help="export, evaluate: the trained weights (results/temporal/NAME.npz)")
     ap.add_argument("--alpha", type=float, default=1.0, help="export: the share of the model's correction kept")
