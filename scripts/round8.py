@@ -24,6 +24,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "results" / "temporal"
+CACHE = ROOT / "results" / "cache"
 TUNED8 = ROOT / "results" / "round8_tuned.json"
 CHOICES = ROOT / "results" / "round8_choices.json"
 BENCHES = ("didemo", "charades", "youcook2", "unav")
@@ -105,9 +106,12 @@ class Round:
         return label, self.spec(label, {b: self.learn(b, "tuning", recipe) for b in BENCHES})
 
     def choose(self) -> None:
-        self.prepare("tuning")
+        if not all((CACHE / f"learn_{b}-tuning_text.npy").exists() for b in BENCHES):  # a resumed run: done
+            self.prepare("tuning")
         start = self.spec("start", {b: OUT / f"{START[b][0]}.npz" for b in BENCHES})
         t = self.tune([start])
+        # the three choices are made in their order, each against the run kept so far (the starting models until
+        # one is kept), as the seventh round's were; a first version stopped when the first was not kept
         current, recipe = "start", None
         # 1. learning each library, 10 passes over its descriptions
         r1 = {"passes": 10.0, "share": 1.0}
@@ -117,23 +121,23 @@ class Round:
         self.record(1, name, r1, t, current, kept)
         if kept:
             current, recipe = name, r1
-        if recipe is not None:
-            # 2. 3 or 30 passes instead: the better of the two, if better
-            tried = [(dict(r1, passes=p), *self.candidate(dict(r1, passes=p))) for p in (3.0, 30.0)]
-            t = self.tune([s for _, _, s in tried])
-            best = max(tried, key=lambda x: t[x[1]]["mean"])
-            for r, n, _ in tried:
-                self.record(2, n, r, t, current, n == best[1] and t[n]["mean"] > t[current]["mean"])
-            if t[best[1]]["mean"] > t[current]["mean"]:
-                current, recipe = best[1], best[0]
-            # 3. half of each batch from the starting model's own training collections
-            r3 = dict(recipe, share=0.5)
-            name, spec = self.candidate(r3)
-            t = self.tune([spec])
-            kept = t[name]["mean"] > t[current]["mean"]
-            self.record(3, name, r3, t, current, kept)
-            if kept:
-                current, recipe = name, r3
+        # 2. 3 or 30 passes instead: the better of the two, if better
+        tried = [(dict(r1, passes=p), *self.candidate(dict(r1, passes=p))) for p in (3.0, 30.0)]
+        t = self.tune([s for _, _, s in tried])
+        best = max(tried, key=lambda x: t[x[1]]["mean"])
+        for r, n, _ in tried:
+            self.record(2, n, r, t, current, n == best[1] and t[n]["mean"] > t[current]["mean"])
+        if t[best[1]]["mean"] > t[current]["mean"]:
+            current, recipe = best[1], best[0]
+        # 3. half of each batch from the starting model's own training collections, with the passes kept so far
+        #    (choice 1's 10 if none was kept)
+        r3 = dict(recipe or r1, share=0.5)
+        name, spec = self.candidate(r3)
+        t = self.tune([spec])
+        kept = t[name]["mean"] > t[current]["mean"]
+        self.record(3, name, r3, t, current, kept)
+        if kept:
+            current, recipe = name, r3
         final = {"run": current, "recipe": recipe, "mean": t[current]["mean"], "start_mean": t["start"]["mean"]}
         CHOICES.write_text(json.dumps({"steps": self.steps, "final": final}, indent=1))
         log(f"kept: {current}; the eighth round's choices are made: record them in docs/PROTOCOL.md, then learn the "
