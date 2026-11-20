@@ -11,6 +11,30 @@
    "against": "start",
    "against_mean": 0.3782412590786738,
    "kept": false
+  },
+  {
+   "choice": 2,
+   "run": "learn-p3",
+   "recipe": {
+    "passes": 3.0,
+    "share": 1.0
+   },
+   "mean": 0.3748733065522116,
+   "against": "start",
+   "against_mean": 0.3782412590786738,
+   "kept": false
+  },
+  {
+   "choice": 2,
+   "run": "learn-p30",
+   "recipe": {
+    "passes": 30.0,
+    "share": 1.0
+   },
+   "mean": 0.36421706780828567,
+   "against": "start",
+   "against_mean": 0.3782412590786738,
+   "kept": false
   }
  ]
 }
