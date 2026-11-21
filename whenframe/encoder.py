@@ -100,6 +100,9 @@ MODELS = {
         "onnx-community/PE-Core-B16-224-ONNX", 224, 99.9263, -19.9853, vision_file="onnx/vision_model_one.xml",
         text_file="onnx/text_model_fp16.onnx", image_output="image_embeds", text_output="text_embeds",
         text_length=32, pad_token=None, clean="none", text_openvino=True,
+        # its query bank as chosen on the tuning sets (results/round9_bank.json); the spans' strengths 0.25 and 0.5
+        # tied on YouCook2's tuning steps, and the first of the grid was kept
+        bank_beta=50.0, bank_lambda=1.0, spans_lambda=0.25,
     ),
 }  # fmt: skip
 DEFAULT_MODEL = "siglip2-base"
