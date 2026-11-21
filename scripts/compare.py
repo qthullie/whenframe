@@ -48,7 +48,8 @@ YOUCOOK2 = f"{HUB}/nguyenminh04/youcook2-videos/resolve/main/videos/{{}}.mp4"
 UNAV = f"{HUB}/nguyenminh04/unav100-videos/resolve/main/unav100_{{:03d}}.tar"
 # the standard mode's caches, whose frames every encoder sees
 BASE = {"didemo-test": "didemo_test_openvino", "didemo-train": "didemo_train_openvino",
-        "charades": "charades_test", "youcook2": "youcook2", "unav": "unav"}  # fmt: skip
+        "charades": "charades_test", "youcook2": "youcook2", "unav": "unav",
+        "charades-tuning": "charades_tuning_openvino"}  # fmt: skip
 DONE = object()
 
 
@@ -62,7 +63,7 @@ def cache_name(dataset: str, model: str) -> str:
         return BASE[dataset]
     if dataset.startswith("didemo"):
         return f"didemo_{dataset.split('-')[1]}_{model}_openvino"  # as scripts/didemo.py names them
-    return f"{BASE[dataset]}_{short(model)}_openvino"
+    return f"{BASE[dataset].removesuffix('_openvino')}_{short(model)}_openvino"
 
 
 # ---------------------------------------------------------------- the videos, read again
@@ -92,6 +93,12 @@ def charades_source(names: list[str], work: Path):
         with z.open(info) as src, open(path, "wb") as dst:
             shutil.copyfileobj(src, dst)
         yield name, path, True
+
+
+def charades_tuning_source(names: list[str], work: Path):
+    """Charades-STA's held-out training videos (seventh round), named without their extension in their cache."""
+    for name, path, temporary in charades_source([f"{n}.mp4" for n in names], work):
+        yield name.removesuffix(".mp4"), path, temporary
 
 
 def youcook2_source(names: list[str], work: Path):
@@ -161,6 +168,7 @@ def extract(args) -> None:
     source = {"didemo-test": lambda: didemo_source(args.dataset, todo_names, args.videos, work),
               "didemo-train": lambda: didemo_source(args.dataset, todo_names, args.videos, work),
               "charades": lambda: charades_source(todo_names, work),
+              "charades-tuning": lambda: charades_tuning_source(todo_names, work),
               "youcook2": lambda: youcook2_source(todo_names, work),
               "unav": lambda: unav_source(todo_names, work)}[args.dataset]  # fmt: skip
     todo, ready = queue.Queue(maxsize=4), queue.Queue(maxsize=4)
@@ -296,7 +304,8 @@ def adapted(c: Candidate, emb, times, starts, counts) -> np.ndarray:
 # ---------------------------------------------------------------- the four benchmarks, for one candidate
 def didemo_bank(model: str) -> np.ndarray:
     """DiDeMo's bank as each round searched with it (the descriptions embedded by the encoder, in float32)."""
-    key = {"siglip2-base": "", "siglip2-b32": "_siglip2-b32", "siglip2-so400m": "_siglip2-so400m_lower"}[model]
+    key = {"siglip2-base": "", "siglip2-b32": "_siglip2-b32", "siglip2-so400m": "_siglip2-so400m_lower",
+           "pe-core-b16": "_pe-core-b16"}[model]  # fmt: skip
     return np.load(CACHE / f"didemo_bank_text{key}.npy").astype(np.float32)
 
 
@@ -336,6 +345,8 @@ class Benchmarks:
         f = replace(f, emb=adapted(c, f.emb, f.times, f.starts, f.counts), _offsets={})
         if c.model == "siglip2-so400m":  # lower case, as chosen for it in the fourth round
             text = np.load(CACHE / f"didemo_{split}_text_siglip2-so400m_lower.npy").astype(np.float32)
+        elif c.model == "pe-core-b16":  # its text tower runs with OpenVINO (ninth round)
+            text = text_embeddings(c.model, f"didemo_{split}", [q["text"] for q in queries])
         else:
             text = didemo.text_embeddings(queries, split, self.args.model_dir, c.model)
         return f, queries, text
@@ -379,9 +390,18 @@ class Benchmarks:
         from temporal import Charades
 
         c = c.on("charades")
-        assert c.model == "siglip2-base", "the held-out videos are embedded by the standard mode's encoder only"
         params = self.search_params(c.model, "frame_window_bank")
-        held = self.once("charades-tuning", lambda: Charades(didemo_bank(c.model), "frame_window_bank", params))
+
+        def held_out():
+            held = Charades(didemo_bank(c.model), "frame_window_bank", params)
+            if c.model != "siglip2-base":  # the same frames embedded again (ninth round), and the descriptions
+                z = np.load(CACHE / f"{cache_name('charades-tuning', c.model)}.npz")
+                assert np.array_equal(z["times"], held.f.times), "not the same frames"
+                held.f = replace(held.f, emb=z["emb"].astype(np.float32), _offsets={})
+                held.text = text_embeddings(c.model, "charades_tuning", [q["text"] for q in held.queries])
+            return held
+
+        held = self.once(("charades-tuning", c.model), held_out)
         f = replace(held.f, emb=adapted(c, held.f.emb, held.f.times, held.f.starts, held.f.counts), _offsets={})
         r = run(f, held.queries, held.text, held.method, held.params, per_query=True)
         return {"value": r["single"]["R1 IoU>=0.5"], "items": [x >= 0.5 for x in r["single_iou"]], "full": strip(r)}
@@ -441,7 +461,9 @@ class Benchmarks:
         lib.emb = adapted(c, lib.emb, lib.times, starts, counts)
         siglip = base_siglip if c.model == "siglip2-base" else text_embeddings(c.model, "unav_labels", labels)
         beta, lam = bank_params(c.model)
-        frames = unav.standardise(lib.frames(siglip, qbank.load(c.model).astype(np.float32), beta, lam))
+        packaged = qbank.load(c.model)  # the tool's bank is DiDeMo's, as each round searched with it
+        bank = didemo_bank(c.model) if packaged is None else packaged.astype(np.float32)
+        frames = unav.standardise(lib.frames(siglip, bank, beta, lam))
         heard = self.once(("unav-heard", part), lambda: unav.standardise(
             unav.Library(z, keep).sound(clap, 5.0)))  # fmt: skip
         best = None
@@ -459,7 +481,7 @@ def strip(r: dict) -> dict:
 
 
 NAMED = {"b32": Candidate("b32", "siglip2-b32"), "base": Candidate("base"),
-         "so400m": Candidate("so400m", "siglip2-so400m")}  # fmt: skip
+         "so400m": Candidate("so400m", "siglip2-so400m"), "pe": Candidate("pe", "pe-core-b16")}  # fmt: skip
 # model v1 as the package shipped it, until model v2 replaced it (commit fb885b0): taken from the repository's history
 V1, V1_COMMIT = ROOT / "results" / "temporal" / "temporal-siglip2-base-v1.npz", "fb885b0^"
 
@@ -501,6 +523,8 @@ TEST7 = ROOT / "results" / "round7_test.json"
 # the eighth round's: each library searched through the model it learnt (scripts/learn.py, temporal.py --library)
 TUNED8 = ROOT / "results" / "round8_tuned.json"
 TEST8 = ROOT / "results" / "round8_test.json"
+# the ninth round's: PE core B/16 against SigLIP 2 B/16, both alone, on the four tuning sets
+TUNED9 = ROOT / "results" / "round9_tuned.json"
 
 
 def tune(args) -> None:
@@ -508,7 +532,7 @@ def tune(args) -> None:
     and the mean of the primary metrics: DiDeMo, YouCook2 and UnAV-100 (sixth round; Charades-STA had none), and
     Charades-STA's 500 held-out training videos (seventh round, --round 7)."""
     b = Benchmarks(args)
-    path = {7: TUNED7, 8: TUNED8}.get(args.round, TUNED)
+    path = {7: TUNED7, 8: TUNED8, 9: TUNED9}.get(args.round, TUNED)
     out = json.loads(path.read_text()) if path.exists() else {}
     for spec in args.candidates.split(","):
         c = candidate(spec)
@@ -701,7 +725,7 @@ def main() -> None:
     ap.add_argument(
         "--round",
         type=int,
-        choices=[6, 7, 8],
+        choices=[6, 7, 8, 9],
         default=6,
         help="tune, evaluate: the sixth round's or the "
         "seventh's (Charades-STA's held-out videos among the tuning sets; results/round7_*.json)",

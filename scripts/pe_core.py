@@ -3,7 +3,10 @@
     python scripts/pe_core.py fetch     --model-folder DIR      # onnx-community's two towers, timm's tokenizer
     python scripts/pe_core.py sample    --folder CHECK --annotations didemo_train.json --videos DIR
     python -I scripts/pe_core.py reference --folder CHECK --export DIR/onnx/vision_model_any_batch.onnx
+    python scripts/pe_core.py one       --model-folder DIR      # the image tower, one frame at a time
     python scripts/pe_core.py check     --folder CHECK --model-folder DIR    # results/round9_check.json
+    python scripts/pe_core.py bank      --annotations didemo_train.json --youcook2-annotations val.parquet
+                                        # PE's own query bank settings, once its frames are embedded
 
 `sample` decodes 16 frames of DiDeMo's tuning videos at the standard mode's instants (one per video, its middle
 cached frame, squashed to 224 pixels by ffmpeg) and takes one description of each, with five more sentences for the
@@ -31,6 +34,8 @@ ROOT = Path(__file__).resolve().parents[1]
 ONNX = "onnx-community/PE-Core-B16-224-ONNX"
 TIMM = "timm/PE-Core-B-16"
 CHECKED = ROOT / "results" / "round9_check.json"
+BANK = ROOT / "results" / "round9_bank.json"
+MODEL = "pe-core-b16"
 # sentences that only test the tokenizer: capitals, punctuation, spaces, accents
 EXTRA = ["A man's dog jumps over the FENCE!", "the camera pans left   then right", "kids playing in the snow, 2nd time",
          "café au lait — poured slowly", "first time we see the red car's door open"]  # fmt: skip
@@ -128,6 +133,20 @@ def reference(args) -> None:
     print(json.dumps(info))
 
 
+def one(args) -> None:
+    """The image tower exported again, fixed to one frame at a time and saved for OpenVINO, which then runs several
+    frames at once, each in a request of its own (its throughput mode, as So400m's runs). With any batch size,
+    OpenVINO's memory grew with every new batch size (from 1.5 to 3.3 GB over ten) and it took 1.8 times SigLIP 2
+    B/16's CPU time per frame; one at a time, it holds and takes 1.3 times."""
+    import openvino as ov
+
+    folder = Path(args.model_folder) / "onnx"
+    model = ov.Core().read_model(str(folder / "vision_model_any_batch.onnx"))
+    model.reshape({"pixel_values": [1, 3, 224, 224]})
+    ov.save_model(model, str(folder / "vision_model_one.xml"), compress_to_fp16=False)
+    print(f"saved {folder / 'vision_model_one.xml'}")
+
+
 def cosines(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     a = a / np.linalg.norm(a, axis=1, keepdims=True)
     b = b / np.linalg.norm(b, axis=1, keepdims=True)
@@ -186,16 +205,68 @@ def check(args) -> None:
     print(json.dumps({k: v for k, v in out.items() if k not in ("frames", "descriptions", "more_sentences")}))
 
 
+def bank(args) -> None:
+    """PE's own query bank on DiDeMo's tuning videos, then the bank's strength for adaptive spans on YouCook2's
+    tuning steps, over the fourth round's grid, as each encoder's were chosen (results/round9_bank.json). Its
+    descriptions and DiDeMo's bank are embedded with OpenVINO, as the tool embeds a query."""
+    import itertools
+    from argparse import Namespace
+    from dataclasses import replace
+
+    sys.path.insert(0, str(ROOT))
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import compare
+    import didemo
+    from benchmark import SPACE, run
+
+    from whenframe import encoder
+    from whenframe.encoder import Encoder
+
+    path = compare.CACHE / f"didemo_bank_text_{MODEL}.npy"
+    if not path.exists():
+        texts = didemo.bank_texts(Namespace(train_annotations=args.annotations))
+        enc = Encoder(MODEL, backend="openvino")
+        emb = np.concatenate([enc.encode_texts(texts[i : i + 64]) for i in range(0, len(texts), 64)])
+        np.save(path, emb.astype(np.float32))
+    b = compare.Benchmarks(Namespace(annotations=args.annotations, model_dir=args.model_dir,
+                                     youcook2_annotations=args.youcook2_annotations))  # fmt: skip
+    c = compare.NAMED["pe"]
+    method = "frame_window_bank"
+    params = json.loads((ROOT / "results" / "didemo_tuned.json").read_text())[method]["params"]
+    f, queries, text = b.didemo(c, "train")
+    grid = []
+    for beta, lam in itertools.product(SPACE["bank"]["beta"], SPACE["bank"]["lam"]):
+        r = run(f, queries, text, method, {**params, "beta": beta, "lam": lam})
+        grid.append({"beta": beta, "lam": lam, "score": r["corpus"]["R@5 IoU>=0.5"]})
+        print(f"DiDeMo tuning, beta {beta:g}, strength {lam:g}: R@5 {100 * grid[-1]['score']:.1f}", flush=True)
+    best = max(grid, key=lambda x: x["score"])
+    spec, spans = encoder.MODELS[MODEL], []
+    for lam in SPACE["bank"]["lam"]:
+        encoder.MODELS[MODEL] = replace(spec, bank_beta=best["beta"], bank_lambda=best["lam"], spans_lambda=lam)
+        y = b.youcook2_score(c, "tuning")  # with the speech weight that does best with it
+        spans.append({"lam": lam, "score": y["value"], "speech": y["speech"]})
+        print(f"YouCook2 tuning, spans' strength {lam:g}: R@5 {100 * y['value']:.1f} (speech {y['speech']})")
+    encoder.MODELS[MODEL] = spec
+    chosen = max(spans, key=lambda x: x["score"])
+    out = {"bank": {"beta": best["beta"], "lam": best["lam"], "score": best["score"], "grid": grid},
+           "spans": {"lam": chosen["lam"], "score": chosen["score"], "grid": spans}}  # fmt: skip
+    BANK.write_text(json.dumps(out, indent=1))
+    print(f"chosen: beta {best['beta']:g}, strength {best['lam']:g}, spans' strength {chosen['lam']:g}")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("stage", choices=["fetch", "sample", "reference", "check"])
+    ap.add_argument("stage", choices=["fetch", "sample", "reference", "one", "check", "bank"])
     ap.add_argument("--folder", help="the check's folder: its frames, descriptions and the reference's embeddings")
     ap.add_argument("--model-folder", help="PE core B/16's files, as `fetch` and `reference --export` leave them")
     ap.add_argument("--annotations", help="DiDeMo's didemo_train.json")
     ap.add_argument("--videos", help="the folder of DiDeMo's training videos")
     ap.add_argument("--export", help="reference: where to export the image tower, taking any batch size")
+    ap.add_argument("--youcook2-annotations", help="bank: YouCook2's validation parquet")
+    ap.add_argument("--model-dir", help="bank: folder of SigLIP 2 base's files, as scripts/compare.py's")
     args = ap.parse_args()
-    {"fetch": fetch, "sample": sample, "reference": reference, "check": check}[args.stage](args)
+    stages = {"fetch": fetch, "sample": sample, "reference": reference, "one": one, "check": check, "bank": bank}
+    stages[args.stage](args)
 
 
 if __name__ == "__main__":

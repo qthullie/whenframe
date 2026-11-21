@@ -93,11 +93,11 @@ MODELS = {
         clean="lower", weights_folder="textual", text_openvino=True, sound_weight=1.5,
     ),
     # Meta's Perception Encoder, PE core B/16 (Apache License 2.0), measured in the ninth round: onnx-community's
-    # text tower, its image tower exported again from timm/PE-Core-B-16's weights to take any batch size, and
+    # text tower, its image tower exported again from timm/PE-Core-B-16's weights and run one frame at a time, and
     # timm/PE-Core-B-16's tokenizer (scripts/pe_core.py prepares the folder). CLIP has no bias of its own: the
     # bias only places the probability shown with a result, at even odds for a cosine of 0.2.
     "pe-core-b16": ModelSpec(
-        "onnx-community/PE-Core-B16-224-ONNX", 224, 99.9263, -19.9853, vision_file="onnx/vision_model_any_batch.onnx",
+        "onnx-community/PE-Core-B16-224-ONNX", 224, 99.9263, -19.9853, vision_file="onnx/vision_model_one.xml",
         text_file="onnx/text_model_fp16.onnx", image_output="image_embeds", text_output="text_embeds",
         text_length=32, pad_token=None, clean="none", text_openvino=True,
     ),

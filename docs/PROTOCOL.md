@@ -1176,3 +1176,13 @@ B/16's too. PE's frames then come out at a cosine of 0.9987 at worst (0.9995
 on average), and SigLIP 2's at 0.9995 at worst against its own float32.
 Decided before any benchmark number: the measure runs both in bfloat16, as
 the tool would on this machine.
+
+**One frame at a time.** With any batch size, OpenVINO's memory for PE's
+image tower grew with each new batch size (from 1.5 to 3.3 GB over ten
+sizes), and an extraction was killed for lack of memory. It also took 1.8
+times SigLIP 2 B/16's CPU time per frame. Fixed to one frame at a time, PE
+runs in OpenVINO's throughput mode, as So400m's tower does: its memory
+holds, and a first estimate puts it at 1.3 times SigLIP 2 B/16's CPU time
+per frame (criterion 32 is measured at the test). The check was made again
+on it: 0.9999999 in float32, 0.9987 at worst in bfloat16. Decided before any
+benchmark number.

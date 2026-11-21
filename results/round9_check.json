@@ -97,8 +97,8 @@
  ],
  "token_ids_equal": true,
  "image_cosine": {
-  "min": 0.998727560043335,
-  "mean": 0.9994512796401978
+  "min": 0.9987134337425232,
+  "mean": 0.9993875622749329
  },
  "text_cosine": {
   "min": 0.9999154806137085,
@@ -111,7 +111,7 @@
  "text_precision": "bf16",
  "export_passed": true,
  "image_cosine_float32": {
-  "min": 0.9999999403953552,
+  "min": 0.9999998807907104,
   "mean": 1.0
  },
  "siglip2_base_picked_against_float32": {
