@@ -1,0 +1,122 @@
+{
+ "reference": {
+  "torch": "2.15.0+cpu",
+  "open_clip": "4.2.2",
+  "logit_scale": 99.92631530761719
+ },
+ "frames": [
+  [
+   "101042541@N03_9670495147_376d39fbc8.mp4",
+   15.0
+  ],
+  [
+   "10271412@N02_5827955376_14cc971711.mp4",
+   12.0
+  ],
+  [
+   "10271412@N02_6011010454_a3cc923d7b.mp4",
+   11.0
+  ],
+  [
+   "10279741@N00_6757697855_6f83d834a2.mp4",
+   15.0
+  ],
+  [
+   "10279741@N00_8437050600_da41f17538.mp4",
+   15.0
+  ],
+  [
+   "10298573@N06_6530945397_1a153ab3e7.mp4",
+   14.0
+  ],
+  [
+   "10464850@N00_4152155034_212e262767.mp4",
+   13.0
+  ],
+  [
+   "10464850@N00_4195537743_49a9bb6593.mp4",
+   12.0
+  ],
+  [
+   "10464850@N00_4655758966_407c9013be.mp4",
+   12.0
+  ],
+  [
+   "10479690@N00_5414236855_93e8c03864.mp4",
+   11.0
+  ],
+  [
+   "10500285@N04_3736427270_22c4d84531.mp4",
+   13.0
+  ],
+  [
+   "105508733@N04_10681195455_4f31c61c99.mp4",
+   15.0
+  ],
+  [
+   "10563005@N06_2841118253_80f3017e78.mp4",
+   15.0
+  ],
+  [
+   "10563005@N06_4047494846_eb79bc0662.mp4",
+   15.0
+  ],
+  [
+   "10770768@N08_3417014208_6dc77ce23d.mp4",
+   15.0
+  ],
+  [
+   "10770768@N08_7019779797_183e7052d5.mp4",
+   15.0
+  ]
+ ],
+ "descriptions": [
+  "man places orange item on the table",
+  "the camera shows a laptop computer",
+  "the dog leaves what he is chewing and runs to the man.",
+  "a cat places both paws on the the wall to try to catch a laser dot.",
+  "cat turns and makes a quick dash across the room",
+  "a second black statue becomes visible",
+  "when the christmas tree fully leaves the scene.",
+  "blue flag appears for first time",
+  "a boat goes by on the ocean.",
+  "the person begins to saw away.",
+  "we first see part of man on the right's hat",
+  "the camera zooms out as two people kiss.",
+  "a kid is coming out of a school bus",
+  "person in striped shirt kicks ball for first time",
+  "man points at book.",
+  "video light turns to green"
+ ],
+ "more_sentences": [
+  "A man's dog jumps over the FENCE!",
+  "the camera pans left   then right",
+  "kids playing in the snow, 2nd time",
+  "caf\u00e9 au lait \u2014 poured slowly",
+  "first time we see the red car's door open"
+ ],
+ "token_ids_equal": true,
+ "image_cosine": {
+  "min": 0.998727560043335,
+  "mean": 0.9994512796401978
+ },
+ "text_cosine": {
+  "min": 0.9999154806137085,
+  "mean": 0.9999632835388184
+ },
+ "onnx_community_image_tower_in_pairs": {
+  "min": 0.9708074927330017
+ },
+ "image_precision": "bf16",
+ "text_precision": "bf16",
+ "export_passed": true,
+ "image_cosine_float32": {
+  "min": 0.9999999403953552,
+  "mean": 1.0
+ },
+ "siglip2_base_picked_against_float32": {
+  "precision": "bf16",
+  "min": 0.9994865655899048,
+  "mean": 0.9998200535774231
+ }
+}

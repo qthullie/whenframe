@@ -1158,3 +1158,21 @@ If 30, 31 and 32 hold, a new library in the standard mode is indexed with PE
 core B/16 and goes through v4. Libraries already indexed keep SigLIP 2 B/16
 and v3. The test is run once, after stage 1's numbers and stage 2's training
 are recorded here.
+
+**The check, before any benchmark number** (`scripts/pe_core.py`,
+`results/round9_check.json`).
+
+- onnx-community's image tower was traced with a batch of exactly 2 frames
+  and cannot be reshaped. Run in pairs, its embeddings came out at a cosine
+  of 0.971 at worst to the reference's. It is not used: the image tower was
+  exported again from `timm/PE-Core-B-16`'s weights (open_clip 4.2.2,
+  PyTorch 2.15), and takes any batch size.
+- The token ids are equal. The text tower's embeddings are at a cosine of
+  0.99992 at worst.
+- The image tower exported again is at a cosine of 0.9999999 in float32.
+
+On this processor, OpenVINO computes every tower in bfloat16, SigLIP 2
+B/16's too. PE's frames then come out at a cosine of 0.9987 at worst (0.9995
+on average), and SigLIP 2's at 0.9995 at worst against its own float32.
+Decided before any benchmark number: the measure runs both in bfloat16, as
+the tool would on this machine.
