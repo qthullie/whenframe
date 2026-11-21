@@ -7,6 +7,7 @@
     python scripts/pe_core.py check     --folder CHECK --model-folder DIR    # results/round9_check.json
     python scripts/pe_core.py bank      --annotations didemo_train.json --youcook2-annotations val.parquet
                                         # PE's own query bank settings, once its frames are embedded
+    python scripts/pe_core.py texts     # stage 2: the training collections' descriptions, embedded by PE
 
 `sample` decodes 16 frames of DiDeMo's tuning videos at the standard mode's instants (one per video, its middle
 cached frame, squashed to 224 pixels by ffmpeg) and takes one description of each, with five more sentences for the
@@ -304,9 +305,32 @@ def bank(args) -> None:
     print(f"chosen: beta {best['beta']:g}, strength {best['lam']:g}, spans' strength {chosen['lam']:g}")
 
 
+# the sets of descriptions whenframe's model trains on (scripts/temporal.py COLLECTIONS)
+SETS = ("didemo_all", "tempo", "msrvtt", "charades_train", "youcook2_train")
+
+
+def texts(args) -> None:
+    """Stage 2: the descriptions of the collections v3 trained on, embedded by PE's text tower with OpenVINO, as the
+    tool embeds a query, in the order of their queries (results/cache/NAME_text_pe-core-b16.npy, float16)."""
+    sys.path.insert(0, str(ROOT))
+    from whenframe.encoder import Encoder
+
+    enc = None
+    for name in SETS:
+        out = ROOT / "results" / "cache" / f"{name}_text_{MODEL}.npy"
+        if out.exists():
+            continue
+        enc = enc or Encoder(MODEL, backend="openvino")
+        said = [q["text"] for q in json.loads((ROOT / "results" / "cache" / f"{name}_queries.json").read_text())]
+        t0 = time.time()
+        emb = np.concatenate([enc.encode_texts(said[i : i + 64]) for i in range(0, len(said), 64)])
+        np.save(out, emb.astype(np.float16))
+        print(f"{name}: {len(said)} descriptions in {time.time() - t0:.0f} s", flush=True)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("stage", choices=["fetch", "sample", "reference", "one", "check", "bank"])
+    ap.add_argument("stage", choices=["fetch", "sample", "reference", "one", "check", "bank", "texts"])
     ap.add_argument("--folder", help="the check's folder: its frames, descriptions and the reference's embeddings")
     ap.add_argument("--model-folder", help="PE core B/16's files, as `fetch` and `reference --export` leave them")
     ap.add_argument("--annotations", help="DiDeMo's didemo_train.json")
@@ -315,7 +339,8 @@ def main() -> None:
     ap.add_argument("--youcook2-annotations", help="bank: YouCook2's validation parquet")
     ap.add_argument("--model-dir", help="bank: folder of SigLIP 2 base's files, as scripts/compare.py's")
     args = ap.parse_args()
-    stages = {"fetch": fetch, "sample": sample, "reference": reference, "one": one, "check": check, "bank": bank}
+    stages = {"fetch": fetch, "sample": sample, "reference": reference, "one": one, "check": check, "bank": bank,
+              "texts": texts}  # fmt: skip
     stages[args.stage](args)
 
 

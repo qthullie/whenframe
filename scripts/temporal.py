@@ -78,6 +78,21 @@ COLLECTIONS = {
 # the teacher (seventh round): SigLIP 2 So400m, its logit scale, query bank and the strength the tool gives it
 TEACHER_SCALE, TEACHER_LAM, TEACHER_BETA = 109.8812, 1.0, 50.0
 TEACHER_BANK = CACHE / "didemo_bank_text_siglip2-so400m_lower.npy"
+# the image encoder the model is trained for (--encoder): SigLIP 2 base, or the ninth round's PE core B/16, whose
+# frames and descriptions scripts/compare.py and scripts/pe_core.py embedded again at the same instants; each
+# encoder's own logit scale and bias (CLIP's PE has none), which the losses use as the search does
+ENCODER = "siglip2-base"
+SCALES = {"siglip2-base": (112.6689, -16.7717), "pe-core-b16": (99.9263, 0.0)}
+
+
+def frames_file(name: str) -> str:
+    """A collection's frames as the encoder embedded them: the standard caches for SigLIP 2 base."""
+    return name if ENCODER == "siglip2-base" else name.replace("_openvino", f"_{ENCODER}_openvino")
+
+
+def text_file(name: str) -> str:
+    """A set of descriptions as the encoder's text tower embedded them."""
+    return f"{name}_text.npy" if ENCODER == "siglip2-base" else f"{name}_text_{ENCODER}.npy"
 
 
 def stem(name: str) -> str:
@@ -106,7 +121,15 @@ def texts(args) -> None:
 
 # ---------------------------------------------------------------- the model, in JAX
 def init(
-    key, d: int = 256, layers: int = 2, heads: int = 4, dim: int = 768, lam: float = 1.0, beta: float = 50.0
+    key,
+    d: int = 256,
+    layers: int = 2,
+    heads: int = 4,
+    dim: int = 768,
+    lam: float = 1.0,
+    beta: float = 50.0,
+    scale: float = 112.6689,
+    bias: float = -16.7717,
 ) -> dict:
     import jax
 
@@ -128,7 +151,7 @@ def init(
               f"l{i}_fc1_w": dense(d, 2 * d), f"l{i}_fc1_b": np.zeros(2 * d, np.float32),
               f"l{i}_fc2_w": dense(2 * d, d, 0.5 / math.sqrt(2 * d)),
               f"l{i}_fc2_b": np.zeros(d, np.float32)}  # fmt: skip
-    p["scale"], p["bias"] = np.float32(math.log(112.6689)), np.float32(-16.7717)  # SigLIP 2 base's own
+    p["scale"], p["bias"] = np.float32(math.log(scale)), np.float32(bias)  # the encoder's own (SigLIP 2 base's)
     p["lam"], p["beta"] = np.float32(lam), np.float32(beta)  # the query bank's correction, as the search's
     # the head, run at search time on a description and the frames of a shortlisted video
     h = d // 2
@@ -336,7 +359,7 @@ class Videos:
         names = ["didemo"] + [c for c in COLLECTIONS if c in extra and c not in ("didemo", "library")]
         if share is not None:
             names = ["library"] if share >= 1.0 else names + ["library"]
-        zs = [np.load(CACHE / f"{COLLECTIONS[c][0]}.npz") for c in names]
+        zs = [np.load(CACHE / f"{frames_file(COLLECTIONS[c][0])}.npz") for c in names]
         self.names = [n for z in zs for n in z["names"].tolist()]
         self.emb = np.concatenate([z["emb"] for z in zs])
         self.times, self.keep = np.concatenate([z["times"] for z in zs]), np.concatenate([z["keep"] for z in zs])
@@ -346,7 +369,7 @@ class Videos:
         sets = [(i, s) for i, c in enumerate(names) for j, s in enumerate(COLLECTIONS[c][1]) if j == 0 or s in extra]
         first_video = np.cumsum([0] + [len(z["names"]) for z in zs])
         index = [{n: first_video[i] + k for k, n in enumerate(z["names"].tolist())} for i, z in enumerate(zs)]
-        self.text = np.concatenate([np.load(CACHE / f"{s}_text.npy") for _, s in sets])
+        self.text = np.concatenate([np.load(CACHE / text_file(s)) for _, s in sets])
         self.queries, self.collection = [], []
         for i, s in sets:
             qs = json.loads((CACHE / f"{s}_queries.json").read_text())
@@ -431,11 +454,12 @@ class Videos:
     def batch(self, n: int, length: int = temporal.WINDOW):
         pairs = self.draw(n) if self.mix == "sqrt" else None
         vids = self.rng.sample(self.videos, n) if pairs is None else [v for v, _ in pairs]
-        x = np.zeros((n, length, 768), np.float32)
+        dim = self.emb.shape[1]
+        x = np.zeros((n, length, dim), np.float32)
         t = np.zeros((n, length), np.float32)
         mask = np.zeros((n, length), bool)
         inside = np.zeros((n, length), bool)
-        q = np.zeros((n, 768), np.float32)
+        q = np.zeros((n, dim), np.float32)
         ends = np.zeros((n, 2), np.float32)
         taught = self.teacher_emb is not None
         if taught:
@@ -491,14 +515,22 @@ class DiDeMo:
         import didemo
 
         frozen, self.queries, _ = didemo.load(split, args.annotations if split == "train" else args.test_annotations)
-        frozen.bank = didemo.bank(args)
-        self.text = didemo.text_embeddings(self.queries, split, args.model_dir)
-        ov = np.load(didemo.CACHE / f"didemo_{split}{didemo.suffix(didemo.MAIN, 'openvino')}.npz")
-        base = replace(frozen, emb=ov["emb"][ov["times"] < didemo.SECONDS].astype(np.float32), _offsets={})
-        self.kept = base.only_kept()
         tuned = json.loads((ROOT / "results" / "didemo_tuned.json").read_text())
         self.method = tuned["default"]
         self.params = tuned[self.method]["params"]
+        if ENCODER == "siglip2-base":
+            frozen.bank = didemo.bank(args)
+            self.text = didemo.text_embeddings(self.queries, split, args.model_dir)
+            ov = np.load(didemo.CACHE / f"didemo_{split}{didemo.suffix(didemo.MAIN, 'openvino')}.npz")
+        else:  # the same frames and descriptions as scripts/compare.py searches them with the encoder
+            from whenframe.encoder import MODELS
+
+            frozen.bank = np.load(CACHE / f"didemo_bank_text_{ENCODER}.npy").astype(np.float32)
+            self.text = np.load(CACHE / f"didemo_{split}_text_compare_{ENCODER}.npy").astype(np.float32)
+            ov = np.load(CACHE / f"didemo_{split}_{ENCODER}_openvino.npz")
+            self.params = {**self.params, "beta": MODELS[ENCODER].bank_beta, "lam": MODELS[ENCODER].bank_lambda}
+        base = replace(frozen, emb=ov["emb"][ov["times"] < didemo.SECONDS].astype(np.float32), _offsets={})
+        self.kept = base.only_kept()
 
     def adapted(self, p: dict) -> np.ndarray:
         return adapt(p, self.kept.emb, self.kept.times, self.kept.starts, self.kept.counts)
@@ -541,6 +573,12 @@ class Charades:
                          "moment": (max(0.0, q["seconds"][0]), min(q["seconds"][1], durations[q["video"]]))}
                         for _, q in found]  # fmt: skip
         self.text = np.load(CACHE / "charades_tuning_text.npy").astype(np.float32)[[i for i, _ in found]]
+        if ENCODER != "siglip2-base":  # the same frames and descriptions, as scripts/compare.py embedded them
+            e = np.load(CACHE / f"charades_tuning_{ENCODER}_openvino.npz")
+            assert np.array_equal(e["times"], self.f.times), "not the same frames"
+            self.f.emb = e["emb"].astype(np.float32)
+            self.text = np.load(CACHE / f"charades_tuning_text_compare_{ENCODER}.npy").astype(np.float32)
+            assert len(self.text) == len(self.queries), "not the same descriptions"
         self.method, self.params = method, params
 
     def score(self, p: dict | None) -> float:
@@ -768,8 +806,10 @@ def train(args) -> None:
         params = {k: jnp.asarray(z[k]) for k in z.files if k not in ("layers", "heads")}
     else:
         init_key = key if args.init_seed is None else jax.random.PRNGKey(args.init_seed)
-        params = jax.tree.map(jnp.asarray, init(init_key, args.width, args.layers, args.heads,
-                                                lam=tuning.params["lam"], beta=tuning.params["beta"]))  # fmt: skip
+        scale, bias = SCALES[ENCODER]
+        params = jax.tree.map(jnp.asarray, init(init_key, args.width, args.layers, args.heads, dim=data.emb.shape[1],
+                                                lam=tuning.params["lam"], beta=tuning.params["beta"], scale=scale,
+                                                bias=bias))  # fmt: skip
         params["h_s_b"] = jnp.float32(calibrated_bias(params, data.batch(args.batch)))
     adam_m = jax.tree.map(jnp.zeros_like, params)
     adam_v = jax.tree.map(jnp.zeros_like, params)
@@ -1041,6 +1081,8 @@ def main() -> None:
         help="between videos: InfoNCE on the search's scores, or SigLIP's own sigmoid loss (FLYP)",
     )
     ap.add_argument("--init", help="train: go on from these weights (results/temporal/NAME.npz)")
+    ap.add_argument("--encoder", default="siglip2-base", choices=sorted(SCALES),
+                    help="train: the image encoder whose frames the model is trained on")  # fmt: skip
     ap.add_argument("--library", help="train: a library to learn, as scripts/learn.py prepared it (eighth round)")
     ap.add_argument("--library-share", type=float, default=1.0, help="train: the library's share of a batch")
     ap.add_argument("--passes", type=float, default=10.0, help="train: passes over the library's descriptions")
@@ -1059,6 +1101,8 @@ def main() -> None:
         "results (default: results/temporal_test.json)",
     )
     args = ap.parse_args()
+    global ENCODER
+    ENCODER = args.encoder
     args.train_annotations = args.train_annotations or args.annotations
     args.split = "train"
     {"texts": texts, "train": train, "soup": soup, "export": export, "evaluate": evaluate}[args.stage](args)

@@ -49,7 +49,10 @@ UNAV = f"{HUB}/nguyenminh04/unav100-videos/resolve/main/unav100_{{:03d}}.tar"
 # the standard mode's caches, whose frames every encoder sees
 BASE = {"didemo-test": "didemo_test_openvino", "didemo-train": "didemo_train_openvino",
         "charades": "charades_test", "youcook2": "youcook2", "unav": "unav",
-        "charades-tuning": "charades_tuning_openvino"}  # fmt: skip
+        "charades-tuning": "charades_tuning_openvino",
+        # the collections whenframe's model trained on (seventh round), embedded again for the ninth
+        "didemo-all": "didemo_all_openvino", "msrvtt": "msrvtt_openvino", "charades-train": "charades_train_openvino",
+        "youcook2-train": "youcook2_train_openvino"}  # fmt: skip
 DONE = object()
 
 
@@ -99,6 +102,18 @@ def charades_tuning_source(names: list[str], work: Path):
     """Charades-STA's held-out training videos (seventh round), named without their extension in their cache."""
     for name, path, temporary in charades_source([f"{n}.mp4" for n in names], work):
         yield name.removesuffix(".mp4"), path, temporary
+
+
+def training_source(dataset: str, names: list[str], work: Path):
+    """The videos of the collections whenframe's model trained on, read as scripts/moments_data.py reads them."""
+    import moments_data
+
+    reader = {"didemo-all": lambda: moments_data.didemo_stream(set(names), work),
+              "msrvtt": lambda: moments_data.msrvtt_stream(set(names), work),
+              "charades-train": lambda: moments_data.charades_videos(names, work),
+              "youcook2-train": lambda: moments_data.youcook2_videos(names, work)}[dataset]  # fmt: skip
+    for name, path in reader():
+        yield name, path, True
 
 
 def youcook2_source(names: list[str], work: Path):
@@ -169,6 +184,8 @@ def extract(args) -> None:
               "didemo-train": lambda: didemo_source(args.dataset, todo_names, args.videos, work),
               "charades": lambda: charades_source(todo_names, work),
               "charades-tuning": lambda: charades_tuning_source(todo_names, work),
+              **{d: (lambda d=d: training_source(d, todo_names, work))
+                 for d in ("didemo-all", "msrvtt", "charades-train", "youcook2-train")},
               "youcook2": lambda: youcook2_source(todo_names, work),
               "unav": lambda: unav_source(todo_names, work)}[args.dataset]  # fmt: skip
     todo, ready = queue.Queue(maxsize=4), queue.Queue(maxsize=4)
@@ -187,7 +204,9 @@ def extract(args) -> None:
                 out = {}
                 for m, enc in encoders.items():
                     t0 = time.process_time()
-                    t, frames = sample_frames(path, 1.0, enc.size)
+                    # DiDeMo's training videos were embedded over their first 30 seconds only
+                    seconds = 30.0 if args.dataset == "didemo-all" else None
+                    t, frames = sample_frames(path, 1.0, enc.size, seconds=seconds)
                     at = np.isin(np.round(t, 3), np.round(want[name], 3))
                     out[m] = (t[at], frames[at], time.process_time() - t0)
                 ready.put((name, out, None))
@@ -244,7 +263,8 @@ def assemble(dataset: str, model: str) -> None:
     z = [np.load(folder / f"{Path(n).stem}.npz") for n in names]
     emb = np.concatenate([x["emb"] for x in z])
     assert np.array_equal(np.concatenate([x["times"] for x in z]), base["times"]), "not the same frames"
-    extra = {k: base[k] for k in base.files if k not in ("emb", "precision", "decode_cpu", "encode_cpu")}
+    extra = {k: base[k] for k in base.files
+             if k not in ("emb", "precision", "decode_cpu", "encode_cpu", "teacher", "teacher_rows")}  # fmt: skip
     out = CACHE / f"{cache_name(dataset, model)}.npz"
     np.savez_compressed(out, **extra, emb=emb, decode_cpu=np.array([float(x["decode_cpu"]) for x in z]),
                         encode_cpu=np.array([float(x["encode_cpu"]) for x in z]))  # fmt: skip
