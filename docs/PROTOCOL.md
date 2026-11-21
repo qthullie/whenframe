@@ -1210,3 +1210,31 @@ the check holds (0.9999999 in float32, 0.9989 at worst in bfloat16).
 Stage 1 is measured again with it from the start: the tuning sets embedded
 again, PE's bank chosen again, the four tuning metrics measured again. Its
 numbers decide, and the first measurement is reported beside.
+
+**Stage 1's numbers** (`scripts/pe_core.py bank`, `scripts/compare.py tune
+--round 9`; `results/round9_bank.json`, `results/round9_tuned.json`), with
+the image tower as finally exported. SigLIP 2 B/16's, recomputed by the same
+code, are the seventh round's to every decimal.
+
+PE's own settings, chosen on the tuning sets:
+
+- the query bank's beta 50 and strength 1 (DiDeMo's R@5 35.0; beta 50 and
+  strength 0.5 next, 34.6);
+- the bank's strength 0.5 for adaptive spans (YouCook2's R@5 29.9, against
+  29.6 with 0.25 and with 1);
+- the weight of speech 0.05 (`normalise` best), the weight of sound 1.5.
+
+| the encoders alone, on the tuning sets | DiDeMo | Charades-STA | YouCook2 | UnAV-100 | mean |
+|---|---|---|---|---|---|
+| SigLIP 2 B/16 | 31.3 | 44.9 | 29.4 | 41.0 | 36.66 |
+| PE core B/16 | 35.0 | 47.8 | 29.9 | 43.3 | 39.00 |
+| PE core B/16, first export (reported beside) | 34.8 | 47.8 | 29.7 | 42.8 | 38.79 |
+
+**The rule holds.** PE core B/16's mean is 2.34 points higher than SigLIP 2
+B/16's (at least 1 was asked for), and it is higher on each of the four
+sets. Stage 2 runs.
+
+The first export, measured before the rotary position embedding was written
+for the export, chose the same bank. It tied the spans' strengths 0.25 and
+0.5 and kept the first, and its weight of sound was 1
+(`results/round9_first_export.json`).
