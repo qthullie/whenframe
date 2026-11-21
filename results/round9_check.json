@@ -2,7 +2,12 @@
  "reference": {
   "torch": "2.15.0+cpu",
   "open_clip": "4.2.2",
-  "logit_scale": 99.92631530761719
+  "logit_scale": 99.92631530761719,
+  "fast_rope": {
+   "layers": 12,
+   "cosine_min": 0.9999998807907104,
+   "max_abs_diff": 0.0
+  }
  },
  "frames": [
   [
@@ -97,8 +102,8 @@
  ],
  "token_ids_equal": true,
  "image_cosine": {
-  "min": 0.9987134337425232,
-  "mean": 0.9993875622749329
+  "min": 0.9989191889762878,
+  "mean": 0.9993912577629089
  },
  "text_cosine": {
   "min": 0.9999154806137085,

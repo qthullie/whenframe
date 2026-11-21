@@ -97,8 +97,52 @@ def sample(args) -> None:
     print(f"{len(frames)} frames, {len(texts)} descriptions and {len(EXTRA)} more sentences in {out}")
 
 
+def fast_rope(visual) -> int:
+    """PE's rotary position embedding written with fewer memory operations, for the export alone: the class token
+    gets the identity rotation (cos 1, sin 0) instead of being cut out of q and k and put back, and the rotation of
+    each pair of dimensions is a product with a fixed matrix instead of two strided slices and a stack. The same
+    arithmetic as timm's AttentionRope (timm 1.0.31), whose forward it replaces; the number of layers patched."""
+    import types
+
+    import torch
+    import torch.nn.functional as F  # noqa: N812
+    from timm.layers.attention import AttentionRope
+
+    def forward(self, x, rope=None, attn_mask=None, is_causal=False):
+        B, N, C = x.shape
+        assert self.gate is None and self.qkv is not None and self.num_kv_groups == 1
+        assert attn_mask is None and not is_causal
+        q, k, v = self.qkv(x).reshape(B, N, 3, self.num_heads, self.head_dim).permute(2, 0, 3, 1, 4).unbind(0)
+        q, k = self.q_norm(q), self.k_norm(k)
+        if rope is not None:
+            assert not getattr(self, "rotate_half", False)
+            sin, cos = rope.chunk(2, -1)  # as timm's apply_rot_embed_cat
+            n, d = self.num_prefix_tokens, q.shape[-1]
+            cos = torch.cat([torch.ones(n, d, dtype=cos.dtype), cos])
+            sin = torch.cat([torch.zeros(n, d, dtype=sin.dtype), sin])
+            r = torch.zeros(d, d, dtype=q.dtype)  # timm's rot: [x0, x1, ...] -> [-x1, x0, ...]
+            r[torch.arange(1, d, 2), torch.arange(0, d, 2)] = -1.0
+            r[torch.arange(0, d, 2), torch.arange(1, d, 2)] = 1.0
+            q = (q * cos + (q @ r) * sin).type_as(v)
+            k = (k * cos + (k @ r) * sin).type_as(v)
+        if self.fused_attn:
+            x = F.scaled_dot_product_attention(q, k, v)
+        else:
+            x = ((q * self.scale) @ k.transpose(-2, -1)).softmax(dim=-1) @ v
+        x = self.proj(self.norm(x.transpose(1, 2).reshape(B, N, self.attn_dim)))
+        return self.proj_drop(x)
+
+    patched = 0
+    for m in visual.modules():
+        if isinstance(m, AttentionRope):
+            m.forward = types.MethodType(forward, m)
+            patched += 1
+    return patched
+
+
 def reference(args) -> None:
-    """open_clip's PE-Core-B-16, its weights read into memory; and the image tower exported with any batch size."""
+    """open_clip's PE-Core-B-16, its weights read into memory; and the image tower exported with any batch size,
+    its rotary position embedding written as fast_rope writes it and checked to give the same embeddings."""
     import open_clip
     import torch
     from safetensors.torch import load
@@ -125,6 +169,13 @@ def reference(args) -> None:
             "logit_scale": float(model.logit_scale.exp().detach())}  # fmt: skip
     (here / "reference.json").write_text(json.dumps(info, indent=1))
     if args.export:
+        layers = fast_rope(model.visual)
+        with torch.no_grad():
+            fast = model.encode_image(x).numpy()
+        ref = np.load(here / "ref_images.npy")
+        info["fast_rope"] = {"layers": layers, "cosine_min": float(cosines(fast, ref).min()),
+                             "max_abs_diff": float(np.abs(fast - ref).max())}  # fmt: skip
+        (here / "reference.json").write_text(json.dumps(info, indent=1))
         with torch.no_grad():
             torch.onnx.export(model.visual, (x[:2],), args.export, input_names=["pixel_values"],
                               output_names=["image_embeds"], opset_version=18, dynamo=False,
@@ -136,8 +187,7 @@ def reference(args) -> None:
 def one(args) -> None:
     """The image tower exported again, fixed to one frame at a time and saved for OpenVINO, which then runs several
     frames at once, each in a request of its own (its throughput mode, as So400m's runs). With any batch size,
-    OpenVINO's memory grew with every new batch size (from 1.5 to 3.3 GB over ten) and it took 1.8 times SigLIP 2
-    B/16's CPU time per frame; one at a time, it holds and takes 1.3 times."""
+    OpenVINO's memory grew with every new batch size (from 1.5 to 3.3 GB over ten); one at a time, it holds."""
     import openvino as ov
 
     folder = Path(args.model_folder) / "onnx"

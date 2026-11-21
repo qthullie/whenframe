@@ -1186,3 +1186,27 @@ holds, and a first estimate puts it at 1.3 times SigLIP 2 B/16's CPU time
 per frame (criterion 32 is measured at the test). The check was made again
 on it: 0.9999999 in float32, 0.9987 at worst in bfloat16. Decided before any
 benchmark number.
+
+**The rotary position embedding, written for the export.** Stage 1 was first
+measured with that tower (PE's mean 38.79, SigLIP 2 B/16's 36.66). Then,
+before stage 2 and before any test number, the cost was measured on its own:
+PE took 1.6 times SigLIP 2 B/16's CPU time per frame. OpenVINO's profile put
+the difference in the rotary position embedding, as the export wrote it:
+strided slices and concatenations of q and k in every layer (about 11 ms of
+42 per frame).
+
+The same arithmetic, written with fewer memory operations, is exported
+instead (`scripts/pe_core.py`, `fast_rope`):
+
+- the class token gets the identity rotation (cos 1, sin 0) instead of
+  being cut out and put back;
+- each pair of dimensions is rotated by a product with a fixed 64 by 64
+  matrix.
+
+In PyTorch it gives the reference's embeddings exactly (largest difference
+0.0). PE then takes about 1.16 times SigLIP 2 B/16's CPU time per frame, and
+the check holds (0.9999999 in float32, 0.9989 at worst in bfloat16).
+
+Stage 1 is measured again with it from the start: the tuning sets embedded
+again, PE's bank chosen again, the four tuning metrics measured again. Its
+numbers decide, and the first measurement is reported beside.
