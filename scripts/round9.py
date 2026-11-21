@@ -77,7 +77,7 @@ class Stage2:
             got = {k: c.get(k) for k in expected}
             assert got == expected, f"{path} was trained otherwise: {got} != {expected}"
             return path
-        cmd = [sys.executable, "scripts/temporal.py", "train", *self.paths, "--name", name, *COMMON, *flags]
+        cmd = [sys.executable, "-I", "scripts/temporal.py", "train", *self.paths, "--name", name, *COMMON, *flags]
         log(f"train {name}: {' '.join(flags)}")
         with open(self.logs / f"{name}.log", "w") as out:
             subprocess.run(cmd, cwd=ROOT, check=True, stdout=out, stderr=subprocess.STDOUT)
@@ -90,7 +90,7 @@ class Stage2:
         if todo:
             log(f"tune {', '.join(s.split('=')[0] for s in todo)}")
             env = dict(os.environ, OPENBLAS_NUM_THREADS="2")
-            subprocess.run([sys.executable, "scripts/compare.py", "tune", "--round", "9", *self.compare,
+            subprocess.run([sys.executable, "-I", "scripts/compare.py", "tune", "--round", "9", *self.compare,
                             "--candidates", ",".join(todo)], cwd=ROOT, check=True, env=env)  # fmt: skip
             t = json.loads(TUNED9.read_text())
         return t
@@ -99,14 +99,23 @@ class Stage2:
     def spec(name: str, weights: Path) -> str:
         return f"{name}={ENCODER}:{weights.relative_to(ROOT)}@1"
 
+    @staticmethod
+    def ready() -> bool:
+        """Every file of the training data there, and none still being written (its size the same 2 minutes on)."""
+        if not all((CACHE / f).exists() for f in DATA):
+            return False
+        sizes = [(CACHE / f).stat().st_size for f in DATA]
+        time.sleep(120)
+        return sizes == [(CACHE / f).stat().st_size for f in DATA]
+
     def run(self) -> None:
-        while not all((CACHE / f).exists() for f in DATA):
+        while not self.ready():
             log("waiting for PE's frames and descriptions (compare.py extract, pe_core.py texts)")
             time.sleep(600)
         with ThreadPoolExecutor(self.args.parallel) as pool:
             weights = dict(zip(RUNS, pool.map(lambda kv: self.train(*kv), RUNS.items()), strict=True))
         before = V4.read_bytes() if V4.exists() else None
-        subprocess.run([sys.executable, "scripts/temporal.py", "export", "--annotations", self.args.annotations,
+        subprocess.run([sys.executable, "-I", "scripts/temporal.py", "export", "--annotations", self.args.annotations,
                         "--encoder", ENCODER, "--model", str(weights["v4"]), "--out", str(V4)], cwd=ROOT,
                        check=True)  # fmt: skip
         if before is not None and before != V4.read_bytes() and TUNED9.exists():  # other weights: measured again

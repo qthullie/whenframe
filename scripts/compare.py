@@ -266,8 +266,10 @@ def assemble(dataset: str, model: str) -> None:
     extra = {k: base[k] for k in base.files
              if k not in ("emb", "precision", "decode_cpu", "encode_cpu", "teacher", "teacher_rows")}  # fmt: skip
     out = CACHE / f"{cache_name(dataset, model)}.npz"
-    np.savez_compressed(out, **extra, emb=emb, decode_cpu=np.array([float(x["decode_cpu"]) for x in z]),
+    part = out.with_name(f"{out.stem}.part.npz")  # written whole, then renamed: never read half-written
+    np.savez_compressed(part, **extra, emb=emb, decode_cpu=np.array([float(x["decode_cpu"]) for x in z]),
                         encode_cpu=np.array([float(x["encode_cpu"]) for x in z]))  # fmt: skip
+    part.replace(out)
     print(f"wrote {out.name}: {len(names)} videos, {len(emb)} frames")
 
 
