@@ -1,0 +1,125 @@
+{
+ "note": "Stage 1 as first measured, with the image tower exported before the rotary position embedding was written for the export (docs/PROTOCOL.md, ninth round). Reported beside; the numbers measured again with the final tower decide (round9_tuned.json, round9_bank.json).",
+ "tuned": {
+  "pe": {
+   "spec": "pe",
+   "model": "pe-core-b16",
+   "weights": null,
+   "alpha": 1.0,
+   "per": {},
+   "didemo": 0.3479816044966786,
+   "youcook2": 0.2972536348949919,
+   "unav": 0.4282051282051282,
+   "charades": 0.4782986111111111,
+   "mean": 0.38793474467697747,
+   "speech": {
+    "weight": 0.05,
+    "pad": 0.0,
+    "normalise": "best"
+   },
+   "sound_weight": 1.0
+  }
+ },
+ "bank": {
+  "bank": {
+   "beta": 50.0,
+   "lam": 1.0,
+   "score": 0.3479816044966786,
+   "grid": [
+    {
+     "beta": 10.0,
+     "lam": 0.25,
+     "score": 0.33418497700562083
+    },
+    {
+     "beta": 10.0,
+     "lam": 0.5,
+     "score": 0.33929483903934593
+    },
+    {
+     "beta": 10.0,
+     "lam": 1.0,
+     "score": 0.3362289218191109
+    },
+    {
+     "beta": 20.0,
+     "lam": 0.25,
+     "score": 0.33418497700562083
+    },
+    {
+     "beta": 20.0,
+     "lam": 0.5,
+     "score": 0.343382728666326
+    },
+    {
+     "beta": 20.0,
+     "lam": 1.0,
+     "score": 0.33571793561573837
+    },
+    {
+     "beta": 50.0,
+     "lam": 0.25,
+     "score": 0.3300970873786408
+    },
+    {
+     "beta": 50.0,
+     "lam": 0.5,
+     "score": 0.34593765968318857
+    },
+    {
+     "beta": 50.0,
+     "lam": 1.0,
+     "score": 0.3479816044966786
+    },
+    {
+     "beta": 100.0,
+     "lam": 0.25,
+     "score": 0.32345426673479816
+    },
+    {
+     "beta": 100.0,
+     "lam": 0.5,
+     "score": 0.3280531425651507
+    },
+    {
+     "beta": 100.0,
+     "lam": 1.0,
+     "score": 0.3147675012774655
+    }
+   ]
+  },
+  "spans": {
+   "lam": 0.25,
+   "score": 0.2972536348949919,
+   "grid": [
+    {
+     "lam": 0.25,
+     "score": 0.2972536348949919,
+     "speech": {
+      "weight": 0.05,
+      "pad": 0.0,
+      "normalise": "best"
+     }
+    },
+    {
+     "lam": 0.5,
+     "score": 0.2972536348949919,
+     "speech": {
+      "weight": 0.05,
+      "pad": 0.0,
+      "normalise": "best"
+     }
+    },
+    {
+     "lam": 1.0,
+     "score": 0.2940226171243942,
+     "speech": {
+      "weight": 0.005,
+      "pad": 0.0,
+      "normalise": "raw"
+     }
+    }
+   ]
+  }
+ }
+}
