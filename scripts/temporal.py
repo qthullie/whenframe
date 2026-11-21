@@ -1025,7 +1025,8 @@ def export(args) -> None:
         path, _, name = args.settings.rpartition(":")
         t = json.loads(Path(path).read_text())[name]
         w["search"] = np.array(json.dumps({"speech": t["speech"], "sound_weight": t["sound_weight"]}))
-    out = Path(args.out or ROOT / "whenframe" / "data" / f"{temporal.MODELS['siglip2-base']}.npz")
+    name = temporal.MODELS.get(ENCODER, f"temporal-{ENCODER}")  # the file the package ships for the encoder
+    out = Path(args.out or ROOT / "whenframe" / "data" / f"{name}.npz")
     np.savez(out, **{k: v.astype(np.float16) if v.ndim else v for k, v in w.items()})
     print(f"wrote {out}: {sum(v.size for v in w.values() if v.ndim)} weights, alpha {args.alpha:g}")
 

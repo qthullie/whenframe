@@ -520,8 +520,12 @@ def shipped(path: Path, commit: str) -> Path:
 
 
 def candidate(spec: str) -> Candidate:
-    """b32, base, so400m, v1, NAME=WEIGHTS@ALPHA (whenframe's model on the base encoder), or, in the eighth round,
-    NAME=didemo:WEIGHTS+charades:WEIGHTS+youcook2:WEIGHTS+unav:WEIGHTS (each library through its own model)."""
+    """b32, base, so400m, pe, v1, NAME=WEIGHTS@ALPHA (whenframe's model on the base encoder),
+    NAME=ENCODER:WEIGHTS@ALPHA (on another encoder's frames: the ninth round's v4 on PE core B/16's), or, in the
+    eighth round, NAME=didemo:WEIGHTS+charades:WEIGHTS+youcook2:WEIGHTS+unav:WEIGHTS (each library through its own
+    model)."""
+    from whenframe.encoder import MODELS
+
     if spec == "v1":
         return Candidate("v1", weights=str(shipped(V1, V1_COMMIT)))
     if spec in NAMED:
@@ -531,8 +535,10 @@ def candidate(spec: str) -> Candidate:
         per = tuple(tuple(x.split(":", 1)) for x in rest.split("+"))
         assert {b for b, _ in per} == {"didemo", "charades", "youcook2", "unav"}, spec
         return Candidate(name, per=per)
+    model, _, rest = rest.rpartition(":")
+    assert not model or model in MODELS, spec
     weights, _, alpha = rest.partition("@")
-    return Candidate(name, weights=weights, alpha=float(alpha or 1.0))
+    return Candidate(name, model or "siglip2-base", weights=weights, alpha=float(alpha or 1.0))
 
 
 TUNED = ROOT / "results" / "compare_tuned.json"
@@ -543,8 +549,28 @@ TEST7 = ROOT / "results" / "round7_test.json"
 # the eighth round's: each library searched through the model it learnt (scripts/learn.py, temporal.py --library)
 TUNED8 = ROOT / "results" / "round8_tuned.json"
 TEST8 = ROOT / "results" / "round8_test.json"
-# the ninth round's: PE core B/16 against SigLIP 2 B/16, both alone, on the four tuning sets
+# the ninth round's: PE core B/16 against SigLIP 2 B/16, both alone, on the four tuning sets; then v4, whenframe's
+# model on PE's frames, against v3 on the four tests, and the two encoders' indexing costs measured again together
 TUNED9 = ROOT / "results" / "round9_tuned.json"
+TEST9 = ROOT / "results" / "round9_test.json"
+COST9 = ROOT / "results" / "round9_cost.json"
+# reported beside, deciding nothing: each left-out run on the test it left out, against v3's
+LEFT_OUT9 = {"charades": ("v4-no-charades", "v3-no-charades"), "youcook2": ("v4-no-youcook2", "v3-no-youcook2")}
+
+
+def criteria9(res: dict) -> dict:
+    """The ninth round's criteria (docs/PROTOCOL.md): 30, v4's mean of the four primary metrics at least 1 point
+    above v3's, with a sign test p < 0.05; 31, at most 1 point lost on each test against v3; 32, PE core B/16's
+    indexing cost at most 1.2 times SigLIP 2 B/16's (results/round9_cost.json)."""
+    changes = {k: res["v4"][k]["value"] - res["v3"][k]["value"] for k in ("didemo", "charades", "youcook2", "unav")}
+    gain, pair = res["v4"]["mean"] - res["v3"]["mean"], res["pairs"]["v4 vs v3"]
+    cost = json.loads(COST9.read_text())
+    ratio = cost["pe-core-b16"]["cpu_min_per_hour"] / cost["siglip2-base"]["cpu_min_per_hour"]
+    left = {k: {"new": new, "old": old, "change": res[new][k]["value"] - res[old][k]["value"]}
+            for k, (new, old) in LEFT_OUT9.items() if new in res and old in res}  # fmt: skip
+    return {"v4_vs_v3": {"gain": gain, "changes": changes, **pair}, "cost_ratio": ratio, "left_out": left,
+            "criteria": {"30": gain >= 0.01 and pair["p"] < 0.05, "31": min(changes.values()) >= -0.01,
+                         "32": ratio <= 1.2}}  # fmt: skip
 
 
 def tune(args) -> None:
@@ -588,8 +614,8 @@ def paired(a: dict, b: dict) -> dict:
 
 def adapter_cost(b: Benchmarks, c: Candidate) -> dict:
     """What whenframe's model adds to indexing, measured as in the fifth round: the CPU time (all threads) of running
-    it over DiDeMo's test frames, per hour of video."""
-    f, _, _ = b.didemo(Candidate("base"), "test")
+    it over DiDeMo's test frames (its encoder's), per hour of video."""
+    f, _, _ = b.didemo(Candidate("frames", c.model), "test")
     t0 = time.process_time()
     adapted(c, f.emb, f.times, f.starts, f.counts)
     cpu, hours = time.process_time() - t0, float(f.durations.sum() / 3600)
@@ -604,6 +630,8 @@ def evaluate(args) -> None:
     tuned = json.loads(TUNED.read_text())
     if args.round == 7:  # the sixth round's candidates keep the weights chosen for them then
         tuned = json.loads(TUNED7.read_text()) | tuned
+    if args.round == 9:  # v3 and its left-out runs keep the seventh round's
+        tuned = json.loads(TUNED7.read_text()) | json.loads(TUNED9.read_text())
     b = Benchmarks(args)
     res, items = {"candidates": args.candidates.split(",")}, {}
     for name in res["candidates"]:
@@ -617,20 +645,23 @@ def evaluate(args) -> None:
         res[name] = {k: {"value": v["value"], "full": v["full"]} for k, v in scores.items()}
         res[name]["mean"] = float(np.mean([v["value"] for v in scores.values()]))
         res[name]["tuned"] = t
-        if args.round == 7 and c.weights is not None:
+        if args.round in (7, 9) and c.weights is not None:
             res[name]["adapter_cost"] = adapter_cost(b, c)
         print(f"{name}: " + ", ".join(f"{k} {100 * v['value']:.1f}" for k, v in scores.items())
               + f"; mean {100 * res[name]['mean']:.2f}", flush=True)  # fmt: skip
     names = res["candidates"]
     res["ranking"] = sorted(names, key=lambda n: -res[n]["mean"])
     res["pairs"] = {f"{a} vs {b_}": paired(items[a], items[b_]) for a in names for b_ in names if a != b_}
-    out = TEST7 if args.round == 7 else TEST
-    if args.round == 7:  # the sixth round's candidates, measured by the same code: the same numbers
-        before = json.loads(TEST.read_text())
-        res["sixth_round_unchanged"] = {
+    out = {7: TEST7, 9: TEST9}.get(args.round, TEST)
+    if args.round in (7, 9):  # the earlier round's candidates, measured by the same code: the same numbers
+        key, before = {7: ("sixth", TEST), 9: ("seventh", TEST7)}[args.round]
+        before = json.loads(before.read_text())
+        res[f"{key}_round_unchanged"] = {
             n: all(res[n][k]["value"] == before[n][k]["value"] for k in scores) for n in names if n in before
         }
-        print(f"the sixth round's numbers again: {res['sixth_round_unchanged']}")
+        print(f"the {key} round's numbers again: {res[f'{key}_round_unchanged']}")
+    if args.round == 9:
+        res |= criteria9(res)
     out.write_text(json.dumps(res, indent=1))
     print("ranking: " + " > ".join(f"{n} ({100 * res[n]['mean']:.2f})" for n in res["ranking"]))
     print(f"wrote {out.relative_to(ROOT)}")
@@ -705,7 +736,8 @@ def cost(args) -> None:
         )  # ffmpeg
 
     names = sorted(str(n) for n in np.load(CACHE / f"{BASE['didemo-test']}.npz")["names"])[: args.cost_videos]
-    out = json.loads(COST.read_text()) if COST.exists() else {}
+    dest = COST9 if args.round == 9 else COST  # the ninth round's: both encoders measured again, one after the other
+    out = json.loads(dest.read_text()) if dest.exists() else {}
     for m in args.models.split(","):
         enc = Encoder(m, backend="openvino")
         enc.encode_images(np.zeros((1, enc.size, enc.size, 3), np.uint8))  # compiled before the clock starts
@@ -732,7 +764,7 @@ def cost(args) -> None:
             f"({out[m]['encode_ms_per_frame']:.0f} ms per frame embedded)",
             flush=True,
         )
-        COST.write_text(json.dumps(out, indent=1))
+        dest.write_text(json.dumps(out, indent=1))
 
 
 COST = ROOT / "results" / "compare_cost.json"
@@ -747,13 +779,14 @@ def main() -> None:
         type=int,
         choices=[6, 7, 8, 9],
         default=6,
-        help="tune, evaluate: the sixth round's or the "
-        "seventh's (Charades-STA's held-out videos among the tuning sets; results/round7_*.json)",
+        help="tune, evaluate: the sixth round's or a later one's (results/roundN_*.json; from the seventh, "
+        "Charades-STA's held-out videos among the tuning sets); cost: 9 for the ninth round's measure",
     )
     ap.add_argument(
         "--candidates",
         default="b32,base,so400m,v1",
-        help="tune, evaluate: b32, base, so400m, v1, or NAME=WEIGHTS@ALPHA, comma-separated",
+        help="tune, evaluate: b32, base, so400m, pe, v1, NAME=WEIGHTS@ALPHA or NAME=ENCODER:WEIGHTS@ALPHA, "
+        "comma-separated",
     )
     ap.add_argument("--annotations", help="DiDeMo's didemo_train.json (the tuning videos, and the query bank)")
     ap.add_argument("--test-annotations", help="DiDeMo's didemo_test.json")
