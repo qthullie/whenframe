@@ -1025,3 +1025,136 @@ On DiDeMo's test library, measured as criterion 29 measures it, decoding,
 describing and embedding the descriptions cost 22.9 CPU minutes per hour of
 video before learning: decoding 1.9, describing 20.3 and embedding 0.67
 (`results/round8_cost.json`).
+
+## Ninth round: Perception Encoder in place of SigLIP 2 B/16
+
+Written before any of its numbers was computed.
+
+**The question.** Most of the gain of whenframe's model comes from the
+collections it trained on. On a library it has never seen, it adds 0.3 to
+0.8 points to SigLIP 2 B/16 alone, and the eighth round could not teach it
+one. What is left to gain there is in the encoder.
+
+Meta's Perception Encoder was trained as CLIP is, then on 22 million videos
+described by its authors' own captioning model (PE core, Bolya et al., 2025;
+Apache License 2.0). Its B/16 has an image tower the size of SigLIP 2
+B/16's: ViT-B/16 at 224 pixels, 0.09 billion weights. It would index at
+about the same cost.
+
+Its authors report, for B/16 zero-shot, MSR-VTT text-to-video R@1 47.6 and
+Kinetics-400 65.6. They report no comparison with SigLIP 2 B/16 on video at
+that size; on ImageNet the two are level (78.4 and 78.2 %).
+
+So: at the same cost, does PE core B/16 find more moments than SigLIP 2
+B/16? And if so, does whenframe's model, trained on its frames, find more
+than v3?
+
+### The encoder
+
+- **Files.** PE-Core-B16-224 as exported to ONNX by onnx-community
+  (`onnx-community/PE-Core-B16-224-ONNX`): the image tower in float32, as
+  SigLIP 2's runs; the text tower (0.31 billion weights, 32 tokens) in
+  float16 weights. The image tower runs with OpenVINO, as SigLIP 2's does,
+  and so does the text tower, as So400m's does.
+- **Tokens.** CLIP's tokenizer, as published with `timm/PE-Core-B-16`,
+  padded with 0 to 32 tokens.
+- **Frames.** Squashed to 224 pixels with bilinear filtering, as ffmpeg
+  already resizes them for SigLIP 2, and scaled to [-1, 1], PE's own
+  preprocessing.
+- **Checked before any benchmark number**, against open_clip's
+  PE-Core-B-16 in PyTorch (the weights of `timm/PE-Core-B-16`), on 16 frames
+  of DiDeMo's tuning videos and 16 of their descriptions:
+  - the token ids must be equal;
+  - each embedding must be at a cosine of at least 0.999 to the reference's.
+
+  If the check fails, the export is not used: PE is exported from those
+  weights instead, and checked the same way.
+
+### Stage 1, on the tuning sets: the encoders alone
+
+**Candidates.** Two, neither with whenframe's model:
+
+- SigLIP 2 B/16, the reference, its numbers recomputed by the same code and
+  checked equal to the seventh round's;
+- PE core B/16.
+
+**The same frames.** Those at the instants of the standard mode's caches,
+read again as in the sixth round, decoded at 224 pixels, the instants
+checked equal, and embedded with OpenVINO:
+
+- DiDeMo's 500 tuning videos (14,439 frames, repeats skipped);
+- Charades-STA's 500 held-out training videos (15,657 frames);
+- YouCook2's 252 validation videos, among which its tuning steps are
+  searched (65,142 frames, repeats skipped);
+- UnAV-100's 392 videos (13,779 frames): its 130 tuning videos, and the 262
+  others for the test, all in the archives read.
+
+**PE's own settings**, chosen on the tuning sets as each encoder's were:
+
+- the query bank's beta and strength on DiDeMo's tuning videos, over the
+  fourth round's grid (beta 10, 20, 50 or 100; strength 0.25, 0.5 or 1);
+- the bank's strength for adaptive spans on YouCook2's tuning steps, over
+  the same strengths;
+- the weight of speech on YouCook2's tuning steps and the weight of sound
+  on UnAV-100's tuning videos, over the sixth round's grids.
+
+SigLIP 2 B/16 keeps its own. The search is otherwise the standard mode's.
+
+**Metrics.** The mean of the four tuning metrics, as in the seventh and
+eighth rounds:
+
+- DiDeMo's R@5;
+- Charades-STA's held-out R1 at IoU >= 0.5;
+- YouCook2's R@5 with speech and spans;
+- UnAV-100's P@10 with sound.
+
+**The rule.** Stage 2 runs only if PE core B/16's mean is at least 1 point
+higher than SigLIP 2 B/16's. Otherwise the round ends there: nothing is
+trained and no test is run.
+
+### Stage 2: whenframe's model on PE's frames (v4)
+
+**Frames.** PE embeds the frames of the collections v3 trained on, at the
+same instants: DiDeMo's training videos (with TEMPO-HL's sentences),
+MSR-VTT's 9,000 clips, Charades-STA's training videos (the 500 held out left
+out) and YouCook2's training videos. It also embeds those of the test sets
+not yet embedded: DiDeMo's 979 test videos and Charades-STA's 1,334.
+
+**Training.** v4 is v3's recipe, unchanged and with no new choice, on PE's
+1,024 dimensions instead of SigLIP 2's 768:
+
+- no teacher;
+- the leash's weight 30;
+- width 256 and two layers;
+- data seed 0;
+- the same steps and checks, the best check kept;
+- alpha 1.
+
+Its speech and sound weights are chosen on the tuning sets, as every
+candidate's. Its two left-out runs (without Charades-STA's videos, without
+YouCook2's) are trained as v3's were.
+
+### Test and criteria
+
+Once, on the four tests, with the four primary metrics and the sign test of
+the sixth and seventh rounds. Four candidates:
+
+- SigLIP 2 B/16 alone;
+- PE core B/16 alone;
+- v3;
+- v4.
+
+Reported beside, deciding nothing: each left-out run on the test it left
+out, against v3's. This is the case of a library never seen.
+
+30. v4's mean of the four primary metrics is at least 1 point higher than
+    v3's, with a sign test p < 0.05.
+31. v4 loses at most 1 point on each of the four tests against v3.
+32. Indexing with PE core B/16 costs at most 1.2 times what SigLIP 2 B/16
+    costs: CPU minutes per hour of DiDeMo's test videos, decoding included,
+    with OpenVINO, measured as the other encoders' costs are.
+
+If 30, 31 and 32 hold, a new library in the standard mode is indexed with PE
+core B/16 and goes through v4. Libraries already indexed keep SigLIP 2 B/16
+and v3. The test is run once, after stage 1's numbers and stage 2's training
+are recorded here.
