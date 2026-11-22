@@ -1,0 +1,11 @@
+{
+ "siglip2-base": {
+  "videos": 100,
+  "hours": 1.5198605494444437,
+  "frames": 4748,
+  "decode_cpu_min_per_hour": 1.9080573331064488,
+  "encode_cpu_min_per_hour": 3.4551783178964706,
+  "cpu_min_per_hour": 5.3632356510029195,
+  "encode_ms_per_frame": 66.36127906486932
+ }
+}
