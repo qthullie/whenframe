@@ -28,6 +28,11 @@
   at best, against 37.82), so it was not tested and the tool is unchanged.
   Describing costs about 20 CPU minutes per hour of video
   ([docs/RESULTS.md](https://github.com/qthullie/whenframe/blob/main/docs/RESULTS.md)).
+- The demo site's frames go through whenframe's model (v3), as a new library's
+  do; they were SigLIP 2 B/16's alone. The site can also search a description
+  of the visitor's own, embedded by a small text server (`demo-server/`: no
+  log, about 1.5 GB of memory, no GPU), once one is deployed and named in
+  `site/config.json`.
 - The ninth round measured Perception Encoder's PE core B/16 in place of
   SigLIP 2 B/16, at the same indexing cost (1.03 times), and whenframe's
   model trained on its frames with v3's recipe (v4; `scripts/pe_core.py`,

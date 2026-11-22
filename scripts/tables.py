@@ -727,6 +727,18 @@ def round7_tables() -> dict[str, str]:
         headline += f" Indexing one keyframe per shot, as some home video tools do, finds it {pct(shots)} % of the "
         headline += "time."
     out["readme-headline"] = headline
+    if met[24] and times:  # the README's opening: what the model does, in one figure, with its limit
+        # on collections it never learnt from: the runs trained without one's videos, and UnAV-100 for v3 itself
+        unseen = [r[k][c]["value"] - r["base"][c]["value"] for k, c in LEFT_OUT.items() if k in r]
+        unseen.append(v3["unav"]["value"] - r["base"]["unav"]["value"])
+        out["readme-pitch"] = (
+            f"**Its own model lets a small encoder find more than one that takes {times:.1f} times the CPU "
+            "time.** Trained on more than 100,000 descriptions written by people, it reads each frame with the "
+            "frames around it: an action, not only a picture. Over four public benchmarks, it lifts SigLIP 2 B/16 "
+            f"above SigLIP 2 So400m (mean {100 * v3['mean']:.2f} against {100 * r['so400m']['mean']:.2f}, sign test "
+            f"p = {p_large['p']:.2g}). On collections it never learnt from, it changes SigLIP 2 B/16's results by "
+            f"{100 * min(unseen):+.1f} to {100 * max(unseen):+.1f} points."
+        )
     modes = [("`standard`, with whenframe's model (the default)", "v3"), ("`standard --no-temporal`", "base"),
              ("`economy`", "b32"), ("`large`", "so400m")]  # fmt: skip
     out["readme-models"] = table(

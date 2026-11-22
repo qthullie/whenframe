@@ -7,7 +7,12 @@ of videos (and photos) on your computer, with no GPU and nothing sent anywhere,
 and answers "the dog jumps into the pool" with the video and the seconds where
 it happens.
 
-**[See it at work in your browser](https://qthullie.github.io/whenframe/)** on three open movies, or install it below.
+<!-- table readme-pitch -->
+**Its own model lets a small encoder find more than one that takes 3.4 times the CPU time.** Trained on more than 100,000 descriptions written by people, it reads each frame with the frames around it: an action, not only a picture. Over four public benchmarks, it lifts SigLIP 2 B/16 above SigLIP 2 So400m (mean 41.90 against 40.63, sign test p = 0.00086). On collections it never learnt from, it changes SigLIP 2 B/16's results by -0.3 to +0.8 points.
+<!-- /table -->
+
+**[See it at work in your browser](https://qthullie.github.io/whenframe/)** on three open movies, or install it:
+`pip install git+https://github.com/qthullie/whenframe` (Python 3.10+ and ffmpeg).
 
 <p align="center">
   <a href="https://qthullie.github.io/whenframe/">
@@ -19,10 +24,6 @@ it happens.
   <br>
   <sub>The demo site, searching Big Buck Bunny, Sintel and Tears of Steel (© Blender Foundation, CC BY 3.0) in the browser.</sub>
 </p>
-
-<!-- table readme-headline -->
-Searching 979 personal videos at once (DiDeMo test) for 3,902 descriptions written by people, whenframe puts the right moment among its first five results **29.4 %** of the time with its own model (27.6 % without it; 29.5 % with SigLIP 2 So400m, for 3.4 times the CPU time), and the right video among its first five **48.1 %** of the time, 1.9 times as often as the best published system trained for this search on a GPU (25.4 %). At the standard mode's cost, it finds more moments than its large mode over four benchmarks (mean 41.90 against 40.63, sign test p = 0.00086). Its lead is on Charades-STA and YouCook2, whose training videos it learnt from: trained without each one's videos, it finds 46.5 and 26.1 % of their moments, against 50.4 and 28.5 % for So400m. Indexing one keyframe per shot, as some home video tools do, finds it 2.3 % of the time.
-<!-- /table -->
 
 ## Use
 
@@ -115,6 +116,10 @@ logging every outbound connection of an indexing and search run). More in
    scores of two models are standardised and added first.
 
 ## Results
+
+<!-- table readme-headline -->
+Searching 979 personal videos at once (DiDeMo test) for 3,902 descriptions written by people, whenframe puts the right moment among its first five results **29.4 %** of the time with its own model (27.6 % without it; 29.5 % with SigLIP 2 So400m, for 3.4 times the CPU time), and the right video among its first five **48.1 %** of the time, 1.9 times as often as the best published system trained for this search on a GPU (25.4 %). At the standard mode's cost, it finds more moments than its large mode over four benchmarks (mean 41.90 against 40.63, sign test p = 0.00086). Its lead is on Charades-STA and YouCook2, whose training videos it learnt from: trained without each one's videos, it finds 46.5 and 26.1 % of their moments, against 50.4 and 28.5 % for So400m. Indexing one keyframe per shot, as some home video tools do, finds it 2.3 % of the time.
+<!-- /table -->
 
 <p align="center">
   <picture>
@@ -227,6 +232,21 @@ round's five):
 | 24. v3's mean is higher than So400m's, sign test p < 0.05 | +1.28 points, p = 0.00086 | yes |
 | 25. v3's mean is higher than v2's, p < 0.05 | +3.26 points, p = 2.6e-27 | yes |
 | 26. v3 loses at most 1 point on each test against B/16 | DiDeMo +1.8; Charades-STA +7.6; YouCook2 +6.2; UnAV-100 -0.3 | yes |
+<!-- /table -->
+
+Eighth round (each library learnt from automatic descriptions of its own
+frames): no recipe found more than the model as it is on the tuning sets, so
+no test was run.
+
+Ninth round (Perception Encoder's PE core B/16 in place of SigLIP 2 B/16, and
+whenframe's model trained on its frames, v4; not adopted):
+
+<!-- table round9-criteria -->
+| criterion (fixed before its test run) | measured on test | met |
+|---|---|---|
+| 30. v4's mean is at least 1 point higher than v3's, sign test p < 0.05 | -0.21 points; 865 items better, 852 worse, p = 0.77 | no |
+| 31. v4 loses at most 1 point on each test against v3 | DiDeMo +1.3; Charades-STA +0.6; YouCook2 -4.7; UnAV-100 +2.1 | no |
+| 32. indexing with PE core B/16 costs at most 1.2 times what SigLIP 2 B/16 costs | 1.03 times (7.1 against 6.9 CPU min per hour, decoding included) | yes |
 <!-- /table -->
 
 All tables, the costs and the figures: [docs/RESULTS.md](https://github.com/qthullie/whenframe/blob/main/docs/RESULTS.md).
