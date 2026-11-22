@@ -1335,3 +1335,40 @@ tuning sets, as every candidate's. An idea whose best setting raises its
 reference's mean by at least 1 point is proposed for an eleventh round, with
 its own protocol and its test written before any test number. One that does
 not is reported and dropped.
+
+**The numbers** (`scripts/screen.py`; `results/round10_screen.json`, the
+descriptions kept in `results/round10_round_trip.json`, each library's log
+in `results/temporal/`). v3 and the eighth round's starting models, measured
+again by the same code, are the seventh and eighth rounds' to every decimal.
+
+| on the tuning sets | DiDeMo | Charades-STA | YouCook2 | UnAV-100 | mean | against its reference |
+|---|---|---|---|---|---|---|
+| v3, the reference of 1 and 2 | 33.7 | 50.6 | 32.1 | 42.1 | 39.63 | |
+| 1. guidance, w 0.25 | 32.6 | 49.9 | 31.7 | 41.0 | 38.80 | -0.83 |
+| 1. guidance, w 0.5 | 31.5 | 49.9 | 31.7 | 41.3 | 38.58 | -1.05 |
+| 1. guidance, w 1 | 30.4 | 49.2 | 30.7 | 41.3 | 37.89 | -1.75 |
+| 1. guidance, w 2 | 27.0 | 47.9 | 27.5 | 41.0 | 35.85 | -3.79 |
+| 2. fusion, PE's weight 0.5 | 36.6 | 51.7 | 32.0 | 43.8 | 41.04 | +1.41 |
+| 2. fusion, 0.75 | 37.4 | 52.3 | 32.1 | 43.6 | 41.34 | +1.70 |
+| 2. fusion, 1 | 37.4 | 52.0 | 31.5 | 44.4 | 41.32 | +1.68 |
+| 2. fusion, 1.5 | 37.1 | 52.1 | 31.8 | 43.6 | 41.16 | +1.53 |
+| 2. fusion, 2 | 37.1 | 52.4 | 31.8 | 43.3 | 41.18 | +1.55 |
+| the eighth round's starting models, the reference of 3 | 33.7 | 46.4 | 29.1 | 42.1 | 37.82 | |
+| 3. round trip | 32.9 | 45.7 | 29.1 | 40.5 | 37.05 | -0.78 |
+
+Each candidate's speech and sound weights, chosen on the tuning sets:
+
+- guidance: speech 0.005, what is said up to 5 seconds around a frame, at
+  every w; sound 2, 1.5, 0.75 and 1.5 at w 0.25, 0.5, 1 and 2;
+- fusion: speech 0.005, up to 5 seconds around a frame at PE's weights 0.5
+  and 0.75, within the moment at 1, 1.5 and 2; sound 2 at 0.5, 1.5 at the
+  others;
+- round trip: speech 0.05 (`normalise` best); sound 1.5.
+
+The round trip kept 412 of DiDeMo's 1,446 descriptions, 232 of
+Charades-STA's 1,551, 392 of YouCook2's 2,534 and 138 of UnAV-100's 471.
+
+**The rule.** Fusion's best setting, PE's weight 0.75, raises v3's mean by
+1.70 points: fusion is proposed for an eleventh round. Guidance's best, w
+0.25, lowers v3's mean by 0.83, and the round trip lowers its reference's by
+0.78: both are dropped.

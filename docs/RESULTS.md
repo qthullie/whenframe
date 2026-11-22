@@ -1176,3 +1176,72 @@ points. Its speech and sound weights were chosen there:
 - speech 0.005, what is said within the moment (v3 counts what is said up
   to 5 seconds around a frame);
 - sound 1 (v3: 2).
+
+## Tenth round: three ideas screened on the tuning sets
+
+The tenth round of the protocol ([PROTOCOL.md](PROTOCOL.md)) screened three
+ideas on the four tuning sets, with no test (`scripts/screen.py`,
+`results/round10_screen.json`):
+
+1. guidance: each description pushed away from itself without its action,
+   as classifier-free guidance pushes a diffusion model away from what it
+   would make without the prompt;
+2. fusion: v3's scores of the frames (SigLIP 2 B/16's) and v4's (PE core
+   B/16's, ninth round) added, each standardised per query;
+3. round trip: each library learnt as in the eighth round, but only from the
+   automatic descriptions that find their own 10 seconds first in it.
+
+An idea was to be proposed for a test only if its best setting raised its
+reference's mean by at least 1 point.
+
+<!-- table round10-tuning -->
+| tuning sets | DiDeMo R@5 | Charades-STA R1 | YouCook2 R@5 | UnAV-100 P@10 | mean | against its reference |
+|---|---|---|---|---|---|---|
+| v3, the reference of 1 and 2 | 33.7 | 50.6 | 32.1 | 42.1 | 39.63 |  |
+| 1. guidance, w 0.25 | 32.6 | 49.9 | 31.7 | 41.0 | 38.80 | -0.83 |
+| 1. guidance, w 0.5 | 31.5 | 49.9 | 31.7 | 41.3 | 38.58 | -1.05 |
+| 1. guidance, w 1 | 30.4 | 49.2 | 30.7 | 41.3 | 37.89 | -1.75 |
+| 1. guidance, w 2 | 27.0 | 47.9 | 27.5 | 41.0 | 35.85 | -3.79 |
+| 2. fusion, PE's weight 0.5 | 36.6 | 51.7 | 32.0 | 43.8 | 41.04 | +1.41 |
+| 2. fusion, PE's weight 0.75 | 37.4 | 52.3 | 32.1 | 43.6 | 41.34 | +1.70 |
+| 2. fusion, PE's weight 1 | 37.4 | 52.0 | 31.5 | 44.4 | 41.32 | +1.68 |
+| 2. fusion, PE's weight 1.5 | 37.1 | 52.1 | 31.8 | 43.6 | 41.16 | +1.53 |
+| 2. fusion, PE's weight 2 | 37.1 | 52.4 | 31.8 | 43.3 | 41.18 | +1.55 |
+| the eighth round's starting models, the reference of 3 | 33.7 | 46.4 | 29.1 | 42.1 | 37.82 |  |
+| 3. round trip: each library learnt from the descriptions kept | 32.9 | 45.7 | 29.1 | 40.5 | 37.05 | -0.78 |
+<!-- /table -->
+
+**Fusion is proposed for an eleventh round.** Every weight of PE raises v3's
+mean, by 1.41 to 1.70 points, the most at 0.75 (41.34). That is 0.71 more
+than v4 alone (40.63):
+
+- on DiDeMo it finds more than either model (37.4 %, against 33.7 for v3
+  and 35.7 for v4);
+- on YouCook2 it keeps v3's 32.1 % (v4: 30.5);
+- on Charades-STA and UnAV-100 it finds about what v4 finds (52.3 and
+  43.6 %, against 52.7 and 43.6).
+
+On DiDeMo in the second round, two SigLIP 2 models together, B/16 and B/32
+(the `precision` mode), found as many moments as B/16 alone. SigLIP 2
+(Google) and PE (Meta) were trained on different data, and on the ninth
+round's test v4 did better than v3 on 865 items and worse on 852.
+
+Indexing would run both encoders. From the ninth round's measure
+(`results/round9_cost.json`), decoding the frames once and encoding them
+twice comes to 11.5 CPU minutes per hour of video: 1.68 times SigLIP 2
+B/16's alone, about half of So400m's (3.4 times).
+
+These are tuning numbers. In the ninth round, v4 was 1.00 point above v3 on
+the tuning sets and 0.21 below on the test.
+
+**Guidance is dropped.** Every weight lowers the mean, the more the larger w
+(-0.83 at 0.25, -3.79 at 2), and lowers DiDeMo, Charades-STA and YouCook2 at
+each weight. A likely reason, not tested: without its action, a description
+keeps its people, objects and places, much of what tells its moment from
+the others, and the query is pushed away from them.
+
+**The round trip is dropped.** The filter kept 412 of DiDeMo's 1,446
+automatic descriptions (28 %), 232 of Charades-STA's 1,551 (15 %), 392 of
+YouCook2's 2,534 (15 %) and 138 of UnAV-100's 471 (29 %). Learnt from those
+alone, the libraries lose 0.78 points against their starting models, more
+than learning from every description did in the eighth round (-0.44).

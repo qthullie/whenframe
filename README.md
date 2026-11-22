@@ -249,6 +249,13 @@ whenframe's model trained on its frames, v4; not adopted):
 | 32. indexing with PE core B/16 costs at most 1.2 times what SigLIP 2 B/16 costs | 1.03 times (7.1 against 6.9 CPU min per hour, decoding included) | yes |
 <!-- /table -->
 
+Tenth round (three ideas screened on the tuning sets, no test): v3's scores
+fused with v4's raise the mean of the four tuning metrics by 1.70 points,
+for about 1.7 times the indexing time, and are proposed for a test. Pushing
+each description away from itself without its action, and learning a
+library only from the automatic descriptions that find their own moment,
+lower it.
+
 All tables, the costs and the figures: [docs/RESULTS.md](https://github.com/qthullie/whenframe/blob/main/docs/RESULTS.md).
 
 ## Limits

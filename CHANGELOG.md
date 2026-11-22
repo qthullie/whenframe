@@ -41,6 +41,14 @@
   against 41.90, p = 0.77): more on DiDeMo, Charades-STA and UnAV-100, 4.7
   points less on YouCook2. Criteria 30 and 31 are not met, so the tool keeps
   SigLIP 2 B/16 and v3.
+- The tenth round screened three ideas on the tuning sets, with no test
+  (`scripts/screen.py`). v3's scores fused with v4's raise the mean of the
+  four tuning metrics by 1.41 to 1.70 points, for both encoders' indexing
+  time (about 1.7 times SigLIP 2 B/16's alone); this is proposed for a test.
+  Guidance, each description pushed away from itself without its action,
+  lowers it by 0.83 to 3.79 points. Learning a library only from the
+  automatic descriptions that find their own 10 seconds lowers it by 0.78.
+  The tool is unchanged.
 - The sixth round compares SigLIP 2 B/32, B/16, So400m and B/16 with the
   model, on the same frames of DiDeMo, Charades-STA, YouCook2 and UnAV-100:
   mean of the four primary metrics 36.80, 38.07, 40.63 and 38.65, each step

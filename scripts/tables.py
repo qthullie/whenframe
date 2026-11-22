@@ -875,6 +875,36 @@ def round9_tables() -> dict[str, str]:
     return out
 
 
+REFERENCE10 = {"v3": "v3, the reference of 1 and 2", "start": "the eighth round's starting models, the reference of 3"}
+
+
+def round10_tables() -> dict[str, str]:
+    """The tenth round: guidance, v3 fused with v4, and libraries learnt from the descriptions that find their own
+    block, screened on the tuning sets."""
+    f = RESULTS / "round10_screen.json"
+    if not f.exists():
+        return {}
+    t, cols = json.loads(f.read_text()), ("didemo", "charades", "youcook2", "unav")
+
+    def what(k: str) -> str:
+        if k in REFERENCE10:
+            return REFERENCE10[k]
+        if k.startswith("guide-"):
+            return f"1. guidance, w {k.removeprefix('guide-')}"
+        if k.startswith("fuse-"):
+            return f"2. fusion, PE's weight {k.removeprefix('fuse-')}"
+        return "3. round trip: each library learnt from the descriptions kept"
+
+    rows = []
+    for k, x in t.items():
+        ref = None if k in REFERENCE10 else t["start" if k == "round-trip" else "v3"]
+        rows.append([what(k), *(pct(x[c]) for c in cols), f"{100 * x['mean']:.2f}",
+                     "" if ref is None else f"{100 * (x['mean'] - ref['mean']):+.2f}"])  # fmt: skip
+    head = ["tuning sets", "DiDeMo R@5", "Charades-STA R1", "YouCook2 R@5", "UnAV-100 P@10", "mean",
+            "against its reference"]  # fmt: skip
+    return {"round10-tuning": table(head, rows)}
+
+
 def published_tables() -> dict[str, str]:
     """whenframe beside published systems trained to search a whole library of DiDeMo's test videos (added after
     the test runs: results/published_didemo.json, as their authors report them)."""
@@ -980,6 +1010,7 @@ def main() -> int:
     tables.update(round7_tables())  # after the sixth round's: replaces the README's tables if v3 is the default
     tables.update(round8_tables())
     tables.update(round9_tables())
+    tables.update(round10_tables())
     tables.update(published_tables())
     f2 = RESULTS / "didemo_test_round2.json"
     if f2.exists():
