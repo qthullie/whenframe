@@ -284,6 +284,10 @@ class Candidate:
     weights: str | None = None  # whenframe's model (a .npz of results/temporal or whenframe/data)
     alpha: float = 1.0  # how much of its correction is added (WiSE-FT's mixing)
     per: tuple = ()  # eighth round: ((benchmark, weights), ...), each library searched through its own model
+    # the tenth round's screening, on the tuning sets: each query guided away from itself without its action, with
+    # this weight (guided, below); and another candidate's scores added, (Candidate, weight) (fused, below)
+    guide: float = 0.0
+    fuse: tuple = ()
 
     def on(self, bench: str) -> Candidate:
         """The candidate as it searches one benchmark's library."""
@@ -324,6 +328,45 @@ def adapted(c: Candidate, emb, times, starts, counts) -> np.ndarray:
     for s, n in zip(starts, counts, strict=True):
         out[s : s + n] = temporal.apply(p, emb[s : s + n], times[s : s + n])
     return out
+
+
+# the tenth round's screening: the words a description's action is made of (scripts/screen.py verbs)
+VERBS = ROOT / "results" / "round10_verbs.json"
+
+
+def strip_action(text: str, verbs: frozenset) -> str:
+    """The description without its action: the words of the verb list left out, the others kept in their order."""
+    kept = [w for w in text.split() if w.lower().strip(".,;:!?\"'()") not in verbs]
+    return " ".join(kept) if kept else text
+
+
+def guided(c: Candidate, key: str, texts: list[str], text: np.ndarray) -> np.ndarray:
+    """Each query guided away from itself without its action, as classifier-free guidance steers a generator away
+    from the unconditional prediction: (1 + w) q - w q_stripped, at unit length. A description with no word of the
+    list is left as it is."""
+    if not c.guide:
+        return text
+    import hashlib
+
+    words = json.loads(VERBS.read_text())["strip"]
+    verbs = frozenset(words)
+    stripped = [strip_action(t, verbs) for t in texts]
+    tag = hashlib.sha1(" ".join(sorted(words)).encode()).hexdigest()[:8]  # another list, other embeddings
+    minus = text_embeddings(c.model, f"{key}_stripped_{tag}", stripped)
+    same = np.array([s == t for s, t in zip(stripped, texts, strict=True)])
+    minus[same] = text[same]
+    g = (1.0 + c.guide) * text - c.guide * minus
+    return (g / np.linalg.norm(g, axis=1, keepdims=True)).astype(np.float32)
+
+
+def fused(a: np.ndarray, b: np.ndarray, w: float) -> np.ndarray:
+    """Two candidates' corrected scores of the same frames (frames x queries), each standardised per query and added
+    with b's weight, as the tool adds two models' scores; put back on a's scale (its mean and spread per query), so
+    that the speech weights keep their meaning."""
+    from benchmark import standardise
+
+    z = standardise(standardise(a) + w * standardise(b))
+    return a.mean(axis=0) + a.std(axis=0) * z
 
 
 # ---------------------------------------------------------------- the four benchmarks, for one candidate
@@ -381,21 +424,29 @@ class Benchmarks:
         params = json.loads((ROOT / "results" / "didemo_tuned.json").read_text())[method]["params"]
         return {**params, "beta": beta, "lam": lam}
 
+    def didemo_scores(self, c: Candidate, split: str):
+        from benchmark import frame_scores
+
+        f, queries, text = self.didemo(c, split)
+        text = guided(c, f"didemo_{split}", [q["text"] for q in queries], text)
+        params = self.search_params(c.model, "frame_window_bank")
+        return f, queries, text, params, frame_scores(f, text, "frame_window_bank", params)
+
     def didemo_score(self, c: Candidate, split: str) -> dict:
         from benchmark import run
 
         c = c.on("didemo")
-        f, queries, text = self.didemo(c, split)
-        r = run(f, queries, text, "frame_window_bank", self.search_params(c.model, "frame_window_bank"),
-                per_query=True)  # fmt: skip
+        f, queries, text, params, scores = self.didemo_scores(c, split)
+        if c.fuse:
+            scores = fused(scores, self.didemo_scores(c.fuse[0].on("didemo"), split)[-1], c.fuse[1])
+        r = run(f, queries, text, "frame_window_bank", params, scores=scores, per_query=True)
         return {"value": r["corpus"]["R@5 IoU>=0.5"], "items": [bool(x) for x in r["found"]], "full": strip(r)}
 
     # Charades-STA: every frame, DiDeMo's parameters, the moment placed in the given video
-    def charades_score(self, c: Candidate) -> dict:
+    def charades_scores(self, c: Candidate):
         import charades
-        from benchmark import run
+        from benchmark import frame_scores
 
-        c = c.on("charades")
         frozen, queries, base_text = self.once("charades", lambda: charades.load(self.ns(
             annotations=self.args.charades_annotations, **self.shared)))  # fmt: skip
         z = self.once(("charades", c.model), lambda: np.load(CACHE / f"{cache_name('charades', c.model)}.npz"))
@@ -404,17 +455,26 @@ class Benchmarks:
         f = replace(f, emb=adapted(c, f.emb, f.times, f.starts, f.counts), _offsets={})
         text = base_text if c.model == "siglip2-base" else text_embeddings(
             c.model, "charades_test", [q["text"] for q in queries])  # fmt: skip
-        r = run(f, queries, text, "frame_window_bank", self.search_params(c.model, "frame_window_bank"),
-                per_query=True)  # fmt: skip
+        text = guided(c, "charades_test", [q["text"] for q in queries], text)
+        params = self.search_params(c.model, "frame_window_bank")
+        return f, queries, text, params, frame_scores(f, text, "frame_window_bank", params)
+
+    def charades_score(self, c: Candidate) -> dict:
+        from benchmark import run
+
+        c = c.on("charades")
+        f, queries, text, params, scores = self.charades_scores(c)
+        if c.fuse:
+            scores = fused(scores, self.charades_scores(c.fuse[0].on("charades"))[-1], c.fuse[1])
+        r = run(f, queries, text, "frame_window_bank", params, scores=scores, per_query=True)
         hits = [x >= 0.5 for x in r["single_iou"]]
         return {"value": r["single"]["R1 IoU>=0.5"], "items": hits, "full": strip(r)}
 
     # Charades-STA's 500 held-out training videos (seventh round): its tuning set, searched as its test
-    def charades_tuning_score(self, c: Candidate) -> dict:
-        from benchmark import run
+    def charades_tuning_scores(self, c: Candidate):
+        from benchmark import frame_scores
         from temporal import Charades
 
-        c = c.on("charades")
         params = self.search_params(c.model, "frame_window_bank")
 
         def held_out():
@@ -428,7 +488,17 @@ class Benchmarks:
 
         held = self.once(("charades-tuning", c.model), held_out)
         f = replace(held.f, emb=adapted(c, held.f.emb, held.f.times, held.f.starts, held.f.counts), _offsets={})
-        r = run(f, held.queries, held.text, held.method, held.params, per_query=True)
+        text = guided(c, "charades_tuning", [q["text"] for q in held.queries], held.text)
+        return held, f, text, frame_scores(f, text, held.method, held.params)
+
+    def charades_tuning_score(self, c: Candidate) -> dict:
+        from benchmark import run
+
+        c = c.on("charades")
+        held, f, text, scores = self.charades_tuning_scores(c)
+        if c.fuse:
+            scores = fused(scores, self.charades_tuning_scores(c.fuse[0].on("charades"))[-1], c.fuse[1])
+        r = run(f, held.queries, text, held.method, held.params, scores=scores, per_query=True)
         return {"value": r["single"]["R1 IoU>=0.5"], "items": [x >= 0.5 for x in r["single_iou"]], "full": strip(r)}
 
     # YouCook2: repeats skipped, speech added to the adaptive spans; a third of the videos for tuning
@@ -454,9 +524,15 @@ class Benchmarks:
         import youcook2
         from benchmark import frame_scores
 
-        g, queries, text, db, parts = self.youcook2(c)
-        params = self.search_params(c.model, "whenframe_bank")
-        visual = frame_scores(g, text, "whenframe_bank", params)
+        def visual_of(c: Candidate):
+            g, queries, text, db, parts = self.youcook2(c)
+            text = guided(c, "youcook2", [q["text"] for q in queries], text)
+            params = self.search_params(c.model, "whenframe_bank")
+            return g, queries, db, parts, params, frame_scores(g, text, "whenframe_bank", params)
+
+        g, queries, db, parts, params, visual = visual_of(c)
+        if c.fuse:
+            visual = fused(visual, visual_of(c.fuse[0])[-1], c.fuse[1])
         which = parts[part]
         best = None
         for config in [cfg] if cfg is not None else youcook2.GRID:
@@ -469,10 +545,9 @@ class Benchmarks:
                 "speech": {"weight": config.weight, "pad": config.pad, "normalise": config.normalise}}  # fmt: skip
 
     # UnAV-100: every frame, frames and sound; a third of the videos for tuning
-    def unav_score(self, c: Candidate, part: str, weight: float | None = None) -> dict:
+    def unav_frames(self, c: Candidate, part: str):
         import unav
 
-        c = c.on("unav")
         a = self.args
         z, labels, events, base_siglip, clap, _ = self.once("unav", lambda: unav.prepare(self.ns(
             annotations=a.unav_annotations, model_dir=a.model_dir, clap_dir=a.clap_dir)))  # fmt: skip
@@ -485,10 +560,19 @@ class Benchmarks:
         counts = np.array([n for _, n in lib.ranges])
         lib.emb = adapted(c, lib.emb, lib.times, starts, counts)
         siglip = base_siglip if c.model == "siglip2-base" else text_embeddings(c.model, "unav_labels", labels)
+        siglip = guided(c, "unav_labels", labels, siglip)
         beta, lam = bank_params(c.model)
         packaged = qbank.load(c.model)  # the tool's bank is DiDeMo's, as each round searched with it
         bank = didemo_bank(c.model) if packaged is None else packaged.astype(np.float32)
-        frames = unav.standardise(lib.frames(siglip, bank, beta, lam))
+        return z, keep, lib, labels, events, clap, unav.standardise(lib.frames(siglip, bank, beta, lam))
+
+    def unav_score(self, c: Candidate, part: str, weight: float | None = None) -> dict:
+        import unav
+
+        c = c.on("unav")
+        z, keep, lib, labels, events, clap, frames = self.unav_frames(c, part)
+        if c.fuse:
+            frames = unav.standardise(frames + c.fuse[1] * self.unav_frames(c.fuse[0].on("unav"), part)[-1])
         heard = self.once(("unav-heard", part), lambda: unav.standardise(
             unav.Library(z, keep).sound(clap, 5.0)))  # fmt: skip
         best = None
@@ -531,6 +615,19 @@ def candidate(spec: str) -> Candidate:
     model)."""
     from whenframe.encoder import MODELS
 
+    if "|" in spec:  # the tenth round's screening: NAME=...|guide:W, or NAME=...|fuse:W:[ENCODER:]WEIGHTS@ALPHA
+        head, *mods = spec.split("|")
+        c, name = candidate(head), head.split("=", 1)[0]
+        for mod in mods:
+            kind, _, rest = mod.partition(":")
+            if kind == "guide":
+                c = replace(c, guide=float(rest))
+            elif kind == "fuse":
+                w, _, other = rest.partition(":")
+                c = replace(c, fuse=(candidate(f"{name}-fused={other}"), float(w)))
+            else:
+                raise ValueError(f"{spec}: {mod}")
+        return c
     if spec == "v1":
         return Candidate("v1", weights=str(shipped(V1, V1_COMMIT)))
     if spec in NAMED:
@@ -558,6 +655,8 @@ TEST8 = ROOT / "results" / "round8_test.json"
 # model on PE's frames, against v3 on the four tests, and the two encoders' indexing costs measured again together
 TUNED9 = ROOT / "results" / "round9_tuned.json"
 TEST9 = ROOT / "results" / "round9_test.json"
+# the tenth round's screening of three ideas, on the tuning sets only (scripts/screen.py)
+TUNED10 = ROOT / "results" / "round10_screen.json"
 COST9 = ROOT / "results" / "round9_cost.json"
 # reported beside, deciding nothing: each left-out run on the test it left out, against v3's
 LEFT_OUT9 = {"charades": ("v4-no-charades", "v3-no-charades"), "youcook2": ("v4-no-youcook2", "v3-no-youcook2")}
@@ -583,7 +682,7 @@ def tune(args) -> None:
     and the mean of the primary metrics: DiDeMo, YouCook2 and UnAV-100 (sixth round; Charades-STA had none), and
     Charades-STA's 500 held-out training videos (seventh round, --round 7)."""
     b = Benchmarks(args)
-    path = {7: TUNED7, 8: TUNED8, 9: TUNED9}.get(args.round, TUNED)
+    path = {7: TUNED7, 8: TUNED8, 9: TUNED9, 10: TUNED10}.get(args.round, TUNED)
     out = json.loads(path.read_text()) if path.exists() else {}
     for spec in args.candidates.split(","):
         c = candidate(spec)
@@ -592,6 +691,7 @@ def tune(args) -> None:
         if args.round >= 7:
             values["charades"] = b.charades_tuning_score(c)["value"]
         out[c.name] = {"spec": spec, "model": c.model, "weights": c.weights, "alpha": c.alpha, "per": dict(c.per),
+                       "guide": c.guide, "fuse": [c.fuse[0].model, c.fuse[0].weights, c.fuse[1]] if c.fuse else None,
                        **values,
                        "mean": float(np.mean(list(values.values()))), "speech": y["speech"],
                        "sound_weight": u["sound_weight"]}  # fmt: skip
@@ -782,16 +882,17 @@ def main() -> None:
     ap.add_argument(
         "--round",
         type=int,
-        choices=[6, 7, 8, 9],
+        choices=[6, 7, 8, 9, 10],
         default=6,
         help="tune, evaluate: the sixth round's or a later one's (results/roundN_*.json; from the seventh, "
-        "Charades-STA's held-out videos among the tuning sets); cost: 9 for the ninth round's measure",
+        "Charades-STA's held-out videos among the tuning sets; 10, the tenth round's screening, tunes only); cost: 9 "
+        "for the ninth round's measure",
     )
     ap.add_argument(
         "--candidates",
         default="b32,base,so400m,v1",
         help="tune, evaluate: b32, base, so400m, pe, v1, NAME=WEIGHTS@ALPHA or NAME=ENCODER:WEIGHTS@ALPHA, "
-        "comma-separated",
+        "comma-separated; for the tenth round's screening, followed by |guide:W or |fuse:W:[ENCODER:]WEIGHTS@ALPHA",
     )
     ap.add_argument("--annotations", help="DiDeMo's didemo_train.json (the tuning videos, and the query bank)")
     ap.add_argument("--test-annotations", help="DiDeMo's didemo_test.json")
@@ -810,6 +911,8 @@ def main() -> None:
         for m in args.models.split(","):
             assemble(args.dataset, m)
         return
+    if args.stage == "evaluate" and args.round == 10:
+        ap.error("the tenth round's screening runs on the tuning sets only")
     if args.stage == "evaluate" and args.round == 8:
         evaluate8(args)
         return

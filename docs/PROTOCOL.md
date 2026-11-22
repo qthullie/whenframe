@@ -1281,3 +1281,57 @@ Trained on YouCook2's videos, PE gains 1.8 points on YouCook2 (28.8 to
 30.5), and SigLIP 2 B/16 3.1 (29.1 to 32.1). Nothing is chosen from these
 numbers. The test runs next, once, with the four candidates and the
 criteria above.
+
+## Tenth round: three ideas screened on the tuning sets
+
+Written before any of its numbers was computed.
+
+**The question.** The ninth round asked whether a better encoder helps. This
+round asks whether three changes to the search and to what the model learns
+do. Each is measured on the four tuning sets only, with the seventh round's
+metrics and their mean (`scripts/screen.py`, `scripts/compare.py tune --round
+10`, `results/round10_screen.json`). No test is run in this round.
+
+**1. Guidance.** Image-text models see what a frame shows more than what
+happens in it: "the dog jumps into the pool" scores the dog and the pool
+more than the jump. Diffusion models had the same weakness with their
+prompts, and classifier-free guidance (Ho and Salimans, 2022) answered it:
+the prediction is pushed away from the one made without the prompt. Here
+each query is pushed away from itself without its action:
+
+- q_g = (1 + w) q - w q_stripped, at unit length, searched as the query was;
+- q_stripped is the description without the words of a verb list mined, by a
+  rule fixed before any measure, from the training descriptions of
+  whenframe's model (`results/round10_verbs.json`, 914 words): the word after
+  a subject when it has a verb's ending, YouCook2's frequent imperatives, the
+  base forms of the -s forms, the auxiliaries, none found after a determiner
+  in more than a fifth of its uses;
+- a description with none of those words is searched as it is;
+- w in 0.25, 0.5, 1 and 2, on v3.
+
+**2. Fusion.** v3 (SigLIP 2 B/16's frames) and v4 (PE core B/16's, ninth
+round) succeed on different descriptions. Their scores of the same frames,
+each corrected by its own query bank, are standardised per query and added,
+as the tool adds two models' scores, with PE's weight w in 0.5, 0.75, 1, 1.5
+and 2. On YouCook2 the sum is put back on v3's scale, so that the weights of
+speech keep their meaning. Indexing would cost both encoders' time.
+
+**3. Round trip.** In the eighth round, each library learnt from every
+automatic description of its frames (Florence-2-base, one per 10 seconds),
+and every recipe lost. Many of those descriptions fit any video ("a person
+is walking down a hallway"). Here a library learns only from those that find
+their own block first in it:
+
+- searched by the library's starting model, with its query bank, the frame
+  that matches the description best in the whole library lies in the
+  10-second block the description was written for;
+- the libraries, the starting models and the recipe are the eighth round's
+  first: 10 passes over the descriptions kept, the library alone.
+
+**References and the rule.** Ideas 1 and 2 are measured against v3 and idea 3
+against the eighth round's starting models, each measured again here by the
+same code. Each candidate's speech and sound weights are chosen on the
+tuning sets, as every candidate's. An idea whose best setting raises its
+reference's mean by at least 1 point is proposed for an eleventh round, with
+its own protocol and its test written before any test number. One that does
+not is reported and dropped.
