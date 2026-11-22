@@ -70,5 +70,23 @@
    "normalise": "best"
   },
   "sound_weight": 1.0
+ },
+ "v4-no-youcook2": {
+  "spec": "v4-no-youcook2=pe-core-b16:results/temporal/v4-no-youcook2.npz@1",
+  "model": "pe-core-b16",
+  "weights": "results/temporal/v4-no-youcook2.npz",
+  "alpha": 1.0,
+  "per": {},
+  "didemo": 0.3582013285641288,
+  "youcook2": 0.2875605815831987,
+  "unav": 0.44615384615384623,
+  "charades": 0.53125,
+  "mean": 0.40579143907529347,
+  "speech": {
+   "weight": 0.005,
+   "pad": 0.0,
+   "normalise": "raw"
+  },
+  "sound_weight": 1.0
  }
 }

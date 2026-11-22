@@ -1238,3 +1238,46 @@ The first export, measured before the rotary position embedding was written
 for the export, chose the same bank. It tied the spans' strengths 0.25 and
 0.5 and kept the first, and its weight of sound was 1
 (`results/round9_first_export.json`).
+
+**Stage 2's numbers** (`scripts/round9.py`; `results/round9_stage2.json`,
+`results/round9_tuned.json`, each run's log in `results/temporal/`),
+recorded before the test.
+
+The three runs trained with v3's flags on PE core B/16's frames, their
+logged recipe checked. Each kept its best check:
+
+- v4: step 4,500 of 6,000 (the check is the mean of DiDeMo's tuning R@5 and
+  Charades-STA's held-out R1: 44.2);
+- v4 without Charades-STA's videos: step 4,500 (DiDeMo's tuning R@5 alone,
+  36.2);
+- v4 without YouCook2's videos: step 5,000 (44.5).
+
+v4 is exported as the package would ship it, alpha 1
+(`results/temporal/temporal-pe-core-b16-v4.npz`, 1,585,408 weights).
+
+Their speech and sound weights, chosen on the tuning sets:
+
+- v4: speech 0.005, what is said within the moment; sound 1;
+- v4 without Charades-STA's videos: speech 0.05 (`normalise` best); sound 1;
+- v4 without YouCook2's videos: speech 0.005; sound 1.
+
+| on the tuning sets | DiDeMo | Charades-STA | YouCook2 | UnAV-100 | mean |
+|---|---|---|---|---|---|
+| SigLIP 2 B/16 alone | 31.3 | 44.9 | 29.4 | 41.0 | 36.66 |
+| PE core B/16 alone | 35.0 | 47.8 | 29.9 | 43.3 | 39.00 |
+| v3 (the seventh round's) | 33.7 | 50.6 | 32.1 | 42.1 | 39.63 |
+| v4 | 35.7 | 52.7 | 30.5 | 43.6 | 40.63 |
+| v3 without Charades-STA's videos | 34.0 | 46.4 | 32.6 | 42.1 | 38.79 |
+| v4 without Charades-STA's videos | 36.2 | 48.8 | 31.2 | 43.3 | 39.88 |
+| v3 without YouCook2's videos | 34.0 | 51.6 | 29.1 | 41.5 | 39.04 |
+| v4 without YouCook2's videos | 35.8 | 53.1 | 28.8 | 44.6 | 40.58 |
+
+On the tuning sets, v4's mean is 1.00 point above v3's:
+
+- higher on DiDeMo (+2.0), Charades-STA (+2.1) and UnAV-100 (+1.5);
+- lower on YouCook2 (-1.6).
+
+Trained on YouCook2's videos, PE gains 1.8 points on YouCook2 (28.8 to
+30.5), and SigLIP 2 B/16 3.1 (29.1 to 32.1). Nothing is chosen from these
+numbers. The test runs next, once, with the four candidates and the
+criteria above.

@@ -399,8 +399,9 @@ def round4_tables() -> dict[str, str]:
 def round5_tables() -> dict[str, str]:
     """The fifth round: whenframe's own model, the runs on the tuning videos and, once run, the test."""
     out = {}
-    # the fifth and sixth rounds' runs; the seventh's (v3-*) keep the best check of two sets, in round7-tuning
-    runs = sorted(f for f in (RESULTS / "temporal").glob("*.json") if not f.name.startswith("v3"))
+    # the fifth and sixth rounds' runs; the seventh's (v3-*) and the ninth's (v4-*, on PE core B/16's frames) keep
+    # the best check of two sets, in round7-tuning and round9-tuning
+    runs = sorted(f for f in (RESULTS / "temporal").glob("*.json") if not f.name.startswith(("v3", "v4")))
     if runs:
         rows = []
         for f in runs:
