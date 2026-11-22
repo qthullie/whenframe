@@ -1,16 +1,19 @@
-"""Build the data of the demo site (site/): three Blender films, embedded once, searched in the browser.
+"""Build the data of the demo site (site/): three Blender films, indexed once in the standard mode, searched in the
+browser.
 
     python scripts/site.py --films DIR      # Big Buck Bunny, Sintel, Tears of Steel (Blender Foundation, CC BY 3.0)
     python scripts/site.py --preview        # then the README's animation of the site, docs/figures/site(-dark).webp
 
-Writes site/data/ (and scripts/site_videos.sh the films' small copies, in site/videos/):
-    frames.bin       the frame embeddings of the default model, float16, as the tool stores them
+The films are indexed as `whenframe index` indexes a new library: SigLIP 2 B/16's frames, each rewritten by
+whenframe's own model (whenframe/temporal.py). Writes site/data/ (and scripts/site_videos.sh the films' small copies,
+in site/videos/):
+    frames.bin       the frame embeddings, float16, as the tool stores them
     offsets.bin      each frame's query-bank offset times the tuned strength, float32
     frames.json      when each frame is, which film it belongs to, the films, the model's calibration
     sheets/N.webp    the frames' thumbnails, 10 x 10 per sheet, in frame order
     queries.bin      the suggested searches, embedded here (float32), and queries.json their text
 
-The page embeds any other search in the browser with the same text model (transformers.js).
+A description of the visitor's own is embedded by the demo's text server (site/server/), the same text model.
 """
 
 from __future__ import annotations
@@ -26,8 +29,9 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from whenframe import Library, Searcher  # noqa: E402
-from whenframe.encoder import MODELS  # noqa: E402
+from whenframe import Library, Searcher, temporal  # noqa: E402
+from whenframe.encoder import DEFAULT_MODEL, MODELS  # noqa: E402
+from whenframe.library import Settings  # noqa: E402
 from whenframe.video import find_videos  # noqa: E402
 
 TILE = (192, 108)
@@ -128,7 +132,9 @@ def main() -> None:
     out = Path(a.out)
     (out / "sheets").mkdir(parents=True, exist_ok=True)
 
-    lib = Library(a.library)
+    # a new library in the standard mode, as `whenframe index` makes it: through whenframe's temporal model
+    name = temporal.MODELS.get(DEFAULT_MODEL)
+    lib = Library(a.library, Settings(temporal=name) if name and temporal.load(name=f"{name}.npz") else None)
     for path in find_videos([a.films]):
         lib.add(path)
     model = lib.settings.models[0]
@@ -158,7 +164,8 @@ def main() -> None:
     offsets[rows].astype("<f4").tofile(out / "offsets.bin")
     spec = MODELS[model]
     meta = {
-        "model": spec.repo, "dim": int(embs[model].shape[1]), "count": int(len(rows)),
+        "model": spec.repo, "temporal": lib.settings.temporal, "dim": int(embs[model].shape[1]),
+        "count": int(len(rows)),
         "scale": spec.logit_scale, "bias": spec.logit_bias, "text_length": spec.text_length,
         "window": searcher.config.window, "per_video": searcher.config.per_video,
         "tile": list(TILE), "cols": COLS, "per_sheet": per_sheet,

@@ -123,6 +123,8 @@ whenframe serve</pre>
       <h3>How it works</h3>
       <ul>
         <li>One frame per second, repeated frames skipped, embedded by SigLIP 2 on the CPU.</li>
+        <li>whenframe's own model, trained on more than 100,000 descriptions written by people, rewrites each
+          frame with what the frames around it show: an action, not only a picture.</li>
         <li>Frames that match almost any text are marked down (query-bank normalisation).</li>
         <li>Moments of ten seconds around the best frames, ranked across all videos.</li>
       </ul>
@@ -132,8 +134,9 @@ whenframe serve</pre>
 
   <footer>
     Films: Big Buck Bunny, Sintel and Tears of Steel, © Blender Foundation, CC BY 3.0, shown here in small copies.
-    Model: SigLIP 2 (Google, Apache 2.0). The search runs in your browser on frames embedded beforehand, the twelve
-    descriptions included; with the tool, any description works. whenframe is MIT-licensed.
+    Models: SigLIP 2 (Google, Apache 2.0), and whenframe's own model (its weights are for research and
+    non-commercial use). The search runs in your browser on frames embedded beforehand, the twelve descriptions
+    included; with the tool, any description works. whenframe is MIT-licensed.
   </footer>
 </div>
 
