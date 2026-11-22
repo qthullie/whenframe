@@ -1,12 +1,15 @@
-// whenframe in the browser: the frames of three films, embedded once with SigLIP 2 (scripts/site.py), searched here
-// the way the tool searches: cosine minus the query-bank offset, 10-second windows around the best frames.
-// The twelve descriptions were embedded by the tool too; the films play from small copies (scripts/site_videos.sh).
+// whenframe in the browser: the frames of three films, indexed once in the standard mode (scripts/site.py), searched
+// here the way the tool searches: cosine minus the query-bank offset, 10-second windows around the best frames.
+// The twelve descriptions were embedded by the tool too; a description of the visitor's own is embedded by the demo's
+// text server (demo-server/, config.json), the same text model. The films play from small copies (site_videos.sh).
 const DATA = "data/";
 const HIDDEN_BELOW = 0.005;  // moments shown as "0 %" sure say nothing: left out
 const $ = (id) => document.getElementById(id);
 
 let meta, frames, offsets, suggestions, vectors;
+let server = "";  // the text server's address, when there is one
 let playing = null;  // the moment being played, which stops at its end; null for a whole film
+let asked = 0;  // the latest description sent to the server: an older answer arriving late is dropped
 
 // float16 -> float32, through a table of the 65,536 values
 const F16 = new Float32Array(65536);
@@ -87,13 +90,15 @@ function showFilms() {
   });
 }
 
-function showMoments(query, vector, ms) {
+function showMoments(query, vector, embedded) {
+  // embedded: the milliseconds the text server took to embed the description, or null for one embedded beforehand
   const t0 = performance.now();
   const hits = search(vector);
   const shown = hits.filter((h) => h.confidence >= HIDDEN_BELOW);
-  const took = ms + performance.now() - t0;
+  const took = performance.now() - t0;
   const hidden = hits.length - shown.length;
   $("status").textContent = `${shown.length} moments in ${Math.round(took)} ms, for “${query}”` +
+    (embedded === null ? "" : `, embedded in ${embedded} ms by the demo's text server`) +
     (hidden ? ` (${hidden} more at 0 % left out)` : "");
   const box = $("results");
   box.replaceChildren();
@@ -159,18 +164,66 @@ $("moment").addEventListener("close", () => {
 });
 
 function pick(query) {
-  // a description from the list, or none: the films
+  // a description from the list, one of the visitor's own (with a text server), or none: the films
+  query = (query || "").trim().slice(0, 200);
   const known = suggestions.findIndex((s) => s === query);
-  history.replaceState(null, "", known >= 0 ? `?q=${encodeURIComponent(query)}` : location.pathname);
+  const searched = known >= 0 || (query && server);
+  history.replaceState(null, "", searched ? `?q=${encodeURIComponent(query)}${keep()}` : location.pathname + keep("?"));
   document.querySelectorAll(".chip").forEach((c) => c.classList.toggle("on", c.textContent === query));
-  if (known < 0) showFilms();
-  else showMoments(query, vectors.subarray(known * meta.dim, (known + 1) * meta.dim), 0);
+  if (server) $("q").value = query;
+  asked++;
+  if (known >= 0) showMoments(query, vectors.subarray(known * meta.dim, (known + 1) * meta.dim), null);
+  else if (searched) ask(query, asked);
+  else showFilms();
+}
+
+function keep(first = "&") {
+  // a server given in the address (a local one, to try the page with it) stays in the address
+  const given = new URLSearchParams(location.search).get("server");
+  return given ? `${first}server=${encodeURIComponent(given)}` : "";
+}
+
+async function ask(query, turn) {
+  // the visitor's own description: embedded by the text server, then searched here like the others
+  $("status").textContent = `Embedding “${query}” on the demo's text server…`;
+  $("results").replaceChildren();
+  let why = "";  // what the server said, when it said why
+  try {
+    const r = await fetch(`${server}/embed?q=${encodeURIComponent(query)}`, { signal: AbortSignal.timeout(60000) });
+    const body = await r.json();
+    if (turn !== asked) return;  // the visitor has moved on
+    if (!r.ok) throw new Error((why = body.error || ""));
+    const bin = atob(body.vector), bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const vector = new Float32Array(bytes.buffer);
+    if (vector.length !== meta.dim) throw new Error((why = "it answered with another model"));
+    showMoments(query, vector, body.ms);
+  } catch {
+    if (turn !== asked) return;
+    $("status").textContent = `The demo's text server did not answer${why ? `: ${why}` : ""}. ` +
+      "The twelve descriptions below work without it.";
+  }
+}
+
+function textServer(config) {
+  // the server the site was deployed with (config.json), or a local one given in the address (?server=)
+  const given = new URLSearchParams(location.search).get("server");
+  if (given && /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\/?$/.test(given)) return given.replace(/\/$/, "");
+  return (config.text_server || "").replace(/\/$/, "");
 }
 
 async function start() {
   const get = (name, kind) => fetch(DATA + name).then((r) => (kind === "json" ? r.json() : r.arrayBuffer()));
+  const config = fetch("config.json").then((r) => r.json()).catch(() => ({}));
   const [m, f, o, s, v] = await Promise.all([get("frames.json", "json"), get("frames.bin"), get("offsets.bin"),
                                              get("queries.json", "json"), get("queries.bin")]);
+  server = textServer(await config);
+  if (server) {
+    $("ask").hidden = false;
+    $("privacy").hidden = false;
+    $("how").textContent = "Describe a moment in your own words, or pick one below:";
+    fetch(`${server}/health`).catch(() => {});  // wakes a server that sleeps while the visitor reads
+  }
   meta = m;
   const half = new Uint16Array(f);
   frames = new Float32Array(half.length);
@@ -195,4 +248,8 @@ async function start() {
 }
 
 $("all").addEventListener("click", () => pick(null));
+$("ask").addEventListener("submit", (e) => {
+  e.preventDefault();
+  pick($("q").value);
+});
 start();

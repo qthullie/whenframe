@@ -37,6 +37,12 @@
            padding: 10px 16px; cursor: pointer; }
   button:hover { border-color: var(--accent); }
   .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 4px; }
+  #ask { display: flex; gap: 8px; margin: 14px 0 4px; }
+  #q { flex: 1; min-width: 0; font: inherit; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--line);
+       background: var(--card); color: var(--ink); }
+  #q:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  #ask button { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .privacy { font-size: 13px; color: var(--muted); margin: 6px 0 0; }
   .chip { font-size: 14px; padding: 5px 11px; border-radius: 999px; background: var(--accent-soft); border: 1px solid transparent; }
   .chip:hover { border-color: var(--accent); }
   #status { color: var(--muted); font-size: 14px; min-height: 22px; margin: 10px 0 0; }
@@ -97,9 +103,17 @@
 
   <div class="demo">
     <h2 id="what">Three open movies</h2>
-    <p class="note">Pick a description: the search runs in your browser, on the frames whenframe embedded. Pick a
-      moment to watch its ten seconds, or <button class="link" id="all" type="button">watch the films</button>.</p>
+    <p class="note"><span id="how">Pick a description:</span> the search runs in your browser, on the frames
+      whenframe embedded. Pick a moment to watch its ten seconds, or
+      <button class="link" id="all" type="button">watch the films</button>.</p>
+    <form id="ask" hidden>
+      <input id="q" type="search" maxlength="200" autocomplete="off" spellcheck="false" enterkeyhint="search"
+             placeholder="a dragon flying over the mountains" aria-label="Describe a moment">
+      <button type="submit">Search</button>
+    </form>
     <div class="chips" id="chips"></div>
+    <p class="privacy" id="privacy" hidden>A description of your own goes to the demo's text server only to be
+      embedded: nothing is logged or stored. whenframe itself runs on your computer.</p>
     <div id="status"></div>
     <div class="grid" id="results"></div>
   </div>
@@ -135,8 +149,8 @@ whenframe serve</pre>
   <footer>
     Films: Big Buck Bunny, Sintel and Tears of Steel, © Blender Foundation, CC BY 3.0, shown here in small copies.
     Models: SigLIP 2 (Google, Apache 2.0), and whenframe's own model (its weights are for research and
-    non-commercial use). The search runs in your browser on frames embedded beforehand, the twelve descriptions
-    included; with the tool, any description works. whenframe is MIT-licensed.
+    non-commercial use). The search runs in your browser, on frames embedded beforehand. whenframe is
+    MIT-licensed.
   </footer>
 </div>
 
