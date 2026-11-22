@@ -24,12 +24,10 @@ RESULTS = ROOT / "results"
 PRIMARY = "R@5 IoU>=0.5"
 EXAMPLES = ("dog barking", "baby laughter")  # shown under the sound panel's first bar
 
-# Charades-STA, zero-shot: (name, what it runs, R1 at IoU 0.5 in %), as published
+# Charades-STA, zero-shot: (name, what it runs, R1 at IoU 0.5 in %), as published (results/published_charades.json)
 PUBLISHED = [
-    ("Your VLM Already Knows When (2026)", "a 7-billion-parameter vision-language model", 56.8),  # arXiv 2608.08315
-    ("TFVTG (ECCV 2024)", "a language model and vision-language models", 49.97),  # arXiv 2408.16219
-    ("VTG-GPT (2024)", "language models and an image captioner", 43.68),  # arXiv 2403.02076, table 1
-    ("PSVL (ICCV 2021)", "trained on unannotated videos", 31.29),  # arXiv 2110.00428
+    (x["name"], x["runs"], x["R1@0.5"])
+    for x in json.loads((RESULTS / "published_charades.json").read_text())["zero_shot"]
 ]
 
 

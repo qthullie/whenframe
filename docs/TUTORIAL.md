@@ -62,8 +62,8 @@ the precision mode costs more and, on DiDeMo, found as many as the standard
 mode. The large mode costs four times the CPU time of the standard mode with
 OpenVINO, about what the standard mode costs without it, and found 1.9 points
 more of the moments on DiDeMo; its index takes 1.5 times the space. The
-measured numbers are in the README and in [RESULTS.md](RESULTS.md), "Second
-round" and "Fourth round".
+measured numbers are in [RESULTS.md](RESULTS.md), "Second round", "Fourth
+round" and "Sixth round".
 
 The index lives in `~/.local/share/whenframe/library` (or `$WHENFRAME_LIBRARY`,
 or `--library DIR`). It takes about 5 MB per hour of video (7.5 in large mode).
@@ -287,6 +287,30 @@ milliseconds.
 grown around peaks, the window length, how many moments per video, and the
 weight of the query-bank correction (0 turns it off). The defaults are the ones
 chosen on DiDeMo training videos.
+
+## How it works
+
+1. ffmpeg reads one frame per second; frames that barely differ from the last
+   one kept are skipped.
+2. [SigLIP 2](https://arxiv.org/abs/2502.14786) embeds the frames and the
+   description (ONNX Runtime, CPU). Its sigmoid gives each frame an absolute
+   match score, so frames from different videos compare directly. Then a
+   small transformer of whenframe's own, trained on the training videos of
+   DiDeMo, MSR-VTT, Charades-STA and YouCook2, rewrites each frame's
+   embedding with what the frames around it show (in the spirit of
+   [CLIP4Clip](https://arxiv.org/abs/2104.08860)'s temporal transformer), for
+   about 0.03 CPU minutes per hour of video.
+3. Frames that match almost any description are marked down, using a bank of
+   4,096 unrelated descriptions: query-bank normalisation
+   ([Bogolin et al., CVPR 2022](https://arxiv.org/abs/2112.12777)), applied to
+   video frames.
+4. With `--speech`, the words of the description said around a frame add to
+   its score (Whisper and a full-text index); with `--sounds`, so does what is
+   heard around it ([CLAP](https://arxiv.org/abs/2211.06687), standardised and
+   added). Both count as chosen with each mode's model on the tuning sets.
+5. In each of the best videos, up to three 10-second moments are placed around
+   the best frames, and all moments are ranked together. In precision mode the
+   scores of two models are standardised and added first.
 
 ## Reproduce the benchmark
 

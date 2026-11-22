@@ -937,6 +937,30 @@ def published_tables() -> dict[str, str]:
     return out
 
 
+def readme_compare() -> dict[str, str]:
+    """The README's comparison: whenframe, on a CPU, beside what others do on the same test sets: published systems
+    as their authors report them (results/published_*.json), the home tools' ways run here on the same videos."""
+    names = ("round7_test", "published_didemo", "published_charades", "didemo_test_thumbnail", "didemo_test")
+    files = [RESULTS / f"{n}.json" for n in names]
+    if not all(f.exists() for f in files):
+        return {}
+    r, pub, zero, th, first = (json.loads(f.read_text()) for f in files)
+    best, top = max(pub["video_retrieval"].items(), key=lambda kv: kv[1]["R@5"])
+    # the three best published without training on Charades-STA, the lowest first
+    others = sorted(sorted(zero["zero_shot"], key=lambda x: -x["R1@0.5"])[:3], key=lambda x: x["R1@0.5"])
+    video, moment = r["v3"]["didemo"]["full"]["video"]["R@5"], r["v3"]["didemo"]["value"]
+    rows = [
+        ["**Find the video** among 979 (DiDeMo, in the first 5)", f"**{pct(video)} %**",
+         f"{top['R@5']:.1f} % {best}, trained on DiDeMo, on a GPU · {pct(th['middle']['R@5'])} % one image per video"],
+        ["**Find the moment** among 979 videos (DiDeMo, in the first 5)", f"**{pct(moment)} %**",
+         f"{pct(first['scene']['corpus'][PRIMARY])} % one keyframe per shot, as home video tools index"],
+        ["**Place the moment** in a given video, never trained on it (Charades-STA, first answer)",
+         f"**{pct(r['v3-no-charades']['charades']['value'])} %**",
+         " · ".join(f"{x['R1@0.5']:.1f} % {x['short']}" for x in others)],
+    ]  # fmt: skip
+    return {"readme-compare": table(["", "whenframe, on a CPU", "others"], rows)}
+
+
 def charades_table() -> str | None:
     f = RESULTS / "charades_test.json"
     if not f.exists():
@@ -1012,6 +1036,7 @@ def main() -> int:
     tables.update(round9_tables())
     tables.update(round10_tables())
     tables.update(published_tables())
+    tables.update(readme_compare())
     f2 = RESULTS / "didemo_test_round2.json"
     if f2.exists():
         tables.update(round2_tables(json.loads(f2.read_text()), json.loads(f.read_text()) if f.exists() else None))

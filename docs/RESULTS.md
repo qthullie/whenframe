@@ -10,6 +10,41 @@ been committed.
 The tables between `<!-- table -->` markers are written by `scripts/tables.py`
 from `results/didemo_test.json`; CI fails if they differ from that file.
 
+## Limits
+
+- It sees frames, not motion: "the camera pans left" is out of its reach, and
+  grids of four successive frames did not help (DiDeMo test, +0.4 points).
+- What is heard (`--sounds`) was measured on short clips cut around their
+  events (UnAV-100); in long home videos, where most of the sound is talk or
+  nothing, it was not.
+- It was measured on short personal videos (DiDeMo, their first 30 seconds) and
+  on cooking videos of about 5 minutes (YouCook2); recordings of an hour or more
+  were not measured.
+- Windows did better on DiDeMo's short clips and spans on YouCook2's long
+  videos; the tool picks one for a whole library from its median video
+  (`--moments auto`), so a library mixing both kinds gets one of them.
+- It cannot tell apart videos that show the same thing: among Charades'
+  1,334 look-alike videos of people at home, the right one is in the first five
+  results 4 % of the time.
+- Indexing is slow on a small machine without OpenVINO (the modes'
+  costs are in [TUTORIAL.md](TUTORIAL.md), measured on 4 vCPUs); OpenVINO's speed-up was measured on one processor only.
+- Descriptions in French were measured through machine translation only.
+- whenframe's own model learnt from the training videos of DiDeMo, MSR-VTT,
+  Charades-STA and YouCook2. Most of its gain on Charades-STA and YouCook2
+  comes from those videos: trained without them, it adds 0.8 and 0.3 points
+  to SigLIP 2 B/16 alone there, instead of 7.6 and 6.2. Learning a library
+  from automatic descriptions of its own frames (Florence-2-base) did not make
+  up for it: every recipe tried found less than the model as it is, on the
+  mean of the four tuning sets. On UnAV-100, which it never saw, it loses 0.3
+  points, and So400m finds more. It was not measured on videos of an hour or
+  more.
+- A better encoder at the same cost did not beat it either. Alone, PE core
+  B/16 finds more than SigLIP 2 B/16 (mean 39.51 against 38.07). With
+  whenframe's model trained on its frames, it finds as much as v3 (41.69
+  against 41.90) and 4.7 points less on YouCook2, so the tool keeps SigLIP 2
+  B/16 and v3 (ninth round).
+- Several criteria set in advance were not met; this page says which and why.
+
 ## Criteria
 
 <!-- table didemo-criteria -->

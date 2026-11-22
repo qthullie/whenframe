@@ -1,0 +1,9 @@
+{
+ "about": "Published results on Charades-STA's test set (3,720 sentences) without training on Charades-STA's annotations, as their authors report them: the right moment first, R1 at IoU >= 0.5. Values in %.",
+ "zero_shot": [
+  {"name": "Your VLM Already Knows When (2026)", "short": "a 7B vision-language model", "runs": "a 7-billion-parameter vision-language model", "R1@0.5": 56.8, "source": "arXiv 2608.08315"},
+  {"name": "TFVTG (ECCV 2024)", "short": "TFVTG", "runs": "a language model and vision-language models", "R1@0.5": 49.97, "source": "arXiv 2408.16219"},
+  {"name": "VTG-GPT (2024)", "short": "VTG-GPT", "runs": "language models and an image captioner", "R1@0.5": 43.68, "source": "arXiv 2403.02076, table 1"},
+  {"name": "PSVL (ICCV 2021)", "short": "PSVL", "runs": "trained on unannotated videos", "R1@0.5": 31.29, "source": "arXiv 2110.00428"}
+ ]
+}
