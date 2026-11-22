@@ -1,0 +1,27 @@
+{
+ "fusion": {
+  "spec": "fusion=results/temporal/temporal-siglip2-base-v3.npz@1|fuse:0.75:pe-core-b16:results/temporal/temporal-pe-core-b16-v4.npz@1",
+  "model": "siglip2-base",
+  "weights": "results/temporal/temporal-siglip2-base-v3.npz",
+  "alpha": 1.0,
+  "per": {},
+  "guide": 0.0,
+  "fuse": [
+   "pe-core-b16",
+   "results/temporal/temporal-pe-core-b16-v4.npz",
+   0.75
+  ],
+  "didemo": 0.373530914665304,
+  "youcook2": 0.32148626817447495,
+  "unav": 0.4358974358974359,
+  "charades": 0.5225694444444444,
+  "mean": 0.41337101579541485,
+  "speech": {
+   "weight": 0.005,
+   "pad": 5.0,
+   "normalise": "raw"
+  },
+  "sound_weight": 1.5,
+  "from": "round10_screen.json fuse-0.75"
+ }
+}
