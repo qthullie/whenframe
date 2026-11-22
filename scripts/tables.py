@@ -792,6 +792,76 @@ def round8_tables() -> dict[str, str]:
     return out
 
 
+MAIN9 = ["base", "pe", "v3", "v4"]
+LABEL9 = {"base": "SigLIP 2 B/16 alone", "pe": "PE core B/16 alone", "v3": "SigLIP 2 B/16 + whenframe's model v3",
+          "v4": "PE core B/16 + whenframe's model v4"}  # fmt: skip
+LEFT_OUT9 = {"charades": ("v3-no-charades", "v4-no-charades"), "youcook2": ("v3-no-youcook2", "v4-no-youcook2")}
+
+
+def round9_tables() -> dict[str, str]:
+    """The ninth round: Perception Encoder's PE core B/16 in place of SigLIP 2 B/16, and whenframe's model on its
+    frames (v4)."""
+    out, cols = {}, ("didemo", "charades", "youcook2", "unav")
+    head = ["DiDeMo R@5", "Charades-STA R1", "YouCook2 R@5", "UnAV-100 P@10", "mean"]
+    f, f7 = RESULTS / "round9_tuned.json", RESULTS / "round7_tuned.json"
+    if f.exists() and f7.exists():
+        t = json.loads(f7.read_text()) | json.loads(f.read_text())  # v3 and its runs: the seventh round's
+        rows = [[LABEL9[k], *(pct(t[k][c]) for c in cols), f"{100 * t[k]['mean']:.2f}"] for k in MAIN9 if k in t]
+        rows += [[f"*{k.split('-')[0]} without {BENCH[c]}'s videos (beside)*", *(pct(t[k][x]) for x in cols),
+                  f"{100 * t[k]['mean']:.2f}"] for c, runs in LEFT_OUT9.items() for k in runs if k in t]  # fmt: skip
+        out["round9-tuning"] = table(["tuning sets", *head], rows)
+    f, fc = RESULTS / "round9_test.json", RESULTS / "round9_cost.json"
+    if not (f.exists() and fc.exists()):
+        return out
+    r, cost = json.loads(f.read_text()), json.loads(fc.read_text())
+    encoder = {"base": "siglip2-base", "v3": "siglip2-base", "pe": "pe-core-b16", "v4": "pe-core-b16"}
+
+    def minutes(n: str) -> float:
+        return cost[encoder[n]]["cpu_min_per_hour"] + r[n].get("adapter_cost", {}).get("cpu_min_per_hour", 0.0)
+
+    main = [n for n in r["ranking"] if n in MAIN9]
+    out["round9-test"] = table(
+        ["test sets, ranked by the mean", *head, "indexing, CPU min per hour"],
+        [[LABEL9[n], *(pct(r[n][c]["value"]) for c in cols), f"**{100 * r[n]['mean']:.2f}**", f"{minutes(n):.1f}"]
+         for n in main],
+    )  # fmt: skip
+    pairs = [(a, b) for i, a in enumerate(main) for b in main[i + 1 :]]
+
+    def said(a: str, b: str) -> bool:
+        return r["pairs"][f"{a} vs {b}"]["p"] < 0.05 and r[a]["mean"] > r[b]["mean"]
+
+    out["round9-pairs"] = table(
+        ["the first finds more than the second?", "items better", "items worse", "sign test p", "said"],
+        [[f"{LABEL9[a]} / {LABEL9[b]}", str(r["pairs"][f"{a} vs {b}"]["wins"]),
+          str(r["pairs"][f"{a} vs {b}"]["losses"]), f"{r['pairs'][f'{a} vs {b}']['p']:.2g}",
+          "yes" if said(a, b) else "no"] for a, b in pairs],
+    )  # fmt: skip
+    left = [(c, old, new) for c, (old, new) in LEFT_OUT9.items() if old in r and new in r]
+    if left:
+        out["round9-left-out"] = table(
+            ["the test of a collection left out of training", "SigLIP 2 B/16 alone", "v3 trained without it",
+             "PE core B/16 alone", "v4 trained without it", "v4 against v3, both without it"],
+            [[f"{BENCH[c]}, {('R1 at IoU >= 0.5' if c == 'charades' else 'R@5, speech + spans')}",
+              pct(r["base"][c]["value"]), pct(r[old][c]["value"]), pct(r["pe"][c]["value"]),
+              pct(r[new][c]["value"]), f"{100 * (r[new][c]['value'] - r[old][c]['value']):+.1f}"]
+             for c, old, new in left],
+        )  # fmt: skip
+    g, met = r["v4_vs_v3"], r["criteria"]
+    rows = [
+        ["30. v4's mean is at least 1 point higher than v3's, sign test p < 0.05",
+         f"{100 * g['gain']:+.2f} points; {g['wins']} items better, {g['losses']} worse, p = {g['p']:.2g}",
+         met["30"]],
+        ["31. v4 loses at most 1 point on each test against v3",
+         "; ".join(f"{BENCH[k]} {100 * v:+.1f}" for k, v in g["changes"].items()), met["31"]],
+        ["32. indexing with PE core B/16 costs at most 1.2 times what SigLIP 2 B/16 costs",
+         f"{r['cost_ratio']:.2f} times ({cost['pe-core-b16']['cpu_min_per_hour']:.1f} against "
+         f"{cost['siglip2-base']['cpu_min_per_hour']:.1f} CPU min per hour, decoding included)", met["32"]],
+    ]  # fmt: skip
+    out["round9-criteria"] = table(["criterion (fixed before its test run)", "measured on test", "met"],
+                                   [[n, m, "yes" if ok else "no"] for n, m, ok in rows])  # fmt: skip
+    return out
+
+
 def published_tables() -> dict[str, str]:
     """whenframe beside published systems trained to search a whole library of DiDeMo's test videos (added after
     the test runs: results/published_didemo.json, as their authors report them)."""
@@ -896,6 +966,7 @@ def main() -> int:
     tables.update(round6_tables())
     tables.update(round7_tables())  # after the sixth round's: replaces the README's tables if v3 is the default
     tables.update(round8_tables())
+    tables.update(round9_tables())
     tables.update(published_tables())
     f2 = RESULTS / "didemo_test_round2.json"
     if f2.exists():
