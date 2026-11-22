@@ -1,0 +1,53 @@
+{
+ "config": {
+  "stage": "train",
+  "name": "learn-charades-tuning-rt-p10",
+  "steps": 19,
+  "batch": 128,
+  "lr": 0.0001,
+  "head_lr": 0.0003,
+  "bank_sample": 1024,
+  "warmup": 1,
+  "decay": 0.01,
+  "width": 256,
+  "layers": 2,
+  "heads": 4,
+  "between": 1.0,
+  "within": 2.0,
+  "leash": 30.0,
+  "dropout": 0.1,
+  "head": 0.0,
+  "negatives": 4,
+  "every": 0,
+  "seed": 0,
+  "init_seed": null,
+  "extra": "msrvtt,youcook2,tempo",
+  "mix": "sqrt",
+  "distil": 0.0,
+  "teacher": "charades",
+  "check_charades": false,
+  "between_loss": "infonce",
+  "init": "/home/user/whenframe/results/temporal/v3-no-charades.npz",
+  "encoder": "siglip2-base",
+  "library": "charades-tuning-rt",
+  "library_share": 1.0,
+  "passes": 10.0,
+  "models": null,
+  "alpha": 1.0,
+  "settings": null,
+  "split": "train"
+ },
+ "tuning_without": {},
+ "checks": [],
+ "collections": {
+  "library": [
+   232,
+   1.0
+  ]
+ },
+ "seconds": 7.807886123657227,
+ "cpu_seconds": 20.001912666,
+ "final_loss": 0.699237048625946,
+ "best": -1.0,
+ "best_step": 19
+}
