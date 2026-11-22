@@ -160,7 +160,10 @@ def unav_source(names: list[str], work: Path, shards: int = 22):
 
 def extract(args) -> None:
     """Each video of the dataset decoded at each encoder's size; the frames at the cached instants embedded."""
-    models = args.models.split(",")
+    models = [m for m in args.models.split(",") if not (CACHE / f"{cache_name(args.dataset, m)}.npz").exists()]
+    if not models:  # assembled before (its per-video parts may be gone): nothing to read again
+        print(f"{args.dataset}: already embedded by {args.models}")
+        return
     base = np.load(CACHE / f"{BASE[args.dataset]}.npz")
     names = [str(n) for n in base["names"]]
     starts, counts, times = base["starts"], base["counts"], base["times"]
