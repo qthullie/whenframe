@@ -28,7 +28,9 @@ trained with these losses, each after a published idea:
   so that what the descriptions never mention is still found;
 - with --distil, the teacher's: So400m's distributions over the batch's videos
   and over a video's frames, on the frames it saw, followed by the model's
-  (knowledge distillation, Hinton et al., 2015; TeachCLIP, Tian et al., 2024).
+  (knowledge distillation, Hinton et al., 2015; TeachCLIP, Tian et al., 2024);
+  with --fusion-teacher as well (eleventh round), the teacher is v3 and v4
+  together, their scores fused as the tenth round fused them, on every frame.
 
 Frames are dropped at random (the tool skips repeats); a DiDeMo or TEMPO-HL
 description's moment is, half the time, one of its annotators' instead of the
@@ -78,6 +80,10 @@ COLLECTIONS = {
 # the teacher (seventh round): SigLIP 2 So400m, its logit scale, query bank and the strength the tool gives it
 TEACHER_SCALE, TEACHER_LAM, TEACHER_BETA = 109.8812, 1.0, 50.0
 TEACHER_BANK = CACHE / "didemo_bank_text_siglip2-so400m_lower.npy"
+# the eleventh round's teacher (scripts/round11.py teacher): each frame of a collection through v3 and through v4,
+# NAME_teacher_TAG_a.npy and _b.npy beside the collection's frames, and _off.npy, each one's query-bank offset; the
+# descriptions as PE core B/16's text tower embedded them; both banks' strength, as the tool gives it to either
+FUSION_B, FUSION_LAM = "pe-core-b16", (1.0, 1.0)
 # the image encoder the model is trained for (--encoder): SigLIP 2 base, or the ninth round's PE core B/16, whose
 # frames and descriptions scripts/compare.py and scripts/pe_core.py embedded again at the same instants; each
 # encoder's own logit scale and bias (CLIP's PE has none), which the losses use as the search does
@@ -283,12 +289,19 @@ def distillation(z, teacher):
     (knowledge distillation, Hinton et al., 2015; for text-video retrieval, TeachCLIP, Tian et al., CVPR 2024), both
     scored as the search scores, over the frames the teacher saw: each description's distribution over the batch's
     videos, by their smooth best frames, and over the frames of its own video. z: the model's (V, Q, L) logits."""
-    import jax
     import jax.numpy as jnp
 
     tx, seen, tq, valid, tbank = teacher
     off = bank_offsets(tx, tbank, TEACHER_BETA)
     zt = TEACHER_SCALE * (jnp.einsum("vld,qd->vql", tx, tq) - TEACHER_LAM * off[:, None, :])
+    return taught_losses(z, zt, seen, valid)
+
+
+def taught_losses(z, zt, seen, valid):
+    """The two divergences, from the teacher's (V, Q, L) logits zt to the model's z, over the frames seen."""
+    import jax
+    import jax.numpy as jnp
+
     zt = jax.lax.stop_gradient(jnp.where(seen[:, None, :], zt, -1e9))
     zs = jnp.where(seen[:, None, :], z, -1e9)
 
@@ -332,8 +345,8 @@ def loss(p, batch, layers, heads, key, cfg):
     total = cfg["between"] * between + cfg["within"] * within + cfg["leash"] * leash
     zero = jnp.float32(0.0)
     taught = (zero, zero)
-    if cfg["distil"]:  # the teacher's frames and descriptions follow the batch's own
-        taught = distillation(z, batch[8:])
+    if cfg["distil"]:  # the teacher's frames and descriptions follow the batch's own; the fusion's, its logits
+        taught = taught_losses(z, *batch[8:]) if cfg["fusion"] else distillation(z, batch[8:])
         total = total + cfg["distil"] * (taught[0] + taught[1])
     if not cfg["head"]:  # the adapter alone
         return total, (between, within, leash, zero, zero, zero, *taught)
@@ -354,7 +367,8 @@ class Videos:
     library alone."""
 
     def __init__(self, seed: int, bank: np.ndarray, bank_sample: int, extra: tuple[str, ...] = (),
-                 mix: str = "videos", teacher: tuple[str, ...] = (), share: float | None = None):  # fmt: skip
+                 mix: str = "videos", teacher: tuple[str, ...] = (), share: float | None = None,
+                 fusion: str = "", fusion_weight: float = 0.75):  # fmt: skip
         self.bank, self.bank_sample, self.mix = bank.astype(np.float32), bank_sample, mix
         names = ["didemo"] + [c for c in COLLECTIONS if c in extra and c not in ("didemo", "library")]
         if share is not None:
@@ -394,8 +408,46 @@ class Videos:
         if teacher:
             self.load_teacher(names, zs, sets, first_frame=np.cumsum([0] + [len(z["times"]) for z in zs]),
                               teacher=teacher)  # fmt: skip
+        self.fusion = None
+        if fusion:
+            self.load_fusion(names, sets, fusion, fusion_weight)
         self.rng = random.Random(seed)
         self.np_rng = np.random.default_rng(seed)
+
+    def load_fusion(self, names, sets, tag: str, weight: float) -> None:
+        """The eleventh round's teacher, read from disk as batches need it: each frame through v3 and through v4,
+        each one's bank offset, and the descriptions as PE core B/16's text tower embedded them."""
+        parts, first = [], 0
+        for c in names:
+            stem_ = CACHE / f"{frames_file(COLLECTIONS[c][0])}_teacher_{tag}"
+            a, b = (np.load(f"{stem_}_{x}.npy", mmap_mode="r") for x in ("a", "b"))
+            off = np.load(f"{stem_}_off.npy")
+            assert len(a) == len(b) == len(off), stem_
+            parts.append((first, a, b, off))
+            first += len(a)
+        assert first == len(self.times), "the teacher's frames are the collections' frames, in their order"
+        assert parts[0][1].shape[1] == self.emb.shape[1], "the teacher's first model reads the model's own frames"
+        self.fusion_parts, self.fusion_first = parts, np.array([p[0] for p in parts])
+        self.fusion_text = np.concatenate([np.load(CACHE / f"{s}_text_{FUSION_B}.npy") for _, s in sets])
+        assert len(self.fusion_text) == len(self.text), "PE's embeddings of the same descriptions"
+        self.fusion, self.fusion_weight = tag, weight
+
+    def fusion_logits(self, ta, tb, off, q, qb, mask) -> np.ndarray:
+        """(V, Q, L): the fusion's scores of the batch's frames for its descriptions, as the tenth round fused them
+        (scripts/compare.py, fused): each model's scores corrected by its bank, standardised per description over the
+        batch's frames, added with PE's weight, put back on v3's spread, times SigLIP 2's logit scale."""
+        m = mask[:, None, :]
+        n = float(m.sum())
+
+        def standardised(c):
+            mean = (c * m).sum(axis=(0, 2)) / n
+            spread = np.sqrt(np.maximum((((c - mean[None, :, None]) ** 2) * m).sum(axis=(0, 2)) / n, 1e-12))
+            return (c - mean[None, :, None]) / spread[None, :, None], spread
+
+        za, spread = standardised(np.einsum("vld,qd->vql", ta, q) - FUSION_LAM[0] * off[:, None, :, 0])
+        zb, _ = standardised(np.einsum("vld,qd->vql", tb, qb) - FUSION_LAM[1] * off[:, None, :, 1])
+        z, _ = standardised(za + self.fusion_weight * zb)
+        return (SCALES[ENCODER][0] * spread[None, :, None] * z).astype(np.float32)
 
     def load_teacher(self, names, zs, sets, first_frame, teacher) -> None:
         """So400m's embeddings of the frames it saw, each frame's row among them (-1: unseen), and of the
@@ -466,6 +518,11 @@ class Videos:
             width = self.teacher_emb.shape[1]
             tx, seen = np.zeros((n, length, width), np.float32), np.zeros((n, length), bool)
             tq, valid = np.zeros((n, width), np.float32), np.zeros(n, bool)
+        fused = self.fusion is not None
+        if fused:
+            wb = self.fusion_parts[0][2].shape[1]
+            ta, tb = np.zeros((n, length, dim), np.float32), np.zeros((n, length, wb), np.float32)
+            toff, tqb = np.zeros((n, length, 2), np.float32), np.zeros((n, wb), np.float32)
         for i, v in enumerate(vids):
             s, c = int(self.starts[v]), int(self.counts[v])
             rows = np.arange(s, s + c)
@@ -501,8 +558,14 @@ class Videos:
                 if (row >= 0).any():
                     tx[i, :k][row >= 0] = self.teacher_emb[row[row >= 0]]
                     seen[i, :k], tq[i], valid[i] = row >= 0, self.teacher_text[qi], True
+            if fused:  # a video's frames are all in one collection's files
+                first, a, b, off = self.fusion_parts[int(np.searchsorted(self.fusion_first, rows[0], "right")) - 1]
+                local = rows - first
+                ta[i, :k], tb[i, :k], toff[i, :k], tqb[i] = a[local], b[local], off[local], self.fusion_text[qi]
         drawn = self.np_rng.choice(len(self.bank), self.bank_sample, replace=False)
         out = (x, t, mask, q, inside, ends[:, 0], ends[:, 1], self.bank[drawn])
+        if fused:  # the teacher's logits, every frame seen, every description taught
+            return out + (self.fusion_logits(ta, tb, toff, q, tqb, mask), mask.copy(), np.ones(n, bool))
         return out + ((tx, seen, tq, valid, self.teacher_bank[drawn]) if taught else ())
 
 
@@ -784,15 +847,17 @@ def train(args) -> None:
 
     cfg = {"between": args.between, "within": args.within, "leash": args.leash, "dropout": args.dropout,
            "head": args.head, "negatives": args.negatives, "between_loss": args.between_loss,
-           "distil": args.distil}  # fmt: skip
+           "distil": args.distil, "fusion": bool(args.fusion_teacher)}  # fmt: skip
+    assert not args.fusion_teacher or args.distil, "--fusion-teacher is the teacher of --distil's losses"
     tuning = DiDeMo(args)
     extra = tuple(e for e in (args.extra or "").split(",") if e)
-    teacher = tuple(e for e in (args.teacher or "").split(",") if e) if args.distil else ()
+    teacher = tuple(e for e in (args.teacher or "").split(",") if e) if args.distil and not args.fusion_teacher else ()
     share = None
     if args.library:  # the eighth round: a library learnt from automatic descriptions (scripts/learn.py prepare)
         COLLECTIONS["library"] = (f"learn_{args.library}_frames", (f"learn_{args.library}",), None)
         share = args.library_share
-    data = Videos(args.seed, tuning.kept.bank, args.bank_sample, extra, args.mix, teacher, share)
+    data = Videos(args.seed, tuning.kept.bank, args.bank_sample, extra, args.mix, teacher, share,
+                  args.fusion_teacher, args.fusion_weight)  # fmt: skip
     if args.library:  # no check (a library has nothing to check against): the steps from the passes, the last kept
         args.batch = min(args.batch, len(data.videos))  # at most one description of a video in a batch
         args.steps = max(1, math.ceil(args.passes * len(data.of_collection[-1]) / (args.batch * share)))
@@ -1070,6 +1135,13 @@ def main() -> None:
     )
     ap.add_argument("--distil", type=float, default=0.0, help="weight of the teacher's losses (So400m)")
     ap.add_argument("--teacher", default="charades", help="the collections whose frames the teacher saw")
+    ap.add_argument(
+        "--fusion-teacher",
+        default="",
+        help="train: the eleventh round's teacher instead, v3 and v4 "
+        "fused, as scripts/round11.py teacher prepared it under this tag (fusion, fusion-no-charades...)",
+    )
+    ap.add_argument("--fusion-weight", type=float, default=0.75, help="train: PE's weight in the teacher's fusion")
     ap.add_argument(
         "--check-charades",
         action="store_true",

@@ -660,6 +660,18 @@ TUNED10 = ROOT / "results" / "round10_screen.json"
 COST9 = ROOT / "results" / "round9_cost.json"
 # reported beside, deciding nothing: each left-out run on the test it left out, against v3's
 LEFT_OUT9 = {"charades": ("v4-no-charades", "v3-no-charades"), "youcook2": ("v4-no-youcook2", "v3-no-youcook2")}
+# the eleventh round's: the tenth round's fusion of v3 and v4 tested (part 1), then v5, whenframe's model taught by
+# it (part 2, scripts/round11.py); both encoders' indexing cost, each frame decoded once
+TUNED11 = ROOT / "results" / "round11_tuned.json"
+TEST11 = ROOT / "results" / "round11_test.json"
+TEST11_V5 = ROOT / "results" / "round11_test_v5.json"
+COST11 = ROOT / "results" / "round11_cost.json"
+FUSION11 = "siglip2-base+pe-core-b16"
+LEFT_OUT11 = {
+    1: {"charades": ("fusion-no-charades", "v3-no-charades"), "youcook2": ("fusion-no-youcook2", "v3-no-youcook2")},
+    2: {"charades": ("v5-no-charades", "v3-no-charades"), "youcook2": ("v5-no-youcook2", "v3-no-youcook2")},
+}
+BENCHES = ("didemo", "charades", "youcook2", "unav")
 
 
 def criteria9(res: dict) -> dict:
@@ -677,12 +689,31 @@ def criteria9(res: dict) -> dict:
                          "32": ratio <= 1.2}}  # fmt: skip
 
 
+def criteria11(res: dict, part: int) -> dict:
+    """The eleventh round's criteria (docs/PROTOCOL.md). Part 1: 33, the fusion's mean of the four primary metrics
+    at least 1 point above v3's, with a sign test p < 0.05; 34, at most 1 point lost on each test against v3; 35,
+    indexing with both encoders, each frame decoded once, at most 2 times SigLIP 2 B/16's cost
+    (results/round11_cost.json). Part 2: 36 and 37, as 33 and 34, for v5."""
+    new, (first, second) = ("fusion", ("33", "34")) if part == 1 else ("v5", ("36", "37"))
+    changes = {k: res[new][k]["value"] - res["v3"][k]["value"] for k in BENCHES}
+    gain, pair = res[new]["mean"] - res["v3"]["mean"], res["pairs"][f"{new} vs v3"]
+    left = {k: {"new": n, "old": o, "change": res[n][k]["value"] - res[o][k]["value"]}
+            for k, (n, o) in LEFT_OUT11[part].items() if n in res and o in res}  # fmt: skip
+    out = {f"{new}_vs_v3": {"gain": gain, "changes": changes, **pair}, "left_out": left}
+    met = {first: gain >= 0.01 and pair["p"] < 0.05, second: min(changes.values()) >= -0.01}
+    if part == 1:
+        cost = json.loads(COST11.read_text())
+        out["cost_ratio"] = cost[FUSION11]["cpu_min_per_hour"] / cost["siglip2-base"]["cpu_min_per_hour"]
+        met["35"] = out["cost_ratio"] <= 2.0
+    return out | {"criteria": met}
+
+
 def tune(args) -> None:
     """Each candidate on the tuning sets: its speech and sound weights chosen on the third and fourth rounds' grids,
     and the mean of the primary metrics: DiDeMo, YouCook2 and UnAV-100 (sixth round; Charades-STA had none), and
     Charades-STA's 500 held-out training videos (seventh round, --round 7)."""
     b = Benchmarks(args)
-    path = {7: TUNED7, 8: TUNED8, 9: TUNED9, 10: TUNED10}.get(args.round, TUNED)
+    path = {7: TUNED7, 8: TUNED8, 9: TUNED9, 10: TUNED10, 11: TUNED11}.get(args.round, TUNED)
     out = json.loads(path.read_text()) if path.exists() else {}
     for spec in args.candidates.split(","):
         c = candidate(spec)
@@ -737,6 +768,8 @@ def evaluate(args) -> None:
         tuned = json.loads(TUNED7.read_text()) | tuned
     if args.round == 9:  # v3 and its left-out runs keep the seventh round's
         tuned = json.loads(TUNED7.read_text()) | json.loads(TUNED9.read_text())
+    if args.round == 11:  # v3 and its left-out runs keep the seventh round's weights, So400m the sixth's
+        tuned = json.loads(TUNED7.read_text()) | tuned | json.loads(TUNED11.read_text())
     b = Benchmarks(args)
     res, items = {"candidates": args.candidates.split(",")}, {}
     for name in res["candidates"]:
@@ -750,23 +783,27 @@ def evaluate(args) -> None:
         res[name] = {k: {"value": v["value"], "full": v["full"]} for k, v in scores.items()}
         res[name]["mean"] = float(np.mean([v["value"] for v in scores.values()]))
         res[name]["tuned"] = t
-        if args.round in (7, 9) and c.weights is not None:
+        if args.round in (7, 9, 11) and c.weights is not None:
             res[name]["adapter_cost"] = adapter_cost(b, c)
         print(f"{name}: " + ", ".join(f"{k} {100 * v['value']:.1f}" for k, v in scores.items())
               + f"; mean {100 * res[name]['mean']:.2f}", flush=True)  # fmt: skip
     names = res["candidates"]
     res["ranking"] = sorted(names, key=lambda n: -res[n]["mean"])
     res["pairs"] = {f"{a} vs {b_}": paired(items[a], items[b_]) for a in names for b_ in names if a != b_}
-    out = {7: TEST7, 9: TEST9}.get(args.round, TEST)
-    if args.round in (7, 9):  # the earlier round's candidates, measured by the same code: the same numbers
-        key, before = {7: ("sixth", TEST), 9: ("seventh", TEST7)}[args.round]
+    out = {7: TEST7, 9: TEST9, 11: TEST11 if args.part == 1 else TEST11_V5}.get(args.round, TEST)
+    if args.round in (7, 9, 11):  # the earlier rounds' candidates, measured by the same code: the same numbers
+        key, before = {7: ("sixth", TEST), 9: ("seventh", TEST7), 11: ("earlier", TEST7)}[args.round]
         before = json.loads(before.read_text())
+        if args.round == 11:  # v3's and its left-out runs' in the ninth round; part 1's fusion in part 2
+            before |= json.loads(TEST9.read_text()) | (json.loads(TEST11.read_text()) if args.part == 2 else {})
         res[f"{key}_round_unchanged"] = {
             n: all(res[n][k]["value"] == before[n][k]["value"] for k in scores) for n in names if n in before
         }
         print(f"the {key} round's numbers again: {res[f'{key}_round_unchanged']}")
     if args.round == 9:
         res |= criteria9(res)
+    if args.round == 11:
+        res |= criteria11(res, args.part)
     out.write_text(json.dumps(res, indent=1))
     print("ranking: " + " > ".join(f"{n} ({100 * res[n]['mean']:.2f})" for n in res["ranking"]))
     print(f"wrote {out.relative_to(ROOT)}")
@@ -841,20 +878,29 @@ def cost(args) -> None:
         )  # ffmpeg
 
     names = sorted(str(n) for n in np.load(CACHE / f"{BASE['didemo-test']}.npz")["names"])[: args.cost_videos]
-    dest = COST9 if args.round == 9 else COST  # the ninth round's: both encoders measured again, one after the other
+    # the ninth round's: both encoders measured again, one after the other; the eleventh's: SigLIP 2 B/16 again,
+    # then SigLIP 2 B/16 and PE core B/16 together (A+B), each frame decoded once and embedded by both
+    dest = {9: COST9, 11: COST11}.get(args.round, COST)
     out = json.loads(dest.read_text()) if dest.exists() else {}
     for m in args.models.split(","):
-        enc = Encoder(m, backend="openvino")
-        enc.encode_images(np.zeros((1, enc.size, enc.size, 3), np.uint8))  # compiled before the clock starts
+        encs = [Encoder(x, backend="openvino") for x in m.split("+")]
+        assert len({e.size for e in encs}) == 1, "decoded once for every encoder: the same frame size"
+        size = encs[0].size
+        for enc in encs:
+            enc.encode_images(np.zeros((1, size, size, 3), np.uint8))  # compiled before the clock starts
         decode = encode = seconds = 0.0
+        each = [0.0] * len(encs)
         frames_kept = 0
         for name in names:
             path = Path(args.videos) / name
             c0 = cpu()
-            _, frames = sample_frames(path, 1.0, enc.size)
+            _, frames = sample_frames(path, 1.0, size)
             keep = drop_repeats(frames)
             c1 = cpu()
-            enc.encode_images(frames[keep])
+            for i, enc in enumerate(encs):
+                ci = cpu()
+                enc.encode_images(frames[keep])
+                each[i] += cpu() - ci
             c2 = cpu()
             decode, encode = decode + c1 - c0, encode + c2 - c1
             seconds += probe(path).duration or len(frames)
@@ -864,6 +910,8 @@ def cost(args) -> None:
                   "decode_cpu_min_per_hour": decode / 60 / hours, "encode_cpu_min_per_hour": encode / 60 / hours,
                   "cpu_min_per_hour": (decode + encode) / 60 / hours,
                   "encode_ms_per_frame": 1000 * encode / frames_kept}  # fmt: skip
+        if len(encs) > 1:
+            out[m]["encode_cpu_min_per_hour_each"] = {e.name: x / 60 / hours for e, x in zip(encs, each, strict=True)}
         print(
             f"{m}: {out[m]['cpu_min_per_hour']:.1f} CPU minutes per hour of video "
             f"({out[m]['encode_ms_per_frame']:.0f} ms per frame embedded)",
@@ -882,12 +930,14 @@ def main() -> None:
     ap.add_argument(
         "--round",
         type=int,
-        choices=[6, 7, 8, 9, 10],
+        choices=[6, 7, 8, 9, 10, 11],
         default=6,
         help="tune, evaluate: the sixth round's or a later one's (results/roundN_*.json; from the seventh, "
         "Charades-STA's held-out videos among the tuning sets; 10, the tenth round's screening, tunes only); cost: 9 "
-        "for the ninth round's measure",
+        "or 11 for the ninth or eleventh round's measure",
     )
+    ap.add_argument("--part", type=int, choices=[1, 2], default=1,
+                    help="evaluate --round 11: part 1, the fusion's test; part 2, v5's")  # fmt: skip
     ap.add_argument(
         "--candidates",
         default="b32,base,so400m,v1",

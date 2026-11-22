@@ -1372,3 +1372,107 @@ Charades-STA's 1,551, 392 of YouCook2's 2,534 and 138 of UnAV-100's 471.
 1.70 points: fusion is proposed for an eleventh round. Guidance's best, w
 0.25, lowers v3's mean by 0.83, and the round trip lowers its reference's by
 0.78: both are dropped.
+
+## Eleventh round: v3 and v4 together, and v5 taught by them
+
+Written before any of its numbers was computed.
+
+**The question.** In the tenth round, v3's scores fused with v4's raised the
+mean of the four tuning metrics by 1.70 points, for both encoders' indexing
+time. This round tests the fusion once. It also asks whether whenframe's
+model, taught by the fusion, can find as much at v3's cost
+(`scripts/round11.py`).
+
+### Part 1: the fusion
+
+Fixed in the tenth round; nothing is chosen again:
+
+- v3's scores of SigLIP 2 B/16's frames and v4's of PE core B/16's, each
+  corrected by its own query bank, standardised per query, added with PE's
+  weight 0.75 and put back on v3's scale (`scripts/compare.py`, `fused`);
+- its speech and sound weights, chosen then on the tuning sets: speech
+  0.005, what is said up to 5 seconds around a frame; sound 1.5.
+
+Reported beside, deciding nothing: v3's and v4's runs without Charades-STA's
+videos, fused the same way, on Charades-STA's test, against v3's run without
+them; and the same without YouCook2's. Their speech and sound weights are
+chosen on the tuning sets first, as every candidate's.
+
+### Part 2: v5, whenframe's model taught by the fusion
+
+On SigLIP 2 B/16's frames, so that indexing costs what it costs with v3:
+
+- v3's recipe, as `scripts/round9.py` trained v4 with it: the leash's weight
+  30, width 256 and two layers, data seed 0, 6,000 steps, a check every 500
+  on DiDeMo's tuning R@5 and Charades-STA's held-out R1, the best check
+  kept, exported with alpha 1;
+- with the seventh round's teacher's losses (`--distil`): Kullback-Leibler
+  divergences from the teacher's distributions to the model's, over the
+  batch's videos by their smooth best frames, and over the frames of each
+  description's own video (Hinton et al., 2015; for text-video retrieval,
+  TeachCLIP, Tian et al., CVPR 2024).
+
+The teacher is the fusion, scored as the search scores
+(`scripts/round11.py teacher`, `scripts/temporal.py --fusion-teacher`):
+
+- each training frame through v3 (SigLIP 2 B/16's embedding) and through v4
+  (PE core B/16's, embedded at the same instants in the ninth round), a
+  video at a time over all its frames;
+- each against the description as its encoder's text tower embeds it,
+  corrected by its encoder's query bank, computed over the whole bank
+  (DiDeMo's training descriptions; beta 50 and strength 1 for both);
+- standardised per description over the batch's frames, added with PE's
+  weight 0.75, put back on v3's scale (its spread per description over the
+  same frames), times SigLIP 2 B/16's logit scale, as the model's own scores
+  are.
+
+Every collection is taught, as the teacher has every collection's frames. In
+the seventh round, So400m's losses (weight 1, on Charades-STA's frames alone)
+lowered the mean by 0.31 points and were not kept.
+
+Choices on the tuning sets, in this order. Each is kept only if it raises the
+mean of the four tuning metrics, with each run's speech and sound weights
+chosen there:
+
+1. the teacher's losses with weight 1, against v3 (39.63);
+2. weight 3 instead, against the run kept so far.
+
+v5 goes to the test only if the run kept raises v3's mean on the tuning sets
+by at least 1 point (the tenth round's rule). In that case, before the test,
+two left-out runs are trained with the recipe chosen: one without
+Charades-STA's videos, one without YouCook2's. Each is taught by the fusion
+of v3's and v4's runs without those videos, and is reported beside, as v3's
+were. If the rule is not met, v5 is reported and dropped.
+
+### Test and criteria
+
+Once for each part, on the four tests, with the four primary metrics and the
+sign test of the earlier rounds:
+
+- part 1 now, as nothing is left to choose: v3 and the fusion;
+- part 2 once v5's choices are recorded here, if v5 goes to the test: v5,
+  with v3 and the fusion again. Nothing of part 2's recipe changes after
+  part 1's test.
+
+Reported beside, deciding nothing: SigLIP 2 So400m (`--mode large` today) and
+the left-out runs.
+
+33. The fusion's mean of the four primary metrics is at least 1 point higher
+    than v3's, with a sign test p < 0.05.
+34. The fusion loses at most 1 point on each of the four tests against v3.
+35. Indexing with both encoders, each frame decoded once, costs at most 2
+    times what SigLIP 2 B/16 alone costs: CPU minutes per hour of DiDeMo's
+    test videos, decoding included, with OpenVINO, both measured again one
+    after the other, as the other encoders' costs are.
+
+If 33, 34 and 35 hold, `--mode large` indexes a new library with SigLIP 2
+B/16 and PE core B/16 and searches it through v3 and v4 together, as
+measured. So400m stays available as `--mode so400m`, and libraries already
+indexed keep their encoders.
+
+36. v5's mean is at least 1 point higher than v3's, with a sign test p <
+    0.05.
+37. v5 loses at most 1 point on each of the four tests against v3.
+
+If 36 and 37 hold, a new library in the standard mode goes through v5 instead
+of v3; libraries already indexed keep v3.
