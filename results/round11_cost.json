@@ -7,5 +7,18 @@
   "encode_cpu_min_per_hour": 3.4551783178964706,
   "cpu_min_per_hour": 5.3632356510029195,
   "encode_ms_per_frame": 66.36127906486932
+ },
+ "siglip2-base+pe-core-b16": {
+  "videos": 100,
+  "hours": 1.5198605494444437,
+  "frames": 4748,
+  "decode_cpu_min_per_hour": 1.9433723822533042,
+  "encode_cpu_min_per_hour": 7.41456632591669,
+  "cpu_min_per_hour": 9.357938708169995,
+  "encode_ms_per_frame": 142.40657350463366,
+  "encode_cpu_min_per_hour_each": {
+   "siglip2-base": 3.561819417344193,
+   "pe-core-b16": 3.8526780316394
+  }
  }
 }
