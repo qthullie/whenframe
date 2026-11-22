@@ -1,0 +1,20 @@
+{
+ "siglip2-base": {
+  "videos": 100,
+  "hours": 1.5198605494444437,
+  "frames": 4748,
+  "decode_cpu_min_per_hour": 2.4193542414208586,
+  "encode_cpu_min_per_hour": 4.433189524611028,
+  "cpu_min_per_hour": 6.852543766031887,
+  "encode_ms_per_frame": 85.14528053917444
+ },
+ "pe-core-b16": {
+  "videos": 100,
+  "hours": 1.5198605494444437,
+  "frames": 4748,
+  "decode_cpu_min_per_hour": 2.4377827961613585,
+  "encode_cpu_min_per_hour": 4.638462940504797,
+  "cpu_min_per_hour": 7.076245736666155,
+  "encode_ms_per_frame": 89.08782855939315
+ }
+}
