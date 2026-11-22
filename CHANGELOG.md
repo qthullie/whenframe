@@ -28,6 +28,14 @@
   at best, against 37.82), so it was not tested and the tool is unchanged.
   Describing costs about 20 CPU minutes per hour of video
   ([docs/RESULTS.md](https://github.com/qthullie/whenframe/blob/main/docs/RESULTS.md)).
+- The ninth round measured Perception Encoder's PE core B/16 in place of
+  SigLIP 2 B/16, at the same indexing cost (1.03 times), and whenframe's
+  model trained on its frames with v3's recipe (v4; `scripts/pe_core.py`,
+  `scripts/round9.py`). Alone, PE finds more than SigLIP 2 B/16 (mean 39.51
+  against 38.07, sign test p = 2.8e-07). v4 finds as much as v3 (41.69
+  against 41.90, p = 0.77): more on DiDeMo, Charades-STA and UnAV-100, 4.7
+  points less on YouCook2. Criteria 30 and 31 are not met, so the tool keeps
+  SigLIP 2 B/16 and v3.
 - The sixth round compares SigLIP 2 B/32, B/16, So400m and B/16 with the
   model, on the same frames of DiDeMo, Charades-STA, YouCook2 and UnAV-100:
   mean of the four primary metrics 36.80, 38.07, 40.63 and 38.65, each step

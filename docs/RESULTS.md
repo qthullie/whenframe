@@ -1058,3 +1058,121 @@ On DiDeMo's test library, the one criterion 29 names, decoding, describing
 and embedding came to 22.9 CPU minutes per hour of video. Learning (about
 0.5 on the tuning sets) would have kept it under the 30 the criterion
 allowed. No criterion was judged, since the test was not run.
+
+## Ninth round: PE core B/16 in place of SigLIP 2 B/16
+
+The ninth round of the protocol ([PROTOCOL.md](PROTOCOL.md)) asked whether a
+better encoder at the same cost finds more. Meta's Perception Encoder (PE
+core B/16, Bolya et al., 2025; Apache License 2.0) was trained as CLIP is,
+then on 22 million videos described by its authors' captioning model. Its
+image tower is the size of SigLIP 2 B/16's.
+
+- Stage 1 compared the two encoders alone on the tuning sets. PE's mean was
+  2.34 points higher, so stage 2 ran.
+- Stage 2 trained whenframe's model on PE's frames with v3's recipe,
+  unchanged (v4), and its two left-out runs. Their numbers were recorded
+  before the test.
+- The test was run once. SigLIP 2 B/16's, v3's and its left-out runs'
+  numbers came out the same as in the seventh round.
+
+<!-- table round9-criteria -->
+| criterion (fixed before its test run) | measured on test | met |
+|---|---|---|
+| 30. v4's mean is at least 1 point higher than v3's, sign test p < 0.05 | -0.21 points; 865 items better, 852 worse, p = 0.77 | no |
+| 31. v4 loses at most 1 point on each test against v3 | DiDeMo +1.3; Charades-STA +0.6; YouCook2 -4.7; UnAV-100 +2.1 | no |
+| 32. indexing with PE core B/16 costs at most 1.2 times what SigLIP 2 B/16 costs | 1.03 times (7.1 against 6.9 CPU min per hour, decoding included) | yes |
+<!-- /table -->
+
+Two of the three criteria are not met, so nothing changes: a new library in
+the standard mode keeps SigLIP 2 B/16 and v3. Over the four benchmarks, v4
+finds as much as v3 (41.69 against 41.90, p = 0.77). It finds more on
+DiDeMo, Charades-STA and UnAV-100, and 4.7 points less on YouCook2. PE costs
+about what SigLIP 2 B/16 costs to index: both were measured again, one after
+the other, on the same 100 test videos (`results/round9_cost.json`).
+
+### On the test sets
+
+<!-- table round9-test -->
+| test sets, ranked by the mean | DiDeMo R@5 | Charades-STA R1 | YouCook2 R@5 | UnAV-100 P@10 | mean | indexing, CPU min per hour |
+|---|---|---|---|---|---|---|
+| SigLIP 2 B/16 + whenframe's model v3 | 29.4 | 53.3 | 32.0 | 52.9 | **41.90** | 6.9 |
+| PE core B/16 + whenframe's model v4 | 30.7 | 53.9 | 27.3 | 54.9 | **41.69** | 7.1 |
+| PE core B/16 alone | 29.2 | 49.8 | 25.5 | 53.5 | **39.51** | 7.1 |
+| SigLIP 2 B/16 alone | 27.6 | 45.7 | 25.8 | 53.2 | **38.07** | 6.9 |
+<!-- /table -->
+
+<!-- table round9-pairs -->
+| the first finds more than the second? | items better | items worse | sign test p | said |
+|---|---|---|---|---|
+| SigLIP 2 B/16 + whenframe's model v3 / PE core B/16 + whenframe's model v4 | 852 | 865 | 0.77 | no |
+| SigLIP 2 B/16 + whenframe's model v3 / PE core B/16 alone | 1043 | 819 | 2.3e-07 | yes |
+| SigLIP 2 B/16 + whenframe's model v3 / SigLIP 2 B/16 alone | 817 | 383 | 1.3e-36 | yes |
+| PE core B/16 + whenframe's model v4 / PE core B/16 alone | 630 | 392 | 9.6e-14 | yes |
+| PE core B/16 + whenframe's model v4 / SigLIP 2 B/16 alone | 1140 | 690 | 5.1e-26 | yes |
+| PE core B/16 alone / SigLIP 2 B/16 alone | 935 | 725 | 2.8e-07 | yes |
+<!-- /table -->
+
+**PE alone is the better encoder.** Without whenframe's model, it finds
+more than SigLIP 2 B/16 over the four benchmarks (39.51 against 38.07,
+p = 2.8e-07):
+
+- DiDeMo: 29.2 against 27.6 %;
+- Charades-STA: 49.8 against 45.7 %;
+- UnAV-100: 53.5 against 53.2 %;
+- YouCook2: 25.5 against 25.8 %, level.
+
+**whenframe's model adds less to PE's frames.** Over the four benchmarks it
+adds 2.2 points to PE and 3.8 to SigLIP 2 B/16. The difference is on
+Charades-STA and YouCook2, whose training videos the model has learnt from
+since the seventh round:
+
+- Charades-STA: 4.1 points to PE, 7.6 to SigLIP 2 B/16;
+- YouCook2: 1.7 points to PE, 6.2 to SigLIP 2 B/16.
+
+On YouCook2 the loss is not only in finding the right video among the
+others. When the video is given, v4 places a step less well than v3 too (R1
+at IoU >= 0.5: 32.5 against 38.4 %). Trained on the same videos, the model
+learnt much less there on PE's frames: when the video is given, it adds 1.5
+points to PE alone and 8.4 to SigLIP 2 B/16. A likely reason, not tested:
+v3's recipe was chosen on SigLIP 2 B/16's frames (seventh round), and v4
+took it unchanged, as fixed before the round. A recipe chosen on PE's own
+frames was not tried.
+
+### A library never seen
+
+<!-- table round9-left-out -->
+| the test of a collection left out of training | SigLIP 2 B/16 alone | v3 trained without it | PE core B/16 alone | v4 trained without it | v4 against v3, both without it |
+|---|---|---|---|---|---|
+| Charades-STA, R1 at IoU >= 0.5 | 45.7 | 46.5 | 49.8 | 50.7 | +4.2 |
+| YouCook2, R@5, speech + spans | 25.8 | 26.1 | 25.5 | 25.2 | -1.0 |
+<!-- /table -->
+
+Reported beside, deciding nothing. Trained without Charades-STA's videos,
+v4 places 50.7 % of its test moments, 4.2 points more than v3 trained
+without them. Nearly all of it is the encoder's: PE alone places 49.8 %,
+SigLIP 2 B/16 alone 45.7 %. Trained without YouCook2's videos, v4 finds
+25.2 % of its steps, against 26.1 % for v3; alone, the two encoders are level
+there (25.5 and 25.8 %).
+
+### v4, trained on the tuning sets
+
+<!-- table round9-tuning -->
+| tuning sets | DiDeMo R@5 | Charades-STA R1 | YouCook2 R@5 | UnAV-100 P@10 | mean |
+|---|---|---|---|---|---|
+| SigLIP 2 B/16 alone | 31.3 | 44.9 | 29.4 | 41.0 | 36.66 |
+| PE core B/16 alone | 35.0 | 47.8 | 29.9 | 43.3 | 39.00 |
+| SigLIP 2 B/16 + whenframe's model v3 | 33.7 | 50.6 | 32.1 | 42.1 | 39.63 |
+| PE core B/16 + whenframe's model v4 | 35.7 | 52.7 | 30.5 | 43.6 | 40.63 |
+| *v3 without Charades-STA's videos (beside)* | 34.0 | 46.4 | 32.6 | 42.1 | 38.79 |
+| *v4 without Charades-STA's videos (beside)* | 36.2 | 48.8 | 31.2 | 43.3 | 39.88 |
+| *v3 without YouCook2's videos (beside)* | 34.0 | 51.6 | 29.1 | 41.5 | 39.04 |
+| *v4 without YouCook2's videos (beside)* | 35.8 | 53.1 | 28.8 | 44.6 | 40.58 |
+<!-- /table -->
+
+On the tuning sets, v4's mean was 1.00 point above v3's. It was lower on
+YouCook2 already (30.5 against 32.1 %). On the test, that gap grew to 4.7
+points. Its speech and sound weights were chosen there:
+
+- speech 0.005, what is said within the moment (v3 counts what is said up
+  to 5 seconds around a frame);
+- sound 1 (v3: 2).

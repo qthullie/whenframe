@@ -259,6 +259,11 @@ All tables, the costs and the figures: [docs/RESULTS.md](https://github.com/qthu
   mean of the four tuning sets. On UnAV-100, which it never saw, it loses 0.3
   points, and So400m finds more. It was not measured on videos of an hour or
   more.
+- A better encoder at the same cost did not beat it either. Alone, PE core
+  B/16 finds more than SigLIP 2 B/16 (mean 39.51 against 38.07). With
+  whenframe's model trained on its frames, it finds as much as v3 (41.69
+  against 41.90) and 4.7 points less on YouCook2, so the tool keeps SigLIP 2
+  B/16 and v3 (ninth round).
 - Several criteria set in advance were not met; the results page says which and
   why.
 
