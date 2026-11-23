@@ -32,9 +32,9 @@ whenframe search "the dog jumps into the pool"
 <!-- table readme-compare -->
 |  | whenframe, on a CPU | others |
 |---|---|---|
-| **Find the video** among 979 (DiDeMo, in the first 5) | **48.1 %** | 25.4 % EventFormer (2024), trained on DiDeMo, on a GPU · 30.7 % one image per video |
-| **Find the moment** among 979 videos (DiDeMo, in the first 5) | **29.4 %** | 2.3 % one keyframe per shot, as home video tools index |
-| **Place the moment** in a given video, never trained on it (Charades-STA, first answer) | **46.5 %** | 43.7 % VTG-GPT · 50.0 % TFVTG · 56.8 % a 7B vision-language model |
+| **Find the video** among 979 (DiDeMo, in the first 5) | **51.1 %** | 25.4 % EventFormer (2024), trained on DiDeMo, on a GPU · 30.7 % one image per video |
+| **Find the moment** among 979 videos (DiDeMo, in the first 5) | **32.0 %** | 2.3 % one keyframe per shot, as home video tools index |
+| **Place the moment** in a given video, never trained on it (Charades-STA, first answer) | **49.9 %** | 43.7 % VTG-GPT · 50.0 % TFVTG · 56.8 % a 7B vision-language model |
 <!-- /table -->
 
 Every number, how it was measured, and the protocol written before each test:
@@ -42,5 +42,5 @@ Every number, how it was measured, and the protocol written before each test:
 [protocol](https://github.com/qthullie/whenframe/blob/main/docs/PROTOCOL.md) ·
 [tutorial](https://github.com/qthullie/whenframe/blob/main/docs/TUTORIAL.md).
 
-MIT licence. The weights of whenframe's own model are for research and
+MIT licence. The weights of whenframe's own models are for research and
 non-commercial use ([credits](https://github.com/qthullie/whenframe/blob/main/docs/CREDITS.md)).

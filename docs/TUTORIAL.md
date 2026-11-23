@@ -9,22 +9,23 @@ whenframe needs Python 3.10 or later and ffmpeg.
 pip install git+https://github.com/qthullie/whenframe
 ```
 
-Two extras are worth adding:
+One extra is worth adding, to search what is said:
 
 ```bash
-pip install "whenframe[fast] @ git+https://github.com/qthullie/whenframe"    # OpenVINO for the image encoder
-pip install "whenframe[speech] @ git+https://github.com/qthullie/whenframe"  # Whisper, to search what is said
+pip install "whenframe[speech] @ git+https://github.com/qthullie/whenframe"  # Whisper
 ```
 
-With `fast`, OpenVINO encodes the frames instead of ONNX Runtime, in bfloat16
-on processors that compute in it (recent Intel Xeon with AMX, AMD Zen 4 and
-later). On the DiDeMo test videos, on the Xeon of the benchmark, encoding took
-4.8 CPU minutes per hour of video instead of 22.6, and the search found as many
+OpenVINO encodes the frames, in bfloat16 on processors that compute in it
+(recent Intel Xeon with AMX, AMD Zen 4 and later). On the DiDeMo test videos,
+on the Xeon of the benchmark, SigLIP 2's encoding took 4.8 CPU minutes per hour
+of video instead of 22.6 with ONNX Runtime, and the search found as many
 moments ([RESULTS.md](RESULTS.md), third round). Other processors were not
-measured. `--backend onnxruntime` keeps ONNX Runtime.
+measured. `--backend onnxruntime` runs SigLIP 2's image encoder with ONNX
+Runtime; PE core B/16's runs with OpenVINO either way.
 
-The first run downloads the SigLIP 2 model (about 1.5 GB) into
-`~/.cache/whenframe` (or `$WHENFRAME_CACHE`); `--speech` downloads Whisper
+The first run downloads the models (about 2.6 GB: SigLIP 2 B/16 and PE core
+B/16) into `~/.cache/whenframe` (or `$WHENFRAME_CACHE`), each file checked
+against its SHA-256 where whenframe pins one; `--speech` downloads Whisper
 (145 MB for base, 480 MB for small) the same way. Nothing else goes over the
 network. whenframe turns off ONNX Runtime's usage telemetry
 (`ORT_DISABLE_TELEMETRY=1`) and keeps OpenVINO's from loading (`import
@@ -48,32 +49,25 @@ them as photos. `--no-photos`, the first time a library is indexed, keeps it to
 videos. A video's moment is judged on its best frame among about ten, a photo
 on its only one, which can favour videos slightly; it was not measured.
 
-A library is built in one of five modes, chosen the first time it is indexed:
+Each frame is looked at by two image encoders, Google's SigLIP 2 B/16 and
+Meta's PE core B/16, which learnt from different images and miss different
+things. Each encoder's frames then go through whenframe's own model trained on
+its frames (v3 and v4, below), and a search adds the two encoders' scores. On
+the four test sets, this found the most of everything measured: 43.72 on the
+mean of their primary metrics, more on each of them than SigLIP 2 B/16 with v3
+alone (41.90, the default until the eleventh round) and than SigLIP 2 So400m
+(40.63). Indexing costs about 9 CPU minutes per hour of video, each frame
+decoded once for both encoders, and a search holds both text towers in memory
+(at most 4.7 GB for a search of the demo's three films). The measured numbers
+are in [RESULTS.md](RESULTS.md), "Eleventh round".
 
-| `--mode` | model |
-|---|---|
-| `standard` (default) | SigLIP 2 B/16, through whenframe's model v3 |
-| `large` | SigLIP 2 B/16 and Meta's PE core B/16, through whenframe's models v3 and v4 together (another 1.1 GB download; needs OpenVINO) |
-| `economy` | SigLIP 2 B/32 (another 1.5 GB download) |
-| `precision` | B/16 and B/32, their scores combined |
-| `so400m` | SigLIP 2 So400m (a 4.3 GB download; OpenVINO advised) |
-
-The large mode found the most on the four test sets: 43.72 on the mean of
-their primary metrics, against 41.90 for the standard mode, more on each of
-them, for 1.7 times the indexing time (both encoders look at the same frames,
-decoded once); its index takes 2.2 times the space, and a search holds both
-text towers in memory (at most 4.7 GB for a search of the demo's three films,
-against 2.1 GB in the standard mode). So400m, the large mode
-until the eleventh round, found less than the standard mode (40.63) for 3.4
-times its CPU time. The economy mode costs about a third of the CPU time and
-finds fewer moments; the precision mode costs more and, on DiDeMo, found as
-many as SigLIP 2 B/16 alone. The measured numbers are in
-[RESULTS.md](RESULTS.md), "Second round", "Sixth round", "Seventh round" and
-"Eleventh round".
+Libraries built by earlier versions, in their standard, economy, precision or
+large modes, keep the models they were built with: they are searched and kept
+up to date as before.
 
 The index lives in `~/.local/share/whenframe/library` (or `$WHENFRAME_LIBRARY`,
-or `--library DIR`). It takes about 5 MB per hour of video (11 in large mode).
-A search copies it into memory as float32, about 11 MB per hour of video, when
+or `--library DIR`). It takes about 11 MB per hour of video.
+A search copies it into memory as float32, about 22 MB per hour of video, when
 that fits in a quarter of the computer's memory (`WHENFRAME_MEMORY=2`, in
 gigabytes, sets another limit); a larger library is read from its files a block
 at a time, which the system caches as it can. On a simulated library of 300
@@ -87,32 +81,32 @@ whenframe stats      # what is indexed
 whenframe compact    # reclaim space after videos were re-indexed or removed
 ```
 
-### whenframe's own model
+### whenframe's own models
 
-In the standard mode, each video's frames go through whenframe's own model
-before they are stored: two transformer layers that add to each frame's
-embedding what the frames around it show, trained on the moments described
-in the training videos of DiDeMo (with TEMPO-HL's sentences), MSR-VTT,
-Charades-STA and YouCook2. On the DiDeMo test it put the right moment among
-the first five 29.4 % of the time instead of 27.6 %, as often as SigLIP 2
-So400m (29.5 %), and over four benchmarks it found more than So400m
-([RESULTS.md](RESULTS.md), "Seventh round"). In the large mode, PE core B/16's
-frames go through v4, the same model trained on PE's frames, and both models'
-scores are searched together ("Eleventh round"). Most of its gain on Charades-STA
-and YouCook2 comes from their training videos: on videos unlike any it
-learnt from, expect less (on UnAV-100, which it never saw, it finds 0.3
-points fewer than SigLIP 2 alone). It costs about 0.03 CPU minutes per hour
-of video, against some 7 for SigLIP 2's image tower. Photos keep their
-embedding, and the other modes do not use it.
+Each video's frames go through whenframe's own models before they are stored:
+two transformer layers that add to each frame's embedding what the frames
+around it show, v3 for SigLIP 2 B/16's frames and v4, the same recipe, for PE
+core B/16's; both trained on the moments described in the training videos of
+DiDeMo (with TEMPO-HL's sentences), MSR-VTT, Charades-STA and YouCook2. With
+SigLIP 2 B/16 alone, v3 put the right moment among the first five of DiDeMo's
+test 29.4 % of the time instead of 27.6 %, as often as SigLIP 2 So400m
+(29.5 %; [RESULTS.md](RESULTS.md), "Seventh round"); with both encoders and
+both models, 32.0 % ("Eleventh round"). Most of their gain on Charades-STA and
+YouCook2 comes from their training videos: on videos unlike any they learnt
+from, expect less (on UnAV-100, which v3 never saw, it finds 0.3 points fewer
+than SigLIP 2 alone). Each costs about 0.03 CPU minutes per hour of video,
+against some 7 for SigLIP 2's image tower. Photos keep their embeddings.
 
 ```bash
-whenframe index ~/Videos --no-temporal   # SigLIP 2's embeddings as they are, the first time a library is indexed
+whenframe index ~/Videos --no-temporal   # the encoders' embeddings as they are, the first time a library is indexed
 ```
 
-Its weights are for research and non-commercial use, as the videos it was
-trained on (`whenframe/data/NOTICE`). A library is built with it or without
-it: use a new folder to change; a library indexed before it existed keeps its
-embeddings.
+Their weights are for research and non-commercial use, as the videos they were
+trained on (`whenframe/data/NOTICE`). Without them, the two encoders are
+searched together all the same; that was not measured (each alone was:
+SigLIP 2 B/16 38.07 on the mean of the four tests, PE core B/16 39.51; ninth
+round). A library is built with them or without them: use a new folder to
+change; a library indexed before they existed keeps its embeddings.
 
 ### What is said
 
@@ -151,11 +145,10 @@ raised the share of right moments among the first ten from 42.9 % to 53.2 %
 does not recognise the description in the sound, and it was not measured on
 long home videos.
 
-How much what is said and what is heard count was chosen with each mode's
-model on tuning videos, and a search uses its library's: what is heard weighs
-1.5 in the large, economy and so400m modes, 2 otherwise; with whenframe's
-models and in the economy mode, what is said counts up to 5 seconds around a
-frame.
+How much what is said and what is heard count was chosen with the models on
+tuning videos: with both encoders, what is heard weighs 1.5 and what is said
+counts up to 5 seconds around a frame. A library built by an earlier version
+is searched with the settings chosen for its own models.
 
 ### Long moments
 
@@ -273,7 +266,7 @@ docker run -d --name whenframe -p 8765:8765 \
 
 The container serves the search page on port 8765 and keeps the index of
 `/videos` up to date (`serve --host 0.0.0.0 --watch /videos`); the index and the
-downloaded model live in the `/data` volume. It includes the `fast` extra. CI
+downloaded models live in the `/data` volume. CI
 builds the image and starts the tool in it; indexing inside the container was
 not tested.
 
@@ -288,7 +281,7 @@ for hit in Searcher(lib).search("sunset over the sea", k=5):
     print(hit.path, hit.start, hit.end, hit.confidence)
 ```
 
-Each `whenframe search` loads the text model first, which takes a few seconds;
+Each `whenframe search` loads the text models first, which takes a few seconds;
 from Python, keep one `Searcher` and the following searches take tens of
 milliseconds.
 
@@ -301,25 +294,27 @@ chosen on DiDeMo training videos.
 
 1. ffmpeg reads one frame per second; frames that barely differ from the last
    one kept are skipped.
-2. [SigLIP 2](https://arxiv.org/abs/2502.14786) embeds the frames and the
-   description (ONNX Runtime, CPU). Its sigmoid gives each frame an absolute
-   match score, so frames from different videos compare directly. Then a
-   small transformer of whenframe's own, trained on the training videos of
-   DiDeMo, MSR-VTT, Charades-STA and YouCook2, rewrites each frame's
-   embedding with what the frames around it show (in the spirit of
-   [CLIP4Clip](https://arxiv.org/abs/2104.08860)'s temporal transformer), for
-   about 0.03 CPU minutes per hour of video.
-3. Frames that match almost any description are marked down, using a bank of
-   4,096 unrelated descriptions: query-bank normalisation
+2. [SigLIP 2](https://arxiv.org/abs/2502.14786) B/16 and
+   [PE core B/16](https://arxiv.org/abs/2504.13181) each embed the frames and
+   the description (OpenVINO, CPU). SigLIP's sigmoid gives each frame an
+   absolute match score, so frames from different videos compare directly.
+   Then a small transformer of whenframe's own for each encoder (v3 and v4),
+   trained on the training videos of DiDeMo, MSR-VTT, Charades-STA and
+   YouCook2, rewrites each frame's embedding with what the frames around it
+   show (in the spirit of [CLIP4Clip](https://arxiv.org/abs/2104.08860)'s
+   temporal transformer), for about 0.03 CPU minutes per hour of video each.
+3. Frames that match almost any description are marked down, for each encoder
+   with a bank of 4,096 unrelated descriptions: query-bank normalisation
    ([Bogolin et al., CVPR 2022](https://arxiv.org/abs/2112.12777)), applied to
    video frames.
 4. With `--speech`, the words of the description said around a frame add to
    its score (Whisper and a full-text index); with `--sounds`, so does what is
    heard around it ([CLAP](https://arxiv.org/abs/2211.06687), standardised and
-   added). Both count as chosen with each mode's model on the tuning sets.
-5. In each of the best videos, up to three 10-second moments are placed around
-   the best frames, and all moments are ranked together. In precision mode the
-   scores of two models are standardised and added first.
+   added). Both count as chosen with the models on the tuning sets.
+5. The two encoders' scores are standardised over the library, added (PE's
+   with weight 0.75) and put back on SigLIP 2's scale. In each of the best
+   videos, up to three 10-second moments are placed around the best frames,
+   and all moments are ranked together.
 
 ## Reproduce the benchmark
 

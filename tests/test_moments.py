@@ -105,11 +105,11 @@ def test_auto_places_spans_in_libraries_of_long_videos():
     assert Bare(Shelf([45.0, 289.0]))._tuned("siglip2-base") == (50.0, 0.5)  # with the spans' bank strength
 
 
-def test_every_mode_has_the_query_bank_it_was_measured_with():
+def test_every_model_a_library_is_built_with_has_the_query_bank_it_was_measured_with():
     from whenframe import bank
-    from whenframe.encoder import MODES
+    from whenframe.encoder import DEFAULT_LIBRARY
 
-    for models in MODES.values():
-        for model in models.split("+"):
-            b = bank.load(model)
-            assert b is not None and b.shape[0] == 4096, model
+    # a new library's, and those of libraries built in the modes of earlier versions
+    for model in (*DEFAULT_LIBRARY.split("+"), "siglip2-base", "siglip2-b32", "siglip2-so400m"):
+        b = bank.load(model)
+        assert b is not None and b.shape[0] == 4096, model

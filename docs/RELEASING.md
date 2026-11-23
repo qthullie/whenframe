@@ -33,5 +33,5 @@ A version cannot be published twice on PyPI: a mistake found after the push
 is fixed by the next version.
 
 After the first release, the install lines of the README and of
-docs/TUTORIAL.md can become `pip install whenframe` (with `[fast]` and
-`[speech]` as before) and `docker pull ghcr.io/qthullie/whenframe`.
+docs/TUTORIAL.md can become `pip install whenframe` (with `[speech]` as
+before) and `docker pull ghcr.io/qthullie/whenframe`.

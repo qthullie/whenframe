@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- One model: a new library is indexed with SigLIP 2 B/16 and Meta's PE core
+  B/16, each frame decoded once, each encoder's frames through whenframe's own
+  model trained on them (v3 and v4), and searched through both together. On
+  the four test sets it found the most of everything measured (eleventh round,
+  below). The standard, economy, precision and large modes are gone, and with
+  them `--mode`; libraries built in them are searched and kept up to date as
+  they were built. OpenVINO is a dependency now (PE core B/16's image tower
+  runs with it), the first run downloads about 2.6 GB, and a search holds both
+  text towers in memory (at most 4.7 GB for the demo's three films).
 - whenframe's own model: a temporal adapter of 1.45 million weights rewrites
   each frame's SigLIP 2 embedding with what the frames around it show. A new
   library in the standard mode goes through it (`whenframe index
@@ -52,13 +61,12 @@
 - The eleventh round tested that fusion once (`scripts/round11.py`): v3 and
   v4 together find more than v3 alone on each of the four tests, mean 43.72
   against 41.90 (sign test p = 4.9e-12), for 1.74 times the indexing cost;
-  So400m's mean is 40.63, for 3.4 times. Criteria 33 to 35 are met, so
-  `--mode large` now indexes a new library with SigLIP 2 B/16 and PE core B/16
-  and searches it through v3 and v4 together (another 1.1 GB download; it
-  needs OpenVINO), and So400m is `--mode so400m`. PE core B/16's image tower,
-  which no model hub serves, comes from the release models-1, built by GitHub
-  Actions to the bytes measured (`.github/workflows/models.yml`); its SHA-256
-  is checked when it is downloaded. v5, whenframe's model taught by the fusion
+  So400m's mean is 40.63, for 3.4 times. Criteria 33 to 35 are met: the
+  large mode became the fusion, then whenframe's only model (above). PE core
+  B/16's image tower, which no model hub serves, comes from the release
+  models-1, built by GitHub Actions to the bytes measured
+  (`.github/workflows/models.yml`); its SHA-256 is checked when it is
+  downloaded. v5, whenframe's model taught by the fusion
   on SigLIP 2 B/16's frames alone, raised v3's tuning mean by 0.55 points, not
   the 1 asked for, so it was not tested.
 - The sixth round compares SigLIP 2 B/32, B/16, So400m and B/16 with the

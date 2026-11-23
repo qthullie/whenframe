@@ -26,14 +26,14 @@ import numpy as np
 
 from . import bank as qbank
 from . import sounds, speech, temporal
-from .encoder import DEFAULT_MODEL, Encoder
+from .encoder import DEFAULT_LIBRARY, Encoder
 from .half import float32_copy, memory_budget
 from .video import RepeatFilter, VideoError, is_photo, iter_frames, probe, read_photo, thumbnails
 
 
 @dataclass
 class Settings:
-    model: str = DEFAULT_MODEL  # several models joined by "+" are indexed together
+    model: str = DEFAULT_LIBRARY  # several models joined by "+" are indexed together
     fps: float = 1.0
     dedup: float = 4.0  # 0 encodes every sampled frame
     max_gap: int = 4

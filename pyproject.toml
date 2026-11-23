@@ -22,7 +22,9 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Topic :: Multimedia :: Video",
 ]
-dependencies = ["numpy>=1.24", "onnxruntime>=1.17", "tokenizers>=0.15"]
+# OpenVINO runs the image encoders, five times faster where the processor computes in bfloat16 (docs/RESULTS.md);
+# PE core B/16's only with it
+dependencies = ["numpy>=1.24", "onnxruntime>=1.17", "openvino>=2025.0", "tokenizers>=0.15"]
 
 [project.urls]
 Homepage = "https://github.com/qthullie/whenframe"
@@ -31,8 +33,8 @@ Demo = "https://qthullie.github.io/whenframe/"
 Changelog = "https://github.com/qthullie/whenframe/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
-# OpenVINO runs the image encoder, five times faster where the processor computes in bfloat16 (docs/RESULTS.md)
-fast = ["openvino>=2025.0"]
+# kept for the install commands of earlier versions: OpenVINO is a dependency now
+fast = []
 # Whisper on the CPU, to search what is said (whenframe index --speech base)
 speech = ["faster-whisper>=1.1"]
 # trains the temporal model (scripts/temporal.py); the tool runs it with numpy

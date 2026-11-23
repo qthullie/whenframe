@@ -937,9 +937,9 @@ def published_tables() -> dict[str, str]:
     return out
 
 
-LABEL11 = {"v3": "SigLIP 2 B/16 + whenframe's model v3 (`standard`, the default)",
-           "fusion": "v3 and v4 together (SigLIP 2 B/16 and PE core B/16; `large`)",
-           "so400m": "SigLIP 2 So400m (`so400m`; `large` until this round)"}  # fmt: skip
+LABEL11 = {"v3": "SigLIP 2 B/16 + whenframe's model v3 (the default until this round)",
+           "fusion": "v3 and v4 together (SigLIP 2 B/16 and PE core B/16; whenframe's model since)",
+           "so400m": "SigLIP 2 So400m (`--mode large` until this round)"}  # fmt: skip
 LEFT_OUT11 = {"charades": ("v3-no-charades", "fusion-no-charades"),
               "youcook2": ("v3-no-youcook2", "fusion-no-youcook2")}  # fmt: skip
 
@@ -1006,9 +1006,10 @@ def round11_tables() -> dict[str, str]:
 
 
 def readme_compare() -> dict[str, str]:
-    """The README's comparison: whenframe, on a CPU, beside what others do on the same test sets: published systems
-    as their authors report them (results/published_*.json), the home tools' ways run here on the same videos."""
-    names = ("round7_test", "published_didemo", "published_charades", "didemo_test_thumbnail", "didemo_test")
+    """The README's comparison: whenframe's model (v3 and v4 together, the eleventh round's test), on a CPU, beside
+    what others do on the same test sets: published systems as their authors report them (results/published_*.json),
+    the home tools' ways run here on the same videos."""
+    names = ("round11_test", "published_didemo", "published_charades", "didemo_test_thumbnail", "didemo_test")
     files = [RESULTS / f"{n}.json" for n in names]
     if not all(f.exists() for f in files):
         return {}
@@ -1016,14 +1017,14 @@ def readme_compare() -> dict[str, str]:
     best, top = max(pub["video_retrieval"].items(), key=lambda kv: kv[1]["R@5"])
     # the three best published without training on Charades-STA, the lowest first
     others = sorted(sorted(zero["zero_shot"], key=lambda x: -x["R1@0.5"])[:3], key=lambda x: x["R1@0.5"])
-    video, moment = r["v3"]["didemo"]["full"]["video"]["R@5"], r["v3"]["didemo"]["value"]
+    video, moment = r["fusion"]["didemo"]["full"]["video"]["R@5"], r["fusion"]["didemo"]["value"]
     rows = [
         ["**Find the video** among 979 (DiDeMo, in the first 5)", f"**{pct(video)} %**",
          f"{top['R@5']:.1f} % {best}, trained on DiDeMo, on a GPU · {pct(th['middle']['R@5'])} % one image per video"],
         ["**Find the moment** among 979 videos (DiDeMo, in the first 5)", f"**{pct(moment)} %**",
          f"{pct(first['scene']['corpus'][PRIMARY])} % one keyframe per shot, as home video tools index"],
         ["**Place the moment** in a given video, never trained on it (Charades-STA, first answer)",
-         f"**{pct(r['v3-no-charades']['charades']['value'])} %**",
+         f"**{pct(r['fusion-no-charades']['charades']['value'])} %**",
          " · ".join(f"{x['R1@0.5']:.1f} % {x['short']}" for x in others)],
     ]  # fmt: skip
     return {"readme-compare": table(["", "whenframe, on a CPU", "others"], rows)}

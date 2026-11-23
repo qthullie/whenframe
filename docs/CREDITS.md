@@ -9,10 +9,12 @@
   Videos*, CVPR 2023 (CC BY-NC-SA 4.0).
 - SigLIP 2: Tschannen et al., 2025. The weights are Google's, under the Apache
   2.0 licence. whenframe downloads the ONNX conversions published on the
-  Hugging Face Hub by onnx-community (B/16 and B/32) and by Immich (So400m, for
-  `--mode so400m`); these conversions state no licence of their own.
-- Perception Encoder's PE core B/16 (`--mode large`): Bolya et al., *Perception
-  Encoder*, 2025. The weights are Meta's, under the Apache 2.0 licence.
+  Hugging Face Hub by onnx-community (B/16, and B/32 for libraries built in the
+  economy and precision modes of earlier versions) and by Immich (So400m, for
+  those built in their large mode); these conversions state no licence of
+  their own.
+- Perception Encoder's PE core B/16: Bolya et al., *Perception Encoder*,
+  2025. The weights are Meta's, under the Apache 2.0 licence.
   whenframe downloads onnx-community's conversion of its text tower, timm's
   tokenizer, and its image tower as whenframe's release models-1 publishes it,
   exported again from timm's weights, unchanged, with Meta's licence and a

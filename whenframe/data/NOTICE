@@ -20,11 +20,10 @@ text and no video.
 temporal-siglip2-base.npz, temporal-pe-core-b16.npz
 
 whenframe's temporal models (whenframe/temporal.py), applied by default to the
-frames of a new library in the standard and large modes (`whenframe index
---no-temporal` leaves them out). temporal-siglip2-base.npz is model v3 of
+frames of a new library (`whenframe index --no-temporal` leaves them out). temporal-siglip2-base.npz is model v3 of
 docs/PROTOCOL.md's seventh round, on SigLIP 2 B/16's frames;
 temporal-pe-core-b16.npz is model v4 of its ninth round, the same recipe on
-PE core B/16's frames, which the large mode searches with v3's. Each is one
+PE core B/16's frames, which a library searches with v3's. Each is one
 run of scripts/temporal.py on the frames and descriptions of
 
 - DiDeMo's training videos: Flickr videos from YFCC100M, each under its own

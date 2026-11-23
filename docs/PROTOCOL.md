@@ -1528,3 +1528,10 @@ OpenVINO: its files are the bytes of the tower measured
 models-1, with Meta's licence and a NOTICE. Since then `--mode large` indexes
 a new library as fixed above, the tower downloaded from the release and its
 SHA-256 checked, and So400m is `--mode so400m`.
+
+**One model.** Then whenframe kept a single model: every new library is
+indexed as the large mode above, and the standard, economy, precision and
+so400m modes are gone. This was decided on the numbers above, with no new
+measurement; libraries built in the other modes are searched as they were
+built. Without whenframe's models (`--no-temporal`), the two encoders are
+searched together as with them, which was not measured.

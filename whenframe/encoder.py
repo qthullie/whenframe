@@ -1,11 +1,12 @@
-"""Image and text towers run with ONNX Runtime: SigLIP 2 at three sizes, and MobileCLIP-S2 for research use.
+"""Image and text towers: SigLIP 2 B/16 and Meta's PE core B/16, which a new library is indexed with; SigLIP 2
+B/32 and So400m, for libraries built in the modes of earlier versions; MobileCLIP-S2 for research use.
 
 SigLIP scores an image-text pair with a sigmoid, sigmoid(scale * cos + bias),
 trained on each pair independently, so its score is an absolute "does this
 match" that can be compared across videos. The ONNX export leaves the scale and
 bias out; they are those of the original google/siglip2 checkpoint.
 
-SigLIP 2 B/32 (256 px, 64 patches instead of 196) is the cheaper model of the
+SigLIP 2 B/32 (256 px, 64 patches instead of 196) was the cheaper model of the
 economy and precision modes; its scale and bias are its own checkpoint's.
 
 SigLIP 2 So400m (400 million parameters in the image tower, 5 times the base
@@ -14,17 +15,17 @@ one image or one text at a time; its descriptions are lower-cased as the base
 model's are, which did as well as open_clip's own cleaning on DiDeMo tuning
 videos, and its scale and bias are those of google/siglip2-so400m-patch14-224.
 
-MobileCLIP-S2 is measured in the benchmark but is not used by any mode: Apple
+MobileCLIP-S2 is measured in the benchmark but is not used by the tool: Apple
 licenses its weights for non-commercial research only. It was trained with a
 softmax; its scale and bias map its cosine onto SigLIP's logit, fitted on DiDeMo
 training pairs (`scripts/didemo.py calibrate`).
 
-The image tower runs with OpenVINO when it is installed (`pip install
-whenframe[fast]`), which computes in bfloat16 on processors that do so natively
-(AMX, AVX512-BF16) and in float32 elsewhere; otherwise with ONNX Runtime. The
-text tower runs with ONNX Runtime in float32, but So400m's, which OpenVINO runs
-ten times faster on this machine (74 ms a text instead of 721) when it runs the
-image tower.
+The image towers run with OpenVINO, which computes in bfloat16 on processors
+that do so natively (AMX, AVX512-BF16) and in float32 elsewhere; SigLIP 2's can
+run with ONNX Runtime instead (`--backend onnxruntime`), PE core B/16's, exported
+for OpenVINO, cannot. The text towers run with ONNX Runtime in float32, but
+So400m's and PE's, which OpenVINO runs faster (So400m's ten times on this
+machine, 74 ms a text instead of 721) when it runs the image towers.
 """
 
 from __future__ import annotations
@@ -123,17 +124,12 @@ MODELS = {
         ),
     ),
 }  # fmt: skip
-DEFAULT_MODEL = "siglip2-base"
-# what `whenframe index --mode` stores; several models are searched together and their scores combined
-MODES = {
-    "standard": "siglip2-base",
-    "economy": "siglip2-b32",
-    "precision": "siglip2-base+siglip2-b32",
-    # SigLIP 2 B/16 and PE core B/16, searched through whenframe's models v3 and v4 together (eleventh round)
-    "large": "siglip2-base+pe-core-b16",
-    "so400m": "siglip2-so400m",  # `--mode large` until the eleventh round
-}
-# weight of each model's scores in a combined search, as tuned on DiDeMo training videos
+DEFAULT_MODEL = "siglip2-base"  # the encoder of a text alone (the demo's server) and of the first model's scores
+# what a new library is indexed with: SigLIP 2 B/16 and PE core B/16, searched through whenframe's models v3 and v4
+# together (docs/RESULTS.md, eleventh round). Libraries built in the modes of earlier versions keep their models:
+# SigLIP 2 B/16 alone (standard), B/32 (economy), both (precision), So400m (large until the eleventh round).
+DEFAULT_LIBRARY = "siglip2-base+pe-core-b16"
+# weight of each model's scores in the precision mode's combined search, as tuned on DiDeMo training videos
 FUSION = {"siglip2-base": 1.0, "siglip2-b32": 0.25, "mobileclip-s2": 1.0}
 
 
@@ -353,9 +349,9 @@ class Encoder:
     def images(self) -> _OnnxRuntime | _OpenVINO:
         """The image tower, loaded on first use."""
         if self._vision is None:
-            if self._vision_path.suffix == ".xml" and self.backend != "openvino":
-                raise RuntimeError(f"{self.name}'s image tower runs with OpenVINO: pip install 'whenframe[fast]'")
-            runtime = _OpenVINO if self.backend == "openvino" else _OnnxRuntime
+            # a tower exported for OpenVINO (.xml) runs with it whatever the backend
+            openvino = self.backend == "openvino" or self._vision_path.suffix == ".xml"
+            runtime = _OpenVINO if openvino else _OnnxRuntime
             self._vision = runtime(self._vision_path, self.spec.image_input, self.spec.image_output, self._threads)
         return self._vision
 

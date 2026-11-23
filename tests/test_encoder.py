@@ -136,7 +136,12 @@ def test_pe_core_comes_from_fixed_revisions_and_whenframes_release():
         assert sources[f"onnx/{f}"] == (f"{enc.RELEASE}/pe-core-b16-vision.{f.split('.')[-1]}", measured["sha256"][f])
 
 
-def test_an_openvino_tower_asks_for_openvino(tiny, monkeypatch):
-    monkeypatch.setitem(enc.MODELS, "tiny-xml", enc.ModelSpec("test/tiny", 8, 10.0, 0.0, vision_file="x.xml"))
-    with pytest.raises(RuntimeError, match=r"whenframe\[fast\]"):
-        enc.Encoder("tiny-xml", folder=tiny, backend="onnxruntime").images  # noqa: B018
+@pytest.mark.skipif(importlib.util.find_spec("openvino") is None, reason="OpenVINO is not installed")
+def test_a_tower_exported_for_openvino_runs_with_it_whatever_the_backend(tiny, monkeypatch):
+    """As PE core B/16's image tower, which exists only for OpenVINO: SigLIP 2's may run with ONNX Runtime."""
+    ov = enc._import_openvino()
+    ov.save_model(ov.Core().read_model(str(tiny / "onnx" / "vision_model.onnx")), str(tiny / "onnx" / "tiny.xml"))
+    monkeypatch.setitem(enc.MODELS, "tiny-xml", enc.ModelSpec("test/tiny", 8, 10.0, 0.0, vision_file="onnx/tiny.xml"))
+    e = enc.Encoder("tiny-xml", folder=tiny, backend="onnxruntime")
+    want = enc.Encoder("tiny", folder=tiny, backend="onnxruntime").encode_images(frames())
+    assert isinstance(e.images, enc._OpenVINO) and (want * e.encode_images(frames())).sum(axis=1).min() > 0.999

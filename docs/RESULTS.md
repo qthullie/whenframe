@@ -41,12 +41,12 @@ from `results/didemo_test.json`; CI fails if they differ from that file.
 - A better encoder at the same cost did not beat it either. Alone, PE core
   B/16 finds more than SigLIP 2 B/16 (mean 39.51 against 38.07). With
   whenframe's model trained on its frames, it finds as much as v3 (41.69
-  against 41.90) and 4.7 points less on YouCook2, so the tool keeps SigLIP 2
-  B/16 and v3 (ninth round).
-- Finding as much as v3 and v4 together takes both encoders' indexing time.
-  Taught by them, whenframe's model on SigLIP 2 B/16's frames alone gained
-  0.55 points on the tuning sets, about a third of their 1.70 (eleventh
-  round).
+  against 41.90) and 4.7 points less on YouCook2, so the ninth round kept
+  SigLIP 2 B/16 and v3; the two together find more (eleventh round).
+- whenframe's model takes both encoders' indexing time (1.7 times SigLIP 2
+  B/16's alone) and, for a search, both text towers' memory. Taught by both,
+  a model on SigLIP 2 B/16's frames alone gained 0.55 points on the tuning
+  sets, about a third of their 1.70 (eleventh round).
 - Several criteria set in advance were not met; this page says which and why.
 
 ## Criteria
@@ -1304,10 +1304,11 @@ in the tenth round.
 | 35. indexing with both encoders costs at most 2 times what SigLIP 2 B/16 alone costs | 1.74 times (9.4 against 5.4 CPU min per hour, decoding included) | yes |
 <!-- /table -->
 
-The three criteria are met. As fixed before the test, `--mode large` now
-indexes a new library with both encoders and searches it through v3 and v4
-together, and So400m stays available as `--mode so400m`. PE core B/16's image
-tower, exported again from timm's weights in the ninth round, is not served by
+The three criteria are met. As fixed before the test, the large mode became
+both encoders searched through v3 and v4 together. Since then it is
+whenframe's only model: every new library is indexed that way, and the other
+modes are gone (libraries built in them are searched as they were built). PE
+core B/16's image tower, exported again from timm's weights in the ninth round, is not served by
 any model hub: whenframe's release models-1 publishes it, built again on
 GitHub's machines to the same bytes as the tower measured
 (`.github/workflows/models.yml`).
@@ -1317,17 +1318,17 @@ GitHub's machines to the same bytes as the tower measured
 <!-- table round11-test -->
 | test sets, ranked by the mean | DiDeMo R@5 | Charades-STA R1 | YouCook2 R@5 | UnAV-100 P@10 | mean | indexing cost, times SigLIP 2 B/16's |
 |---|---|---|---|---|---|---|
-| v3 and v4 together (SigLIP 2 B/16 and PE core B/16; `large`) | 32.0 | 55.5 | 32.9 | 54.4 | **43.72** | 1.74 |
-| SigLIP 2 B/16 + whenframe's model v3 (`standard`, the default) | 29.4 | 53.3 | 32.0 | 52.9 | **41.90** | 1.00 |
-| SigLIP 2 So400m (`so400m`; `large` until this round) | 29.5 | 50.4 | 28.5 | 54.1 | **40.63** | 3.44 |
+| v3 and v4 together (SigLIP 2 B/16 and PE core B/16; whenframe's model since) | 32.0 | 55.5 | 32.9 | 54.4 | **43.72** | 1.74 |
+| SigLIP 2 B/16 + whenframe's model v3 (the default until this round) | 29.4 | 53.3 | 32.0 | 52.9 | **41.90** | 1.00 |
+| SigLIP 2 So400m (`--mode large` until this round) | 29.5 | 50.4 | 28.5 | 54.1 | **40.63** | 3.44 |
 <!-- /table -->
 
 <!-- table round11-pairs -->
 | the first finds more than the second? | items better | items worse | sign test p |
 |---|---|---|---|
-| v3 and v4 together (SigLIP 2 B/16 and PE core B/16; `large`) / SigLIP 2 B/16 + whenframe's model v3 (`standard`, the default) | 528 | 326 | 4.9e-12 |
-| v3 and v4 together (SigLIP 2 B/16 and PE core B/16; `large`) / SigLIP 2 So400m (`so400m`; `large` until this round) | 1069 | 721 | 1.9e-16 |
-| SigLIP 2 B/16 + whenframe's model v3 (`standard`, the default) / SigLIP 2 So400m (`so400m`; `large` until this round) | 994 | 850 | 0.00086 |
+| v3 and v4 together (SigLIP 2 B/16 and PE core B/16; whenframe's model since) / SigLIP 2 B/16 + whenframe's model v3 (the default until this round) | 528 | 326 | 4.9e-12 |
+| v3 and v4 together (SigLIP 2 B/16 and PE core B/16; whenframe's model since) / SigLIP 2 So400m (`--mode large` until this round) | 1069 | 721 | 1.9e-16 |
+| SigLIP 2 B/16 + whenframe's model v3 (the default until this round) / SigLIP 2 So400m (`--mode large` until this round) | 994 | 850 | 0.00086 |
 <!-- /table -->
 
 The fusion finds more than v3 on each test, the most on DiDeMo (+2.6) and

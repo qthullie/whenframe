@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 
 from . import __version__, temporal
-from .encoder import BACKENDS, DEFAULT_MODEL, MODELS, MODES, backend_name
+from .encoder import BACKENDS, DEFAULT_LIBRARY
 from .library import Library, Settings
 from .search import HEARD, SearchConfig, Searcher, worth_showing
 from .video import find_media
@@ -29,21 +29,15 @@ def clock(t: float) -> str:
 def open_library(args) -> Library:
     """The library, created with the indexing options the first time."""
     overrides = {k: v for k, v in (("fps", args.fps), ("dedup", args.dedup)) if v is not None}
-    if args.mode:
-        overrides["model"] = MODES[args.mode]
     if args.no_photos:
         overrides["photos"] = False
     if not (Path(args.library) / "config.json").exists() and not args.no_temporal:
-        # a new library in the standard and large modes goes through whenframe's temporal models, one per image
-        # model (docs/RESULTS.md, seventh and eleventh rounds); the other modes' frames were not measured with them
-        names = temporal.for_library(overrides.get("model", DEFAULT_MODEL))
+        # a new library's frames go through whenframe's models, v3 for SigLIP 2 B/16's and v4 for PE core B/16's
+        # (docs/RESULTS.md, eleventh round); a library already built keeps the models it was built with
+        names = temporal.for_library(DEFAULT_LIBRARY)
         if names:
             overrides["temporal"] = names
     lib = Library(args.library, Settings(**overrides) if overrides else None, backend=args.backend)
-    xml = [m for m in lib.settings.models if m in MODELS and MODELS[m].vision_file.endswith(".xml")]
-    if xml and backend_name(args.backend) != "openvino":
-        raise SystemExit(f"whenframe: {' and '.join(xml)}'s image tower runs with OpenVINO: "
-                         "pip install 'whenframe[fast]'")  # fmt: skip
     if args.speech:
         lib.enable_speech(args.speech)
     if args.sounds:
@@ -175,21 +169,15 @@ def main(argv: list[str] | None = None) -> int:
     def indexing_options(p: argparse.ArgumentParser) -> None:
         p.add_argument("--fps", type=float, default=None, help="frames looked at per second (default 1)")
         p.add_argument("--dedup", type=float, default=None, help="skip frames that barely changed (default 4, 0 = off)")
-        p.add_argument("--mode", choices=list(MODES), default=None,
-                       help="standard (default); economy: about 3 times less CPU, less accurate; precision: two "
-                            "models, no gain measured on DiDeMo; large: SigLIP 2 B/16 and PE core B/16 with "
-                            "whenframe's models v3 and v4, 1.7 times the CPU of standard, 1.8 points more on the "
-                            "four tests (needs OpenVINO: pip install 'whenframe[fast]'); so400m: SigLIP 2 So400m, "
-                            "3.4 times the CPU, 1.3 points less. Fixed for a library (docs/RESULTS.md).")  # fmt: skip
         p.add_argument("--backend", choices=BACKENDS, default=None,
-                       help="runtime of the image encoder: OpenVINO if installed (auto, the default), else ONNX "
-                            "Runtime; also $WHENFRAME_BACKEND")  # fmt: skip
+                       help="runtime of SigLIP 2's image encoder: OpenVINO (auto, the default) or ONNX Runtime; "
+                            "PE core B/16's runs with OpenVINO; also $WHENFRAME_BACKEND")  # fmt: skip
         p.add_argument("--no-photos", action="store_true", help="index videos only, not the photos next to them "
                        "(fixed for a library)")  # fmt: skip
         no_temporal = (
-            "keep the frame embeddings as the image encoders give them, without whenframe's temporal models (by "
-            "default a new library in the standard and large modes goes through them; their weights are for "
-            "research and non-commercial use; docs/RESULTS.md, seventh and eleventh rounds); fixed for a library"
+            "keep the frame embeddings as SigLIP 2 B/16 and PE core B/16 give them, without whenframe's models v3 "
+            "and v4 (by default a new library goes through them; their weights are for research and non-commercial "
+            "use; docs/CREDITS.md); fixed for a library"
         )
         p.add_argument("--no-temporal", action="store_true", help=no_temporal)
         p.add_argument("--speech", choices=["base", "small"], default=None,
