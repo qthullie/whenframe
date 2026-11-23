@@ -1476,3 +1476,32 @@ indexed keep their encoders.
 
 If 36 and 37 hold, a new library in the standard mode goes through v5 instead
 of v3; libraries already indexed keep v3.
+
+**Part 1's test** (`scripts/round11.py test1`; `results/round11_test.json`,
+the cost in `results/round11_cost.json`). Run once, after this protocol was
+pushed and the cost measured on an idle machine:
+
+- the fusion's mean is 43.72, against 41.90 for v3: +1.81 points, with 528
+  items better and 326 worse, sign test p = 4.9e-12 (criterion 33 met);
+- it is higher on each test: DiDeMo +2.6, Charades-STA +2.2, YouCook2 +0.9,
+  UnAV-100 +1.6 (criterion 34 met);
+- indexing with both encoders, each frame decoded once, costs 9.4 CPU minutes
+  per hour of video, against 5.4 with SigLIP 2 B/16 alone: 1.74 times
+  (criterion 35 met).
+
+v3, So400m and v3's left-out runs gave the earlier rounds' numbers to every
+decimal. Beside: So400m's mean is 40.63. v3's and v4's runs without
+Charades-STA's videos, fused, place 49.9 % of its moments, against 46.5 % for
+v3's run without them; without YouCook2's, 26.4 % of its steps, against 26.1 %.
+Before the test, as written, their speech and sound weights were chosen on
+the tuning sets (means 40.35 and 40.50).
+
+The session's disk filled up while v5's teacher was being written, during
+part 1. Part 1's numbers were not touched. Part 2 started again, with the
+teacher's last arrays written to /dev/shm (`ROUND11_TEACHER_DIR`) and its
+recipe unchanged.
+
+As fixed above, `--mode large` is to index a new library with SigLIP 2 B/16
+and PE core B/16 and search it through v3 and v4 together. The tool does not
+do so yet: PE core B/16's image tower, exported again from timm's weights in
+the ninth round, is not published anywhere the tool could download it from.

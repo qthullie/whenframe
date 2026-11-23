@@ -1280,3 +1280,72 @@ automatic descriptions (28 %), 232 of Charades-STA's 1,551 (15 %), 392 of
 YouCook2's 2,534 (15 %) and 138 of UnAV-100's 471 (29 %). Learnt from those
 alone, the libraries lose 0.78 points against their starting models, more
 than learning from every description did in the eighth round (-0.44).
+
+## Eleventh round: v3 and v4 together
+
+The eleventh round of the protocol ([PROTOCOL.md](PROTOCOL.md)) tested the
+tenth round's fusion once. v3's scores of SigLIP 2 B/16's frames and v4's of
+PE core B/16's are each corrected by their own query bank, standardised per
+query, and added with PE's weight 0.75 (`scripts/round11.py`,
+`results/round11_test.json`). Its speech and sound weights are those chosen
+in the tenth round.
+
+<!-- table round11-criteria -->
+| criterion (fixed before its test run) | measured on test | met |
+|---|---|---|
+| 33. the fusion's mean is at least 1 point higher than v3's, sign test p < 0.05 | +1.81 points; 528 items better, 326 worse, p = 4.9e-12 | yes |
+| 34. the fusion loses at most 1 point on each test against v3 | DiDeMo +2.6; Charades-STA +2.2; YouCook2 +0.9; UnAV-100 +1.6 | yes |
+| 35. indexing with both encoders costs at most 2 times what SigLIP 2 B/16 alone costs | 1.74 times (9.4 against 5.4 CPU min per hour, decoding included) | yes |
+<!-- /table -->
+
+The three criteria are met. As fixed before the test, `--mode large` is to
+index a new library with both encoders and search it through v3 and v4
+together, and So400m to stay available as `--mode so400m`. The tool does not
+do so yet. PE core B/16's image tower, exported again from timm's weights in
+the ninth round, is not published anywhere the tool could download it from.
+
+### On the test sets
+
+<!-- table round11-test -->
+| test sets, ranked by the mean | DiDeMo R@5 | Charades-STA R1 | YouCook2 R@5 | UnAV-100 P@10 | mean | indexing cost, times SigLIP 2 B/16's |
+|---|---|---|---|---|---|---|
+| v3 and v4 together (SigLIP 2 B/16 and PE core B/16) | 32.0 | 55.5 | 32.9 | 54.4 | **43.72** | 1.74 |
+| SigLIP 2 B/16 + whenframe's model v3 (`standard`, the default) | 29.4 | 53.3 | 32.0 | 52.9 | **41.90** | 1.00 |
+| SigLIP 2 So400m (`--mode large` so far) | 29.5 | 50.4 | 28.5 | 54.1 | **40.63** | 3.44 |
+<!-- /table -->
+
+<!-- table round11-pairs -->
+| the first finds more than the second? | items better | items worse | sign test p |
+|---|---|---|---|
+| v3 and v4 together (SigLIP 2 B/16 and PE core B/16) / SigLIP 2 B/16 + whenframe's model v3 (`standard`, the default) | 528 | 326 | 4.9e-12 |
+| v3 and v4 together (SigLIP 2 B/16 and PE core B/16) / SigLIP 2 So400m (`--mode large` so far) | 1069 | 721 | 1.9e-16 |
+| SigLIP 2 B/16 + whenframe's model v3 (`standard`, the default) / SigLIP 2 So400m (`--mode large` so far) | 994 | 850 | 0.00086 |
+<!-- /table -->
+
+The fusion finds more than v3 on each test, the most on DiDeMo (+2.6) and
+Charades-STA (+2.2). It finds 3.09 points more than So400m on the mean, for
+about half its indexing cost.
+
+SigLIP 2 B/16 alone and both encoders together were measured again, one after
+the other, on the same 100 test videos: 5.4 and 9.4 CPU minutes per hour of
+video, decoding included, each frame decoded once for both encoders. B/16's
+cost is lower than the ninth round's 6.9 on the same videos; criterion 35
+compares the two measured together. whenframe's models' own cost, logged
+during the test while v5's teacher was being prepared on the same machine,
+is not comparable and is not reported. The fifth round's measure, about 0.04
+CPU minutes per hour of video, stands.
+
+### A library never seen
+
+<!-- table round11-left-out -->
+| the test of a collection left out of training | v3 trained without it | v3 and v4 trained without it, together | change |
+|---|---|---|---|
+| Charades-STA, R1 at IoU >= 0.5 | 46.5 | 49.9 | +3.4 |
+| YouCook2, R@5, speech + spans | 26.1 | 26.4 | +0.3 |
+<!-- /table -->
+
+v3's and v4's runs trained without Charades-STA's videos, fused, place the
+right moment first 49.9 % of the time, 3.4 points more than v3's run without
+them. That is more than VTG-GPT (43.7 %) and about as much as TFVTG (50.0 %),
+two published methods that do not train on Charades-STA either. On YouCook2,
+the gain without its videos is 0.3 points.

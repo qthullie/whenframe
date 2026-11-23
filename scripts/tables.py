@@ -937,6 +937,61 @@ def published_tables() -> dict[str, str]:
     return out
 
 
+LABEL11 = {"v3": "SigLIP 2 B/16 + whenframe's model v3 (`standard`, the default)",
+           "fusion": "v3 and v4 together (SigLIP 2 B/16 and PE core B/16)",
+           "so400m": "SigLIP 2 So400m (`--mode large` so far)"}  # fmt: skip
+LEFT_OUT11 = {"charades": ("v3-no-charades", "fusion-no-charades"),
+              "youcook2": ("v3-no-youcook2", "fusion-no-youcook2")}  # fmt: skip
+
+
+def round11_tables() -> dict[str, str]:
+    """The eleventh round, part 1: the tenth round's fusion of v3 and v4, tested once against v3 (and So400m,
+    beside); both encoders' indexing cost against SigLIP 2 B/16's, measured again the same way."""
+    out, cols = {}, ("didemo", "charades", "youcook2", "unav")
+    head = ["DiDeMo R@5", "Charades-STA R1", "YouCook2 R@5", "UnAV-100 P@10", "mean"]
+    f, fc, f6 = RESULTS / "round11_test.json", RESULTS / "round11_cost.json", RESULTS / "compare_cost.json"
+    if not (f.exists() and fc.exists()):
+        return out
+    r, cost = json.loads(f.read_text()), json.loads(fc.read_text())
+    one = cost["siglip2-base"]["cpu_min_per_hour"]
+    times = {"v3": 1.0, "fusion": cost["siglip2-base+pe-core-b16"]["cpu_min_per_hour"] / one}
+    if f6.exists():  # So400m's against B/16's, as the sixth round measured both
+        c6 = json.loads(f6.read_text())
+        times["so400m"] = c6["siglip2-so400m"]["cpu_min_per_hour"] / c6["siglip2-base"]["cpu_min_per_hour"]
+    main = [n for n in r["ranking"] if n in LABEL11]
+    out["round11-test"] = table(
+        ["test sets, ranked by the mean", *head, "indexing cost, times SigLIP 2 B/16's"],
+        [[LABEL11[n], *(pct(r[n][c]["value"]) for c in cols), f"**{100 * r[n]['mean']:.2f}**",
+          f"{times[n]:.2f}" if n in times else ""] for n in main],
+    )  # fmt: skip
+    pairs = [("fusion", "v3"), ("fusion", "so400m"), ("v3", "so400m")]
+    out["round11-pairs"] = table(
+        ["the first finds more than the second?", "items better", "items worse", "sign test p"],
+        [[f"{LABEL11[a]} / {LABEL11[b]}", str(r["pairs"][f"{a} vs {b}"]["wins"]),
+          str(r["pairs"][f"{a} vs {b}"]["losses"]), f"{r['pairs'][f'{a} vs {b}']['p']:.2g}"] for a, b in pairs],
+    )  # fmt: skip
+    out["round11-left-out"] = table(
+        ["the test of a collection left out of training", "v3 trained without it", "v3 and v4 trained without it, "
+         "together", "change"],
+        [[f"{BENCH[c]}, {('R1 at IoU >= 0.5' if c == 'charades' else 'R@5, speech + spans')}",
+          pct(r[old][c]["value"]), pct(r[new][c]["value"]), f"{100 * (r[new][c]['value'] - r[old][c]['value']):+.1f}"]
+         for c, (old, new) in LEFT_OUT11.items() if old in r and new in r],
+    )  # fmt: skip
+    g, met = r["fusion_vs_v3"], r["criteria"]
+    both = cost["siglip2-base+pe-core-b16"]["cpu_min_per_hour"]
+    rows = [
+        ["33. the fusion's mean is at least 1 point higher than v3's, sign test p < 0.05",
+         f"{100 * g['gain']:+.2f} points; {g['wins']} items better, {g['losses']} worse, p = {g['p']:.2g}", met["33"]],
+        ["34. the fusion loses at most 1 point on each test against v3",
+         "; ".join(f"{BENCH[k]} {100 * v:+.1f}" for k, v in g["changes"].items()), met["34"]],
+        ["35. indexing with both encoders costs at most 2 times what SigLIP 2 B/16 alone costs",
+         f"{r['cost_ratio']:.2f} times ({both:.1f} against {one:.1f} CPU min per hour, decoding included)", met["35"]],
+    ]  # fmt: skip
+    out["round11-criteria"] = table(["criterion (fixed before its test run)", "measured on test", "met"],
+                                    [[n, m, "yes" if ok else "no"] for n, m, ok in rows])  # fmt: skip
+    return out
+
+
 def readme_compare() -> dict[str, str]:
     """The README's comparison: whenframe, on a CPU, beside what others do on the same test sets: published systems
     as their authors report them (results/published_*.json), the home tools' ways run here on the same videos."""
@@ -1035,6 +1090,7 @@ def main() -> int:
     tables.update(round8_tables())
     tables.update(round9_tables())
     tables.update(round10_tables())
+    tables.update(round11_tables())
     tables.update(published_tables())
     tables.update(readme_compare())
     f2 = RESULTS / "didemo_test_round2.json"
