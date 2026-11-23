@@ -938,8 +938,8 @@ def published_tables() -> dict[str, str]:
 
 
 LABEL11 = {"v3": "SigLIP 2 B/16 + whenframe's model v3 (`standard`, the default)",
-           "fusion": "v3 and v4 together (SigLIP 2 B/16 and PE core B/16)",
-           "so400m": "SigLIP 2 So400m (`--mode large` so far)"}  # fmt: skip
+           "fusion": "v3 and v4 together (SigLIP 2 B/16 and PE core B/16; `large`)",
+           "so400m": "SigLIP 2 So400m (`so400m`; `large` until this round)"}  # fmt: skip
 LEFT_OUT11 = {"charades": ("v3-no-charades", "fusion-no-charades"),
               "youcook2": ("v3-no-youcook2", "fusion-no-youcook2")}  # fmt: skip
 

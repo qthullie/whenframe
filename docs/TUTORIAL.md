@@ -48,25 +48,31 @@ them as photos. `--no-photos`, the first time a library is indexed, keeps it to
 videos. A video's moment is judged on its best frame among about ten, a photo
 on its only one, which can favour videos slightly; it was not measured.
 
-A library is built in one of four modes, chosen the first time it is indexed:
+A library is built in one of five modes, chosen the first time it is indexed:
 
 | `--mode` | model |
 |---|---|
-| `standard` (default) | SigLIP 2 B/16 |
+| `standard` (default) | SigLIP 2 B/16, through whenframe's model v3 |
+| `large` | SigLIP 2 B/16 and Meta's PE core B/16, through whenframe's models v3 and v4 together (another 1.1 GB download; needs OpenVINO) |
 | `economy` | SigLIP 2 B/32 (another 1.5 GB download) |
-| `precision` | both, their scores combined |
-| `large` | SigLIP 2 So400m (a 4.3 GB download; OpenVINO advised) |
+| `precision` | B/16 and B/32, their scores combined |
+| `so400m` | SigLIP 2 So400m (a 4.3 GB download; OpenVINO advised) |
 
-The economy mode costs about a third of the CPU time and finds fewer moments;
-the precision mode costs more and, on DiDeMo, found as many as the standard
-mode. The large mode costs four times the CPU time of the standard mode with
-OpenVINO, about what the standard mode costs without it, and found 1.9 points
-more of the moments on DiDeMo; its index takes 1.5 times the space. The
-measured numbers are in [RESULTS.md](RESULTS.md), "Second round", "Fourth
-round" and "Sixth round".
+The large mode found the most on the four test sets: 43.72 on the mean of
+their primary metrics, against 41.90 for the standard mode, more on each of
+them, for 1.7 times the indexing time (both encoders look at the same frames,
+decoded once); its index takes 2.2 times the space, and a search holds both
+text towers in memory (at most 4.7 GB for a search of the demo's three films,
+against 2.1 GB in the standard mode). So400m, the large mode
+until the eleventh round, found less than the standard mode (40.63) for 3.4
+times its CPU time. The economy mode costs about a third of the CPU time and
+finds fewer moments; the precision mode costs more and, on DiDeMo, found as
+many as SigLIP 2 B/16 alone. The measured numbers are in
+[RESULTS.md](RESULTS.md), "Second round", "Sixth round", "Seventh round" and
+"Eleventh round".
 
 The index lives in `~/.local/share/whenframe/library` (or `$WHENFRAME_LIBRARY`,
-or `--library DIR`). It takes about 5 MB per hour of video (7.5 in large mode).
+or `--library DIR`). It takes about 5 MB per hour of video (11 in large mode).
 A search copies it into memory as float32, about 11 MB per hour of video, when
 that fits in a quarter of the computer's memory (`WHENFRAME_MEMORY=2`, in
 gigabytes, sets another limit); a larger library is read from its files a block
@@ -89,8 +95,10 @@ embedding what the frames around it show, trained on the moments described
 in the training videos of DiDeMo (with TEMPO-HL's sentences), MSR-VTT,
 Charades-STA and YouCook2. On the DiDeMo test it put the right moment among
 the first five 29.4 % of the time instead of 27.6 %, as often as SigLIP 2
-So400m (29.5 %), and over four benchmarks it found more than the large mode
-([RESULTS.md](RESULTS.md), "Seventh round"). Most of its gain on Charades-STA
+So400m (29.5 %), and over four benchmarks it found more than So400m
+([RESULTS.md](RESULTS.md), "Seventh round"). In the large mode, PE core B/16's
+frames go through v4, the same model trained on PE's frames, and both models'
+scores are searched together ("Eleventh round"). Most of its gain on Charades-STA
 and YouCook2 comes from their training videos: on videos unlike any it
 learnt from, expect less (on UnAV-100, which it never saw, it finds 0.3
 points fewer than SigLIP 2 alone). It costs about 0.03 CPU minutes per hour
@@ -145,8 +153,9 @@ long home videos.
 
 How much what is said and what is heard count was chosen with each mode's
 model on tuning videos, and a search uses its library's: what is heard weighs
-1.5 in the economy and large modes, 2 otherwise; with whenframe's model and in
-the economy mode, what is said counts up to 5 seconds around a frame.
+1.5 in the large, economy and so400m modes, 2 otherwise; with whenframe's
+models and in the economy mode, what is said counts up to 5 seconds around a
+frame.
 
 ### Long moments
 

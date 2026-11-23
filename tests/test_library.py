@@ -215,3 +215,24 @@ def test_a_temporal_model_rewrites_the_frames_of_videos_not_photos(videos, tmp_p
     assert np.array_equal(new[photo.start], raw[photo.start])
     with pytest.raises(ValueError, match="not installed"):
         Library(tmp_path / "lib", encoder=ToyEncoder()).temporal_model  # noqa: B018
+
+
+def test_each_model_goes_through_its_own_temporal_model(videos, tmp_path):
+    from test_temporal import params
+
+    from whenframe import temporal
+
+    assert Settings(model="a+b", temporal="t").temporal_models == {"a": "t"}  # one name: the first model's
+    assert Settings(model="a+b", temporal="t+u").temporal_models == {"a": "t", "b": "u"}
+    encoders = {"toy": ToyEncoder(32), "toy2": ToyEncoder(48)}
+    plain = Library(tmp_path / "plain", Settings(model="toy+toy2"), encoders=dict(encoders))
+    lib = Library(tmp_path / "lib", Settings(model="toy+toy2", temporal="t-toy+t-toy2"), encoders=dict(encoders))
+    lib._temporal = params(np.random.default_rng(0), dim=3)  # no such models are installed: toy ones
+    lib._temporals["toy2"] = params(np.random.default_rng(1), dim=3)
+    plain.add(videos / "a.mp4")
+    lib.add(videos / "a.mp4")
+    ((video,), (_, raw, times), (_, new, _)) = plain.videos(), plain.snapshot(), lib.snapshot()
+    rows = slice(video.start, video.start + video.count)
+    for model, p in (("toy", lib._temporal), ("toy2", lib._temporals["toy2"])):
+        assert np.allclose(new[model][rows], temporal.apply(p, raw[model][rows], times[rows]), atol=2e-3)
+    assert not np.allclose(new["toy"][rows], new["toy2"][rows], atol=1e-2)

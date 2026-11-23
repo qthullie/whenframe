@@ -1518,3 +1518,13 @@ The run kept raises v3's mean by 0.55 points, short of the 1 point asked for.
 As written, v5 is reported and dropped. No left-out run was trained, part 2
 has no test, and criteria 36 and 37 were not measured. A new library in the
 standard mode keeps v3.
+
+**The large mode.** The workflow Models (`.github/workflows/models.yml`,
+`scripts/pe_core.py export`) built PE core B/16's image tower again on
+GitHub's machines, from timm/PE-Core-B-16's weights at the revision read in
+the ninth round, with the same versions of PyTorch, open_clip, timm and
+OpenVINO: its files are the bytes of the tower measured
+(`models/pe-core-b16/check.json`). It published them once in the release
+models-1, with Meta's licence and a NOTICE. Since then `--mode large` indexes
+a new library as fixed above, the tower downloaded from the release and its
+SHA-256 checked, and So400m is `--mode so400m`.

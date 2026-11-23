@@ -273,3 +273,15 @@ def test_the_export_keeps_the_search_settings_chosen_for_the_model(tmp_path):
                                        settings=settings))  # fmt: skip
     assert temporal.load(tmp_path / "v3.npz")["search"] == {"speech": tuned["v3"]["speech"], "sound_weight": 1.5}
     assert "search" not in temporal.load(tmp_path / "plain.npz")
+
+
+def test_each_library_goes_through_the_temporal_models_measured_with_its_models():
+    assert temporal.for_library("siglip2-base") == "temporal-siglip2-base"
+    assert temporal.for_library("siglip2-base+pe-core-b16") == "temporal-siglip2-base+temporal-pe-core-b16"
+    assert temporal.for_library("siglip2-base+siglip2-b32") == ""  # never measured with one
+    assert temporal.for_library("siglip2-so400m") == ""
+
+
+def test_the_package_ships_v4_for_pe_core():
+    p = temporal.load(name="temporal-pe-core-b16.npz")
+    assert p["in_w"].shape == (1024, 256) and (p["layers"], p["heads"]) == (2, 4) and "search" not in p

@@ -29,6 +29,7 @@ image tower.
 
 from __future__ import annotations
 
+import hashlib
 import html
 import importlib.util
 import json
@@ -66,6 +67,8 @@ class ModelSpec:
     text_input: str = "input_ids"
     text_dtype: str = "int64"
     weights_folder: str | None = None  # a folder of weights stored next to the ONNX graphs, fetched whole
+    # the files, when they are not all at the repository's main: (path in the model's folder, URL, SHA-256)
+    sources: tuple[tuple[str, str, str], ...] = ()
     text_openvino: bool = False  # the text tower runs with OpenVINO too, when the image tower does
     bank_beta: float = 50.0  # query-bank correction, as tuned on DiDeMo training videos
     bank_lambda: float = 1.0
@@ -75,6 +78,8 @@ class ModelSpec:
     speech_pad: float = 0.0  # seconds before and after a frame in which what is said counts
     sound_weight: float = 2.0  # of CLAP's standardised score, added to the frames'
 
+
+RELEASE = "https://github.com/qthullie/whenframe/releases/download/models-1"  # files no model hub serves
 
 MODELS = {
     "siglip2-base": ModelSpec("onnx-community/siglip2-base-patch16-224-ONNX", 224, 112.6689, -16.7717,
@@ -92,16 +97,30 @@ MODELS = {
         text_input="text", text_dtype="int32", image_output="embedding", text_output="embedding",
         clean="lower", weights_folder="textual", text_openvino=True, sound_weight=1.5,
     ),
-    # Meta's Perception Encoder, PE core B/16 (Apache License 2.0), measured in the ninth round: onnx-community's
-    # text tower, its image tower exported again from timm/PE-Core-B-16's weights and run one frame at a time, and
-    # timm/PE-Core-B-16's tokenizer (scripts/pe_core.py prepares the folder). CLIP has no bias of its own: the
-    # bias only places the probability shown with a result, at even odds for a cosine of 0.2.
+    # Meta's Perception Encoder, PE core B/16 (Apache License 2.0), measured in the ninth to eleventh rounds:
+    # onnx-community's text tower, timm/PE-Core-B-16's tokenizer, and its image tower exported again from
+    # timm/PE-Core-B-16's weights, for OpenVINO, one frame at a time (scripts/pe_core.py), which no model hub serves:
+    # whenframe's release models-1 does, built there again to the same bytes (.github/workflows/models.yml). CLIP
+    # has no bias of its own: the bias only places the probability shown with a result, at even odds for a cosine
+    # of 0.2.
     "pe-core-b16": ModelSpec(
         "onnx-community/PE-Core-B16-224-ONNX", 224, 99.9263, -19.9853, vision_file="onnx/vision_model_one.xml",
         text_file="onnx/text_model_fp16.onnx", image_output="image_embeds", text_output="text_embeds",
         text_length=32, pad_token=None, clean="none", text_openvino=True,
         # its query bank and spans' strength as chosen on the tuning sets (results/round9_bank.json)
         bank_beta=50.0, bank_lambda=1.0, spans_lambda=0.5,
+        sources=(
+            ("tokenizer.json", "https://huggingface.co/timm/PE-Core-B-16/resolve/"
+             "0038414f37721c5eafc1a5e0da802d291c909de3/tokenizer.json",
+             "43d4281659ce30b6aca2c7485944b3d73925bb7f87c7234daf3b6b094a6d618c"),
+            ("onnx/text_model_fp16.onnx", "https://huggingface.co/onnx-community/PE-Core-B16-224-ONNX/resolve/"
+             "7668f1df203c393f95310563ff999bfc8fd627b4/onnx/text_model_fp16.onnx",
+             "d837a6e29246892cafb195c92265899defd2ca89166a692f61e0c5b6a57ff65f"),
+            ("onnx/vision_model_one.xml", f"{RELEASE}/pe-core-b16-vision.xml",
+             "8bb5f9908c0011ecd138cb328f1ef7dc862f890c804ff32adf7882402b3bd474"),
+            ("onnx/vision_model_one.bin", f"{RELEASE}/pe-core-b16-vision.bin",
+             "dde7ec6a300b4fe7a1c4cccfa3f27fe62adbdbc7b6ea9ccea1fbb6db29e00bc1"),
+        ),
     ),
 }  # fmt: skip
 DEFAULT_MODEL = "siglip2-base"
@@ -110,10 +129,30 @@ MODES = {
     "standard": "siglip2-base",
     "economy": "siglip2-b32",
     "precision": "siglip2-base+siglip2-b32",
-    "large": "siglip2-so400m",
+    # SigLIP 2 B/16 and PE core B/16, searched through whenframe's models v3 and v4 together (eleventh round)
+    "large": "siglip2-base+pe-core-b16",
+    "so400m": "siglip2-so400m",  # `--mode large` until the eleventh round
 }
 # weight of each model's scores in a combined search, as tuned on DiDeMo training videos
 FUSION = {"siglip2-base": 1.0, "siglip2-b32": 0.25, "mobileclip-s2": 1.0}
+
+
+@dataclass(frozen=True)
+class Fused:
+    """Several models searched as the tenth and eleventh rounds measured them together (scripts/compare.py,
+    `fused`): each model's corrected scores standardised over the library and added with its weight, the sum
+    standardised again and put back on the first model's scale (its mean and spread), so that the speech weight
+    means what it means with one model; with the speech settings and sound weight chosen with them on the tuning
+    sets."""
+
+    weights: tuple[float, ...]  # in the order of the models
+    speech_weight: float
+    speech_pad: float
+    speech_normalise: str
+    sound_weight: float
+
+
+FUSED = {"siglip2-base+pe-core-b16": Fused((1.0, 0.75), 0.005, 5.0, "raw", 1.5)}
 
 
 def cache_dir() -> Path:
@@ -123,26 +162,39 @@ def cache_dir() -> Path:
 
 def fetch(spec: ModelSpec) -> Path:
     """Download the model files once into the cache and return their folder."""
+    if spec.sources:
+        folder = cache_dir() / "models" / spec.repo.replace("/", "--")
+        for name, url, digest in spec.sources:
+            download(url, folder / name, digest)
+        return folder
     folder = fetch_files(spec.repo, (spec.tokenizer_file, spec.vision_file, spec.text_file))
     if spec.weights_folder:
         fetch_folder(spec.repo, spec.weights_folder)
     return folder
 
 
+def download(url: str, dest: Path, sha256: str = "") -> None:
+    """A file, once: written next to its place and moved there whole, after its SHA-256 is checked when given."""
+    if dest.exists():
+        return
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_suffix(dest.suffix + ".part")
+    h = hashlib.sha256()
+    with urllib.request.urlopen(url, timeout=60) as r, open(tmp, "wb") as f:  # noqa: S310 (fixed hosts)
+        while chunk := r.read(1 << 20):
+            f.write(chunk)
+            h.update(chunk)
+    if sha256 and h.hexdigest() != sha256:
+        tmp.unlink()
+        raise OSError(f"{url}: SHA-256 {h.hexdigest()}, expected {sha256}")
+    tmp.replace(dest)
+
+
 def fetch_files(repo: str, names: tuple[str, ...]) -> Path:
     """Download files of a Hugging Face repository once into the cache and return their folder."""
     folder = cache_dir() / "models" / repo.replace("/", "--")
     for name in names:
-        dest = folder / name
-        if dest.exists():
-            continue
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        url = f"https://huggingface.co/{repo}/resolve/main/{name}"
-        tmp = dest.with_suffix(dest.suffix + ".part")
-        with urllib.request.urlopen(url, timeout=60) as r, open(tmp, "wb") as f:  # noqa: S310 (fixed host)
-            while chunk := r.read(1 << 20):
-                f.write(chunk)
-        tmp.replace(dest)
+        download(f"https://huggingface.co/{repo}/resolve/main/{name}", folder / name)
     return folder
 
 
@@ -301,6 +353,8 @@ class Encoder:
     def images(self) -> _OnnxRuntime | _OpenVINO:
         """The image tower, loaded on first use."""
         if self._vision is None:
+            if self._vision_path.suffix == ".xml" and self.backend != "openvino":
+                raise RuntimeError(f"{self.name}'s image tower runs with OpenVINO: pip install 'whenframe[fast]'")
             runtime = _OpenVINO if self.backend == "openvino" else _OnnxRuntime
             self._vision = runtime(self._vision_path, self.spec.image_input, self.spec.image_output, self._threads)
         return self._vision

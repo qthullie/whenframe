@@ -26,7 +26,7 @@ import numpy as np
 
 from . import bank as qbank
 from . import sounds
-from .encoder import FUSION, MODELS
+from .encoder import FUSED, FUSION, MODELS
 from .half import BLOCK, to_float32
 from .library import Library, Video
 from .moments import Span, on_grid, smooth, spans, windows
@@ -60,10 +60,15 @@ class SearchConfig:
 
 def chosen(library: Library) -> tuple[SpeechConfig, SoundConfig]:
     """The speech settings and the sound weight chosen with the library's model on YouCook2's and UnAV-100's tuning
-    sets (docs/RESULTS.md, sixth and seventh rounds): its temporal model's, kept in the model's file, when its frames
-    go through one; else its image model's (encoder.MODELS); the defaults when several models are searched together,
-    for which none were chosen."""
+    sets (docs/RESULTS.md, sixth, seventh and tenth rounds): those of its models together when they were measured
+    together (encoder.FUSED); its temporal model's, kept in the model's file, when its frames go through one; else
+    its image model's (encoder.MODELS); the defaults for other models searched together, for which none were
+    chosen."""
     models = library.settings.models
+    fused = FUSED.get(library.settings.model)
+    if fused:
+        return (SpeechConfig(fused.speech_weight, fused.speech_pad, fused.speech_normalise),
+                SoundConfig(weight=fused.sound_weight))  # fmt: skip
     if len(models) > 1 or models[0] not in MODELS:
         return SpeechConfig(), SoundConfig()
     if library.settings.temporal:
@@ -176,11 +181,21 @@ class Searcher:
             off = self.offsets(model)
             strength = self.config.bank * self._tuned(model)[1]
             corrected[model] = raw[model] if off is None else raw[model] - strength * off
-        self._first_corrected = corrected[self.models[0]]
+        first = corrected[self.models[0]]
+        self._first_corrected = first
         if len(self.models) == 1:
-            return corrected[self.models[0]]
+            return first
+        fused = FUSED.get(self.library.settings.model)
+        if fused and self.config.weights is None:  # as measured together, on the first model's scale
+            z = standardise(sum(w * standardise(corrected[m]) for m, w in zip(self.models, fused.weights, strict=True)))
+            return float(first.mean()) + float(first.std()) * z
         weights = self.config.weights or FUSION
         return sum(weights.get(m, 1.0) * standardise(corrected[m]) for m in self.models)
+
+    @property
+    def _on_first_scale(self) -> bool:
+        """Whether the ranking scores are on the first model's scale: one model, or models fused as measured."""
+        return len(self.models) == 1 or (self.library.settings.model in FUSED and self.config.weights is None)
 
     def video_moments(self, video: Video, scores: np.ndarray, times: np.ndarray) -> list[Span]:
         c = self.config
@@ -205,8 +220,9 @@ class Searcher:
         hits = self.library.speech_hits(query)
         cfg = self.config.speech
         said = frame_speech(times, {v.id: (v.start, v.count) for v in videos}, hits, cfg)
-        # the weight was tuned on one model's corrected scores; several models' are standardised first
-        scale = 1.0 if len(self.models) == 1 else 1.0 / max(float(self._first_corrected.std()), 1e-9)
+        # the weight was tuned on one model's corrected scores; several models' are standardised first, unless they
+        # were put back on the first model's scale
+        scale = 1.0 if self._on_first_scale else 1.0 / max(float(self._first_corrected.std()), 1e-9)
         return cfg.weight * scale * said, hits
 
     def sound_scores(self, query: str, videos, times, heard: np.ndarray | None = None) -> np.ndarray:

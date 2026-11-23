@@ -102,3 +102,41 @@ def test_backend_names(monkeypatch):
     assert enc.backend_name() == "onnxruntime"
     with pytest.raises(ValueError):
         enc.backend_name("tensorflow")
+
+
+def test_a_download_is_kept_only_when_its_digest_matches(tmp_path):
+    import hashlib
+
+    src = tmp_path / "src.bin"
+    src.write_bytes(b"whenframe")
+    bad = tmp_path / "bad" / "f.bin"
+    with pytest.raises(OSError, match="SHA-256"):
+        enc.download(src.as_uri(), bad, "0" * 64)
+    assert not bad.exists() and not bad.with_suffix(".bin.part").exists()
+    good = tmp_path / "good" / "f.bin"
+    enc.download(src.as_uri(), good, hashlib.sha256(b"whenframe").hexdigest())
+    assert good.read_bytes() == b"whenframe"
+
+
+def test_pe_core_comes_from_fixed_revisions_and_whenframes_release():
+    """PE core B/16's files as measured: Hugging Face at fixed revisions, and the image tower of the release
+    models-1, which the workflow Models built to the bytes of the tower measured (models/pe-core-b16/check.json)."""
+    import json
+    from pathlib import Path
+
+    spec = enc.MODELS["pe-core-b16"]
+    sources = {name: (url, digest) for name, url, digest in spec.sources}
+    assert set(sources) == {spec.tokenizer_file, spec.text_file, spec.vision_file,
+                            spec.vision_file.removesuffix(".xml") + ".bin"}  # fmt: skip
+    for url, digest in sources.values():
+        assert len(digest) == 64 and "/resolve/main/" not in url
+        assert url.startswith(("https://huggingface.co/", enc.RELEASE + "/"))
+    measured = json.loads((Path(__file__).parents[1] / "models" / "pe-core-b16" / "check.json").read_text())
+    for f in ("vision_model_one.xml", "vision_model_one.bin"):
+        assert sources[f"onnx/{f}"] == (f"{enc.RELEASE}/pe-core-b16-vision.{f.split('.')[-1]}", measured["sha256"][f])
+
+
+def test_an_openvino_tower_asks_for_openvino(tiny, monkeypatch):
+    monkeypatch.setitem(enc.MODELS, "tiny-xml", enc.ModelSpec("test/tiny", 8, 10.0, 0.0, vision_file="x.xml"))
+    with pytest.raises(RuntimeError, match=r"whenframe\[fast\]"):
+        enc.Encoder("tiny-xml", folder=tiny, backend="onnxruntime").images  # noqa: B018

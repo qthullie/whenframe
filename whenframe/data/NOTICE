@@ -1,9 +1,11 @@
-bank-siglip2-base.npy, bank-siglip2-b32.npy, bank-siglip2-so400m.npy
+bank-siglip2-base.npy, bank-siglip2-b32.npy, bank-siglip2-so400m.npy,
+bank-pe-core-b16.npy
 
 SigLIP 2 base (google/siglip2-base-patch16-224), B/32
-(google/siglip2-base-patch32-256) and So400m (google/siglip2-so400m-patch14-224,
-through Immich's ONNX export) text embeddings, rounded to float16, of the same
-4,096 descriptions from the training split of DiDeMo:
+(google/siglip2-base-patch32-256), So400m (google/siglip2-so400m-patch14-224,
+through Immich's ONNX export) and Perception Encoder's PE core B/16 (Meta,
+Apache 2.0, through onnx-community's ONNX export) text embeddings, rounded to
+float16, of the same 4,096 descriptions from the training split of DiDeMo:
 
     Lisa Anne Hendricks, Oliver Wang, Eli Shechtman, Josef Sivic, Trevor Darrell
     and Bryan Russell. Localizing Moments in Video with Natural Language.
@@ -15,12 +17,15 @@ outside the benchmark's tuning set; `bank()` in scripts/didemo.py rebuilds
 them from the annotations. The file holds embeddings only: no description
 text and no video.
 
-temporal-siglip2-base.npz
+temporal-siglip2-base.npz, temporal-pe-core-b16.npz
 
-whenframe's temporal model (whenframe/temporal.py), applied by default to the
-frames of a new library in the standard mode (`whenframe index --no-temporal`
-leaves it out). Model v3 of docs/PROTOCOL.md's seventh round: one run of
-scripts/temporal.py on the frames and descriptions of
+whenframe's temporal models (whenframe/temporal.py), applied by default to the
+frames of a new library in the standard and large modes (`whenframe index
+--no-temporal` leaves them out). temporal-siglip2-base.npz is model v3 of
+docs/PROTOCOL.md's seventh round, on SigLIP 2 B/16's frames;
+temporal-pe-core-b16.npz is model v4 of its ninth round, the same recipe on
+PE core B/16's frames, which the large mode searches with v3's. Each is one
+run of scripts/temporal.py on the frames and descriptions of
 
 - DiDeMo's training videos: Flickr videos from YFCC100M, each under its own
   Creative Commons licence (some of them non-commercial), with descriptions
@@ -36,6 +41,6 @@ scripts/temporal.py on the frames and descriptions of
 
 These videos were published for research. The weights are provided for
 research and non-commercial use only; the rest of whenframe stays under the
-MIT licence. The file holds weights, and the speech settings and sound weight
-chosen with the model on the tuning sets (docs/PROTOCOL.md), only: no frame,
+MIT licence. The files hold weights only (v3's, also the speech settings and
+sound weight chosen with it on the tuning sets, docs/PROTOCOL.md): no frame,
 description or video.

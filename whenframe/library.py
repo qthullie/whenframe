@@ -40,11 +40,19 @@ class Settings:
     speech: str = ""  # Whisper model transcribing the videos ("base", "small"), or "" for none
     photos: bool = True  # photos are indexed with the videos, each as a single frame
     sounds: bool = False  # CLAP embeds windows of the sound tracks, to search what is heard
-    temporal: str = ""  # whenframe's temporal model, run over the first model's frames of each video, or ""
+    # whenframe's temporal models, run over each video's frames: one per model, in the models' order and joined by
+    # "+" ("" for none; a single name is the first model's)
+    temporal: str = ""
 
     @property
     def models(self) -> tuple[str, ...]:
         return tuple(self.model.split("+"))
+
+    @property
+    def temporal_models(self) -> dict[str, str]:
+        """The name of the temporal model each model's frames go through, for those that go through one."""
+        names = self.temporal.split("+") if self.temporal else []
+        return {m: n for m, n in zip(self.models, names, strict=False) if n}
 
 
 @dataclass(frozen=True)
@@ -97,16 +105,30 @@ class Library:
         if encoder is not None:
             self._encoders[self.settings.models[0]] = encoder
         self._cache = None
-        self._temporal = None
+        self._temporal = None  # the first model's temporal model's weights, loaded when first needed
+        self._temporals: dict[str, dict] = {}  # the other models'
 
     @property
     def temporal_model(self) -> dict:
-        """The weights of the temporal model this library's frames go through (whenframe/temporal.py)."""
+        """The weights of the temporal model this library's first model's frames go through (whenframe/temporal.py)."""
         if self._temporal is None:
-            self._temporal = temporal.load(name=f"{self.settings.temporal}.npz")
-            if self._temporal is None:
-                raise ValueError(f"{self.folder} was indexed with {self.settings.temporal}, which is not installed")
+            self._temporal = self._load_temporal(self.settings.models[0])
         return self._temporal
+
+    def temporal_for(self, model: str) -> dict:
+        """The weights of the temporal model this model's frames go through."""
+        if model == self.settings.models[0]:
+            return self.temporal_model
+        if model not in self._temporals:
+            self._temporals[model] = self._load_temporal(model)
+        return self._temporals[model]
+
+    def _load_temporal(self, model: str) -> dict:
+        name = self.settings.temporal_models.get(model, "")
+        p = temporal.load(name=f"{name}.npz") if name else None
+        if p is None:
+            raise ValueError(f"{self.folder} was indexed with {self.settings.temporal}, which is not installed")
+        return p
 
     def enable_speech(self, size: str) -> None:
         """Transcribe this library's videos with Whisper `size` from now on (and those not transcribed yet)."""
@@ -260,9 +282,10 @@ class Library:
             raise VideoError(f"{path}: no frame decoded")
         embs = {m: np.concatenate(e) for m, e in embs.items()}
         times = np.concatenate(kept_times)
-        if s.temporal:  # each frame told what the frames around it show; photos have no frames around them
-            first = s.models[0]
-            embs[first] = temporal.apply(self.temporal_model, embs[first].astype(np.float32), times).astype(np.float16)
+        # each frame told what the frames around it show, by its model's temporal model (a photo has none around it)
+        for model in s.temporal_models:
+            adapted = temporal.apply(self.temporal_for(model), embs[model].astype(np.float32), times)
+            embs[model] = adapted.astype(np.float16)
         return self._store(path, embs, times, info.duration or float(seen / s.fps))
 
     def _add_photo(self, path: Path) -> Video:

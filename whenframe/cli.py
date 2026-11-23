@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 
 from . import __version__, temporal
-from .encoder import BACKENDS, DEFAULT_MODEL, MODES
+from .encoder import BACKENDS, DEFAULT_MODEL, MODELS, MODES, backend_name
 from .library import Library, Settings
 from .search import HEARD, SearchConfig, Searcher, worth_showing
 from .video import find_media
@@ -34,12 +34,16 @@ def open_library(args) -> Library:
     if args.no_photos:
         overrides["photos"] = False
     if not (Path(args.library) / "config.json").exists() and not args.no_temporal:
-        # a new library in the standard mode goes through whenframe's temporal model (docs/RESULTS.md, sixth
-        # round); the other modes' frames were not measured with it
-        name = temporal.MODELS.get(overrides.get("model", DEFAULT_MODEL))
-        if name and temporal.load(name=f"{name}.npz") is not None:
-            overrides["temporal"] = name
+        # a new library in the standard and large modes goes through whenframe's temporal models, one per image
+        # model (docs/RESULTS.md, seventh and eleventh rounds); the other modes' frames were not measured with them
+        names = temporal.for_library(overrides.get("model", DEFAULT_MODEL))
+        if names:
+            overrides["temporal"] = names
     lib = Library(args.library, Settings(**overrides) if overrides else None, backend=args.backend)
+    xml = [m for m in lib.settings.models if m in MODELS and MODELS[m].vision_file.endswith(".xml")]
+    if xml and backend_name(args.backend) != "openvino":
+        raise SystemExit(f"whenframe: {' and '.join(xml)}'s image tower runs with OpenVINO: "
+                         "pip install 'whenframe[fast]'")  # fmt: skip
     if args.speech:
         lib.enable_speech(args.speech)
     if args.sounds:
@@ -54,9 +58,10 @@ def cmd_index(args) -> int:
             or lib.needs_sounds(p.resolve())]  # fmt: skip
     print(f"{len(paths)} videos and photos found, {len(todo)} to index")
     if todo:
-        enc = lib.encoder
-        print(f"image encoder: {enc.name} on {enc.backend} ({enc.images.precision})"
-              + (f", then whenframe's {lib.settings.temporal}" if lib.settings.temporal else ""))  # fmt: skip
+        encs = [lib.encoder_for(m) for m in lib.settings.models]
+        names = " and ".join(f"{e.name} on {e.backend} ({e.images.precision})" for e in encs)
+        then = " and ".join(lib.settings.temporal_models.values())
+        print(f"image encoder{'s' if len(encs) > 1 else ''}: {names}" + (f", then whenframe's {then}" if then else ""))
     t0 = time.time()
     failed = 0
 
@@ -172,17 +177,19 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--dedup", type=float, default=None, help="skip frames that barely changed (default 4, 0 = off)")
         p.add_argument("--mode", choices=list(MODES), default=None,
                        help="standard (default); economy: about 3 times less CPU, less accurate; precision: two "
-                            "models, no gain measured on DiDeMo; large: SigLIP 2 So400m, 4 times the CPU of "
-                            "standard, 1.9 points more on DiDeMo. Fixed for a library (docs/RESULTS.md).")  # fmt: skip
+                            "models, no gain measured on DiDeMo; large: SigLIP 2 B/16 and PE core B/16 with "
+                            "whenframe's models v3 and v4, 1.7 times the CPU of standard, 1.8 points more on the "
+                            "four tests (needs OpenVINO: pip install 'whenframe[fast]'); so400m: SigLIP 2 So400m, "
+                            "3.4 times the CPU, 1.3 points less. Fixed for a library (docs/RESULTS.md).")  # fmt: skip
         p.add_argument("--backend", choices=BACKENDS, default=None,
                        help="runtime of the image encoder: OpenVINO if installed (auto, the default), else ONNX "
                             "Runtime; also $WHENFRAME_BACKEND")  # fmt: skip
         p.add_argument("--no-photos", action="store_true", help="index videos only, not the photos next to them "
                        "(fixed for a library)")  # fmt: skip
         no_temporal = (
-            "keep SigLIP 2's frame embeddings as they are, without whenframe's temporal model (by "
-            "default a new library in the standard mode goes through it; its weights are for research "
-            "and non-commercial use; docs/RESULTS.md, sixth round); fixed for a library"
+            "keep the frame embeddings as the image encoders give them, without whenframe's temporal models (by "
+            "default a new library in the standard and large modes goes through them; their weights are for "
+            "research and non-commercial use; docs/RESULTS.md, seventh and eleventh rounds); fixed for a library"
         )
         p.add_argument("--no-temporal", action="store_true", help=no_temporal)
         p.add_argument("--speech", choices=["base", "small"], default=None,

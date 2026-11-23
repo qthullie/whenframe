@@ -27,6 +27,7 @@ BANKS = {
     "siglip2-base": "bank-siglip2-base.npy",
     "siglip2-b32": "bank-siglip2-b32.npy",
     "siglip2-so400m": "bank-siglip2-so400m.npy",
+    "pe-core-b16": "bank-pe-core-b16.npy",
 }
 
 

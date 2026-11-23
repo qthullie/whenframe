@@ -25,7 +25,10 @@ from importlib import resources
 import numpy as np
 
 WINDOW, STRIDE = 32, 16  # frames read together, and how far the next window starts
-MODELS = {"siglip2-base": "temporal-siglip2-base"}  # the image encoders a temporal model was trained for
+# the image encoders a temporal model was trained for: v3 (seventh round) and v4 (ninth round)
+MODELS = {"siglip2-base": "temporal-siglip2-base", "pe-core-b16": "temporal-pe-core-b16"}
+# the libraries whose frames were measured through them: v3 alone, v4 alone, and both together (eleventh round)
+MEASURED = ("siglip2-base", "pe-core-b16", "siglip2-base+pe-core-b16")
 PERIODS = (2.0, 4.0, 8.0, 16.0, 32.0, 64.0)  # seconds: the times' sines and cosines at these periods
 
 
@@ -86,6 +89,15 @@ def apply(p: dict, emb: np.ndarray, times: np.ndarray) -> np.ndarray:
         weight[s:e] += w[:, None]
     out = x + total / weight
     return out / np.maximum(np.linalg.norm(out, axis=1, keepdims=True), 1e-12)
+
+
+def for_library(model: str) -> str:
+    """The temporal models a new library of these image models ("+"-joined) goes through, one per model in their
+    order, joined by "+": as measured, and only when all are installed; "" otherwise."""
+    if model not in MEASURED:
+        return ""
+    names = [MODELS[m] for m in model.split("+")]
+    return "+".join(names) if all(load(name=f"{n}.npz") is not None for n in names) else ""
 
 
 def load(path=None, name: str = "temporal-siglip2-base.npz") -> dict | None:
