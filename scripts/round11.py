@@ -44,6 +44,9 @@ V5LOG = ROOT / "results" / "round11_v5.json"
 V3 = OUT / "temporal-siglip2-base-v3.npz"
 V4 = OUT / "temporal-pe-core-b16-v4.npz"
 V5 = OUT / "temporal-siglip2-base-v5.npz"  # v5, exported as the package would ship it
+# where the teacher's arrays are written (results/cache by default; ROUND11_TEACHER_DIR, such as /dev/shm, when the
+# disk is too small for them), each linked into results/cache, where scripts/temporal.py reads it
+TEACHER_DIR = Path(os.environ.get("ROUND11_TEACHER_DIR") or CACHE)
 PE = "pe-core-b16"
 WEIGHT = 0.75  # PE's weight in the fusion, chosen in the tenth round
 # the fusion as the tenth round measured it, and its left-out runs fused the same way (reported beside)
@@ -78,6 +81,7 @@ def teacher(tag: str) -> None:
 
     a_weights, b_weights = FUSIONS[tag]
     pa, pb = temporal.load(a_weights), temporal.load(b_weights)
+    TEACHER_DIR.mkdir(parents=True, exist_ok=True)
     banks = [np.load(CACHE / f"didemo_bank_text{k}.npy").astype(np.float32) for k in ("", f"_{PE}")]
     for c, name in FRAMES.items():
         if c == WITHOUT[tag]:
@@ -96,9 +100,13 @@ def teacher(tag: str) -> None:
             b[s : s + n] = temporal.apply(pb, emb_b[s : s + n].astype(np.float32), times[s : s + n])
         off = np.stack([qbank.offsets(a, banks[0], 50.0), qbank.offsets(b, banks[1], 50.0)], axis=1)
         for x, arr in (("a", a), ("b", b), ("off", off.astype(np.float32))):
-            tmp = dest[x].with_suffix(".tmp.npy")
+            target = TEACHER_DIR / dest[x].name
+            tmp = target.with_suffix(".tmp.npy")
             np.save(tmp, arr)
-            tmp.replace(dest[x])
+            tmp.replace(target)
+            if target != dest[x]:  # written elsewhere (a disk too small: /dev/shm), read through a link
+                dest[x].unlink(missing_ok=True)
+                dest[x].symlink_to(target)
     log(f"teacher {tag}: ready")
 
 
