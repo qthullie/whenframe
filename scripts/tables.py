@@ -945,10 +945,23 @@ LEFT_OUT11 = {"charades": ("v3-no-charades", "fusion-no-charades"),
 
 
 def round11_tables() -> dict[str, str]:
-    """The eleventh round, part 1: the tenth round's fusion of v3 and v4, tested once against v3 (and So400m,
-    beside); both encoders' indexing cost against SigLIP 2 B/16's, measured again the same way."""
+    """The eleventh round. Part 1: the tenth round's fusion of v3 and v4, tested once against v3 (and So400m,
+    beside); both encoders' indexing cost against SigLIP 2 B/16's, measured again the same way. Part 2: v5, taught
+    by the fusion, on the tuning sets (it did not reach the test)."""
     out, cols = {}, ("didemo", "charades", "youcook2", "unav")
     head = ["DiDeMo R@5", "Charades-STA R1", "YouCook2 R@5", "UnAV-100 P@10", "mean"]
+    f5, f7, ft = RESULTS / "round11_v5.json", RESULTS / "round7_tuned.json", RESULTS / "round11_tuned.json"
+    if f5.exists() and f7.exists() and ft.exists():  # part 2: v5's choices, on the tuning sets only
+        v5, v3 = json.loads(f5.read_text()), json.loads(f7.read_text())["v3"]
+        runs = [("v3, the reference", v3), ("the fusion, v5's teacher", json.loads(ft.read_text())["fusion"])]
+        runs += [(f"v5, the teacher's losses with weight {s['distil']:g}"
+                  + (" (kept)" if s["run"] == v5["kept"] else ""), v5["runs"][s["run"]]["tuning"])
+                 for s in v5["steps"]]  # fmt: skip
+        out["round11-v5"] = table(
+            ["tuning sets", *head, "against v3"],
+            [[name, *(pct(x[c]) for c in cols), f"{100 * x['mean']:.2f}",
+              "" if x is v3 else f"{100 * (x['mean'] - v3['mean']):+.2f}"] for name, x in runs],
+        )  # fmt: skip
     f, fc, f6 = RESULTS / "round11_test.json", RESULTS / "round11_cost.json", RESULTS / "compare_cost.json"
     if not (f.exists() and fc.exists()):
         return out

@@ -1505,3 +1505,16 @@ As fixed above, `--mode large` is to index a new library with SigLIP 2 B/16
 and PE core B/16 and search it through v3 and v4 together. The tool does not
 do so yet: PE core B/16's image tower, exported again from timm's weights in
 the ninth round, is not published anywhere the tool could download it from.
+
+**Part 2's choices** (`scripts/round11.py v5`; `results/round11_v5.json`, each
+run's tuning numbers in `results/round11_tuned.json`). Made on the tuning sets
+only, in the order written above:
+
+1. the teacher's losses with weight 1: mean 39.69, against 39.63 for v3:
+   kept;
+2. weight 3: mean 40.19, against 39.69: kept.
+
+The run kept raises v3's mean by 0.55 points, short of the 1 point asked for.
+As written, v5 is reported and dropped. No left-out run was trained, part 2
+has no test, and criteria 36 and 37 were not measured. A new library in the
+standard mode keeps v3.

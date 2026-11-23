@@ -49,6 +49,15 @@
   lowers it by 0.83 to 3.79 points. Learning a library only from the
   automatic descriptions that find their own 10 seconds lowers it by 0.78.
   The tool is unchanged.
+- The eleventh round tested that fusion once (`scripts/round11.py`): v3 and
+  v4 together find more than v3 alone on each of the four tests, mean 43.72
+  against 41.90 (sign test p = 4.9e-12), for 1.74 times the indexing cost;
+  So400m's mean is 40.63, for 3.4 times. Criteria 33 to 35 are met. The tool
+  does not switch `--mode large` to it yet, as PE core B/16's image tower,
+  exported again from timm's weights, is not published where the tool could
+  download it. v5, whenframe's model taught by the fusion on SigLIP 2 B/16's
+  frames alone, raised v3's tuning mean by 0.55 points, not the 1 asked for,
+  so it was not tested.
 - The sixth round compares SigLIP 2 B/32, B/16, So400m and B/16 with the
   model, on the same frames of DiDeMo, Charades-STA, YouCook2 and UnAV-100:
   mean of the four primary metrics 36.80, 38.07, 40.63 and 38.65, each step

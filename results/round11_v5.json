@@ -1,0 +1,50 @@
+{
+ "v3_mean": 0.39633159295051007,
+ "steps": [
+  {
+   "run": "v5-d1",
+   "distil": 1.0,
+   "mean": 0.39687620692845904,
+   "against": "v3",
+   "against_mean": 0.39633159295051007,
+   "kept": true
+  },
+  {
+   "run": "v5-d3",
+   "distil": 3.0,
+   "mean": 0.40185116142852895,
+   "against": "v5-d1",
+   "against_mean": 0.39687620692845904,
+   "kept": true
+  }
+ ],
+ "kept": "v5-d3",
+ "gain": 0.005519568478018877,
+ "to_test": false,
+ "runs": {
+  "v5-d1": {
+   "weights": "results/temporal/v5-d1.npz",
+   "best_step": 3500,
+   "best": 0.4247018360018169,
+   "tuning": {
+    "didemo": 0.3372508942258559,
+    "charades": 0.5121527777777778,
+    "youcook2": 0.3150242326332795,
+    "unav": 0.4230769230769232,
+    "mean": 0.39687620692845904
+   }
+  },
+  "v5-d3": {
+   "weights": "results/temporal/v5-d3.npz",
+   "best_step": 6000,
+   "best": 0.42771541262135926,
+   "tuning": {
+    "didemo": 0.33980582524271846,
+    "charades": 0.515625,
+    "youcook2": 0.3263327948303716,
+    "unav": 0.4256410256410257,
+    "mean": 0.40185116142852895
+   }
+  }
+ }
+}

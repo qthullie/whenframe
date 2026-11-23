@@ -43,6 +43,10 @@ from `results/didemo_test.json`; CI fails if they differ from that file.
   whenframe's model trained on its frames, it finds as much as v3 (41.69
   against 41.90) and 4.7 points less on YouCook2, so the tool keeps SigLIP 2
   B/16 and v3 (ninth round).
+- Finding as much as v3 and v4 together takes both encoders' indexing time.
+  Taught by them, whenframe's model on SigLIP 2 B/16's frames alone gained
+  0.55 points on the tuning sets, about a third of their 1.70 (eleventh
+  round).
 - Several criteria set in advance were not met; this page says which and why.
 
 ## Criteria
@@ -696,6 +700,8 @@ model for the test, on all of them (`results/temporal/*.json`).
 | v2-infonce-s2: adapter | 3000 x 128 | 1 | 2 | 100 | 1250 | 33.0 | 52.6 | 48.5 | 0.999 |
 | v2-infonce: adapter | 3000 x 128 | 1 | 2 | 100 | 2250 | 33.4 | 53.2 | 48.6 | 0.999 |
 | v2-sigmoid: adapter | 3000 x 128 | 1 | 2 | 100 | 2250 | 33.1 | 52.6 | 48.5 | 0.998 |
+| v5-d1: adapter | 6000 x 128 | 1 | 2 | 30 | 6000 | 34.2 | 54.4 | 49.6 | 0.993 |
+| v5-d3: adapter | 6000 x 128 | 1 | 2 | 30 | 2500 | 34.1 | 54.2 | 49.4 | 0.992 |
 <!-- /table -->
 
 ### DiDeMo test
@@ -1349,3 +1355,23 @@ right moment first 49.9 % of the time, 3.4 points more than v3's run without
 them. That is more than VTG-GPT (43.7 %) and about as much as TFVTG (50.0 %),
 two published methods that do not train on Charades-STA either. On YouCook2,
 the gain without its videos is 0.3 points.
+
+### v5, taught by the fusion, on the tuning sets
+
+The round's second part trained whenframe's model on SigLIP 2 B/16's frames
+alone, with v3's recipe and the fusion's scores as its teacher, so that
+indexing would cost what it costs with v3 (`scripts/round11.py v5`,
+`results/round11_v5.json`). Its two choices were made on the tuning sets.
+
+<!-- table round11-v5 -->
+| tuning sets | DiDeMo R@5 | Charades-STA R1 | YouCook2 R@5 | UnAV-100 P@10 | mean | against v3 |
+|---|---|---|---|---|---|---|
+| v3, the reference | 33.7 | 50.6 | 32.1 | 42.1 | 39.63 |  |
+| the fusion, v5's teacher | 37.4 | 52.3 | 32.1 | 43.6 | 41.34 | +1.70 |
+| v5, the teacher's losses with weight 1 | 33.7 | 51.2 | 31.5 | 42.3 | 39.69 | +0.05 |
+| v5, the teacher's losses with weight 3 (kept) | 34.0 | 51.6 | 32.6 | 42.6 | 40.19 | +0.55 |
+<!-- /table -->
+
+With weight 3, v5 raises v3's mean by 0.55 points, about a third of what its
+teacher gains. The protocol asked for 1 point before any test, so v5 was not
+tested, and a new library in the standard mode keeps v3.

@@ -71,5 +71,45 @@
    "normalise": "raw"
   },
   "sound_weight": 1.0
+ },
+ "v5-d1": {
+  "spec": "v5-d1=results/temporal/v5-d1.npz@1",
+  "model": "siglip2-base",
+  "weights": "results/temporal/v5-d1.npz",
+  "alpha": 1.0,
+  "per": {},
+  "guide": 0.0,
+  "fuse": null,
+  "didemo": 0.3372508942258559,
+  "youcook2": 0.3150242326332795,
+  "unav": 0.4230769230769232,
+  "charades": 0.5121527777777778,
+  "mean": 0.39687620692845904,
+  "speech": {
+   "weight": 0.005,
+   "pad": 5.0,
+   "normalise": "raw"
+  },
+  "sound_weight": 1.5
+ },
+ "v5-d3": {
+  "spec": "v5-d3=results/temporal/v5-d3.npz@1",
+  "model": "siglip2-base",
+  "weights": "results/temporal/v5-d3.npz",
+  "alpha": 1.0,
+  "per": {},
+  "guide": 0.0,
+  "fuse": null,
+  "didemo": 0.33980582524271846,
+  "youcook2": 0.3263327948303716,
+  "unav": 0.4256410256410257,
+  "charades": 0.515625,
+  "mean": 0.40185116142852895,
+  "speech": {
+   "weight": 0.005,
+   "pad": 5.0,
+   "normalise": "raw"
+  },
+  "sound_weight": 1.5
  }
 }
