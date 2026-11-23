@@ -1535,3 +1535,86 @@ so400m modes are gone. This was decided on the numbers above, with no new
 measurement; libraries built in the other modes are searched as they were
 built. Without whenframe's models (`--no-temporal`), the two encoders are
 searched together as with them, which was not measured.
+
+## Twelfth round: descriptions in French, and text towers in 8 bits
+
+Written before any of its numbers was computed.
+
+**The questions.** A description typed in French is searched as it is today.
+SigLIP 2 read many languages in training; PE core B/16's text tower was not
+measured on any but English. In the second round, French descriptions found
+about 70 % of what English ones found with SigLIP 2 B/16 alone. And
+whenframe's model downloads 2.6 GB and holds both text towers in memory at
+search time (4.7 GB at most, eleventh round). This round asks whether
+translating a French description into English on the user's computer finds
+more than searching it as it is (part 1), and whether the text towers can
+keep their weights in 8 bits without finding less (part 2)
+(`scripts/round12.py`).
+
+### Part 1: French descriptions
+
+The French descriptions stand in for French written by people, errors
+included: every description of the four tuning and test sets, and UnAV-100's
+labels, translated by Opus-MT en-fr (Helsinki-NLP, Apache 2.0; Xenova's ONNX
+export, full precision), greedily, as in the second round
+(`scripts/translate.py`; DiDeMo's are the second round's).
+
+Three ways of searching them, with whenframe's model as the eleventh round
+tested it, every setting unchanged:
+
+- English: the original descriptions, the reference (the eleventh round's
+  numbers again);
+- French as it is: the French description given to both text towers, to the
+  transcripts' full-text search (YouCook2) and to CLAP (UnAV-100);
+- translated: the French description translated back into English on the
+  computer by Opus-MT fr-en (Xenova's ONNX export of Helsinki-NLP/opus-mt-fr-en,
+  Apache 2.0), greedily, then searched as an English one everywhere.
+
+One choice, on the tuning sets: the translator in full precision (423 MB) or
+its 8-bit export (107 MB). The 8-bit one is kept unless the mean of the four
+tuning metrics, translated, is more than 0.3 points lower with it.
+
+The tool cannot ask which language a description is in, so a description is
+taken for French when it has more French marks than English ones: words such
+as le, la, les, une, des, du, dans, sur, avec, qui, est, sont (and the
+elided l', d', qu'), and accented letters; English marks are words such as
+the, an, of, in, with, is, are, from, and. Words common to both languages
+(a, on, son, pour, plus) count for neither. A tie, or no mark, is English.
+The word lists are fixed on the tuning sets' descriptions in both languages,
+before the test.
+
+38. Translated, the French descriptions find at least 1 point more than as
+    they are, on the mean of the four primary metrics, with a sign test
+    p < 0.05.
+39. The detector takes at most 0.5 % of the test sets' English descriptions
+    for French, and at least 95 % of their French ones.
+40. Translating a description takes at most 0.5 seconds (the median, one
+    description at a time, on this machine's 4 vCPUs).
+
+If 38, 39 and 40 hold, the tool translates a description it takes for French
+before searching it, with the translator chosen above (downloaded the first
+time one is needed); an English description is searched as before. Reported
+beside, deciding nothing: what translated French descriptions find against
+the English ones.
+
+### Part 2: the text towers in 8 bits
+
+SigLIP 2 B/16's and PE core B/16's text towers, their weights compressed to
+8 bits by NNCF (`nncf.compress_weights`, INT8_ASYM, data-free, one scale per
+output channel) and run with OpenVINO. The descriptions and the query banks
+are embedded by them; the frames are those indexed by the image towers in
+full precision, which stay unchanged in this round; whenframe's model and
+every setting are those of the eleventh round's test. Nothing is chosen on
+the tuning sets.
+
+41. The mean of the four primary metrics is at most 0.3 points lower than with
+    the text towers in full precision, and no test is more than 0.5 points
+    lower.
+42. A search of the demo's library holds at most 2.5 GB of memory (the
+    process's peak), and the models to download weigh at most 1.5 GB.
+
+If 41 and 42 hold, the tool downloads the text towers in 8 bits, built again
+from the same files and published by the workflow Models with their SHA-256
+pinned, and embeds the query banks with them; libraries already indexed keep
+their frames. If both parts pass, the tool does both; their combination is
+not measured.
