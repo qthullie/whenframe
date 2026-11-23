@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Descriptions in French: a search translates a description it takes for
+  French into English on the computer first (Opus-MT fr-en, from the
+  University of Helsinki, Apache 2.0: 430 MB, downloaded the first time one is
+  needed; about a tenth of a second a description), then searches it as an
+  English one. `whenframe search` and the local page say what they searched;
+  `--as-typed` searches the description as written. On the four test sets,
+  French descriptions found 10.76 points more translated than as they were
+  (mean 40.04 against 29.28; the English ones 43.72), and the detector took no
+  English description for French (twelfth round, `scripts/round12.py`).
 - The demo site searches someone's phone instead of three Blender films: 67
   videos and 165 photos that 217 people shared on Flickr under CC BY 2.0
   (YFCC100M), chosen by hand, named as a phone names them, with whenframe's

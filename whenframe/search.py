@@ -25,7 +25,7 @@ from dataclasses import dataclass, replace
 import numpy as np
 
 from . import bank as qbank
-from . import sounds
+from . import sounds, translate
 from .encoder import FUSED, FUSION, MODELS
 from .half import BLOCK, to_float32
 from .library import Library, Video
@@ -56,6 +56,8 @@ class SearchConfig:
     # library's model on the tuning sets (chosen, below)
     speech: SpeechConfig | None = None
     sound: SoundConfig | None = None
+    # a description taken for French is translated into English on the computer, then searched (twelfth round)
+    translate: bool = True
 
 
 def chosen(library: Library) -> tuple[SpeechConfig, SoundConfig]:
@@ -137,6 +139,16 @@ class Searcher:
         banks = banks or {}
         self.banks = {m: banks[m] if m in banks else qbank.load(m) for m in self.models}
         self._offsets = {}
+        self._english: dict[str, str] = {}
+
+    def searched_as(self, query: str) -> str:
+        """The description as it is searched: translated into English if it is taken for French (and the search
+        translates), as typed otherwise."""
+        if not self.config.translate:
+            return query
+        if query not in self._english:
+            self._english[query] = translate.to_english(query)
+        return self._english[query]
 
     @property
     def moments(self) -> str:
@@ -242,6 +254,7 @@ class Searcher:
         videos, _, times = self.library.snapshot()
         if not videos:
             return []
+        query = self.searched_as(query)
         raw = self.frame_scores(query) if scores is None else scores
         ranking = self.ranking_scores(raw)
         extra, segments = self.speech_scores(query, ranking, videos, times)

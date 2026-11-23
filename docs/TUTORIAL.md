@@ -25,9 +25,10 @@ Runtime; PE core B/16's runs with OpenVINO either way.
 
 The first run downloads the models (about 2.6 GB: SigLIP 2 B/16 and PE core
 B/16) into `~/.cache/whenframe` (or `$WHENFRAME_CACHE`), each file checked
-against its SHA-256 where whenframe pins one; `--speech` downloads Whisper
-(145 MB for base, 480 MB for small) the same way. Nothing else goes over the
-network. whenframe turns off ONNX Runtime's usage telemetry
+against its SHA-256 where whenframe pins one, and the first description written
+in French downloads the translator (430 MB), checked the same way; `--speech`
+downloads Whisper (145 MB for base, 480 MB for small). Nothing else goes over
+the network. whenframe turns off ONNX Runtime's usage telemetry
 (`ORT_DISABLE_TELEMETRY=1`) and keeps OpenVINO's from loading (`import
 openvino` otherwise reports to Google Analytics); every connection of an
 indexing and a search run was traced to check it.
@@ -194,9 +195,30 @@ whenframe search "a dog jumps into the pool"
 ```
 
 Each line is a moment: how sure the model is that its best frame matches the
-description, where the moment starts and ends, and the file. About a tenth of
-the model's training text was not English, so descriptions in French or Spanish
-can work; they were not measured here, and English is the safer bet.
+description, where the moment starts and ends, and the file.
+
+A description written in French is translated into English on your computer
+first, then searched: PE core B/16 and CLAP read only English, and SigLIP 2
+reads English best.
+
+```bash
+whenframe search "le chien saute dans la piscine"
+```
+
+```
+searched as: “the dog jumps in the pool”
+ 81%     1:12 - 1:22      /home/me/Videos/2024/summer/IMG_4120.MOV
+ ...
+```
+
+The translator (Opus-MT fr-en, from the University of Helsinki, 430 MB) is
+downloaded the first time a description needs it and translates one in about a
+tenth of a second. On the four test sets, French descriptions found
+10.8 points more translated than searched as they are, and 3.7 points less
+than the English ones (twelfth round). A description counts as French when it
+has more French marks than English ones: words such as le, une, dans, avec,
+homme or plage, accented letters, l' and d'. `--as-typed` searches it as
+written, and descriptions in other languages are searched as written.
 
 ## In the browser
 
@@ -286,11 +308,15 @@ from Python, keep one `Searcher` and the following searches take tens of
 milliseconds.
 
 `SearchConfig` holds the few settings of the search: fixed windows or spans
-grown around peaks, the window length, how many moments per video, and the
-weight of the query-bank correction (0 turns it off). The defaults are the ones
-chosen on DiDeMo training videos.
+grown around peaks, the window length, how many moments per video, the weight
+of the query-bank correction (0 turns it off), and whether a description in
+French is translated first (`translate=False` searches it as written). The
+defaults are the ones chosen on DiDeMo training videos.
 
 ## How it works
+
+A description taken for French is first translated into English on the
+computer ([Opus-MT](https://github.com/Helsinki-NLP/Opus-MT) fr-en, greedily).
 
 1. ffmpeg reads one frame per second; frames that barely differ from the last
    one kept are skipped.

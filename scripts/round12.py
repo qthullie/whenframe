@@ -325,26 +325,19 @@ def towers(args) -> None:
     """Both text towers with their weights in 8 bits (NNCF, INT8_ASYM, data-free, one scale per output channel),
     saved beside each model's files, and DiDeMo's bank embedded by them (results/cache)."""
     import didemo
+    import text8  # NNCF, not a dependency of the benchmarks: installed beside them (it pins numpy below 2.5)
 
-    from whenframe.encoder import Encoder, _import_openvino, fetch
-
-    ov = _import_openvino()  # first: NNCF then finds no usage-report package, and reports nothing
-    import nncf  # not a dependency of the benchmarks: installed beside them (it pins numpy below 2.5)
+    from whenframe.encoder import Encoder, fetch
 
     register_eight()
     out = {}
     for model, name in EIGHT.items():
         folder = fetch(MODELS[model])
-        dest = folder / EIGHT_FILE
+        source, dest = folder / MODELS[model].text_file, folder / EIGHT_FILE
+        assert sha256(source) == text8.SOURCES[model][1], f"{source}: not the file the eleventh round read"
         if not dest.exists():
             log(f"{model}: compressing {MODELS[model].text_file}")
-            m = ov.Core().read_model(str(folder / MODELS[model].text_file))
-            m = nncf.compress_weights(m, mode=nncf.CompressWeightsMode.INT8_ASYM)
-            tmp = dest.with_name(dest.stem + ".tmp.xml")
-            ov.save_model(m, str(tmp), compress_to_fp16=False)
-            tmp.with_suffix(".bin").replace(dest.with_suffix(".bin"))
-            tmp.replace(dest)
-        source = folder / MODELS[model].text_file
+            text8.compress(source, dest)
         out[model] = {"file": EIGHT_FILE, "bytes": dest.stat().st_size + dest.with_suffix(".bin").stat().st_size,
                       "full_bytes": source.stat().st_size, "source": MODELS[model].text_file,
                       "source_sha256": sha256(source),
@@ -391,9 +384,9 @@ def memory(args) -> None:
     for which in ("full", EIGHT_FILE):
         gb = []
         for q in args.queries:
-            r = subprocess.run([sys.executable, "-c", peak, sys.executable, "-c", search, which, "search",
-                                "--library", args.library, q], cwd=ROOT, capture_output=True, text=True,
-                               check=True)  # fmt: skip
+            r = subprocess.run([sys.executable, "-c", peak, sys.executable, "-c", search, which, "--library",
+                                args.library, "search", q], cwd=ROOT, capture_output=True, text=True)  # fmt: skip
+            assert r.returncode == 0, r.stderr[-3000:]
             gb.append(int(r.stdout.strip().splitlines()[-1]) * 1024 / 1e9)
         out[which] = {"peak_gb": max(gb), "each_gb": gb}
     from whenframe.encoder import fetch

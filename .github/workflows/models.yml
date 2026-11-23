@@ -1,18 +1,27 @@
 name: Models
 
-# The files whenframe downloads that no model hub serves, published once in the release models-1: PE core B/16's
+# The files whenframe downloads that no model hub serves, each release published once. models-1: PE core B/16's
 # image tower (Meta's Perception Encoder, Apache License 2.0), built again from timm/PE-Core-B-16's weights by
 # scripts/pe_core.py export, as the ninth round built the tower the ninth to eleventh rounds measured, and checked
-# against it (models/pe-core-b16/check.json). Run by hand, from the Actions tab. A release already published is
-# never replaced: whenframe pins its files' SHA-256.
+# against it (models/pe-core-b16/check.json). models-2: the text towers of SigLIP 2 B/16 and PE core B/16 with their
+# weights in 8 bits, compressed again from their sources by scripts/text8.py release, as the twelfth round compressed
+# the towers it measured, and checked to be the same bytes (results/round12_towers.json). Run by hand, from the
+# Actions tab. A release already published is never replaced: whenframe pins its files' SHA-256.
 
 on:
   workflow_dispatch:
+    inputs:
+      release:
+        description: "The release to build and publish"
+        required: true
+        type: choice
+        options: [models-2, models-1]
 
 concurrency: models
 
 jobs:
   pe-core-b16:
+    if: inputs.release == 'models-1'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -48,3 +57,43 @@ jobs:
           gh release create models-1 --target "$GITHUB_SHA" --title "Model files" --notes-file $d/notes.md \
             $d/pe-core-b16-vision.xml $d/pe-core-b16-vision.bin $d/pe-core-b16-NOTICE.txt \
             $d/pe-core-b16-LICENSE.txt $d/pe-core-b16-export.json
+
+  text-int8:
+    if: inputs.release == 'models-2'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: write  # the release
+    steps:
+      - uses: actions/checkout@v6
+      - name: Not published yet
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view models-2 > /dev/null 2>&1; then echo "models-2 is already published"; exit 1; fi
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: The compression's environment, as in the twelfth round
+        # NNCF pins numpy below 2.5: installed without its pins, beside the numpy the round measured with
+        run: |
+          python -m pip install openvino==2026.4.1 numpy==2.5.3 onnxruntime==1.29.0 tokenizers
+          python -m pip install --no-deps nncf==3.4.0
+          python -m pip install "networkx<=3.6.1" "ninja<1.14" psutil "pydot<=4.0.1" rich safetensors scikit-learn \
+            tabulate
+          python -m pip install --no-deps -e .
+      - name: Build and check
+        run: python scripts/text8.py release --out build/text-int8
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          d=build/text-int8
+          cp models/text-int8/NOTICE $d/text-int8-NOTICE.txt
+          cp models/text-int8/LICENSE $d/text-int8-LICENSE.txt
+          mv $d/export.json $d/text-int8-export.json
+          sha256sum $d/*.xml $d/*.bin
+          gh release create models-2 --target "$GITHUB_SHA" --title "Model files: text towers in 8 bits" \
+            --notes-file $d/notes.md $d/siglip2-base-text-int8.xml $d/siglip2-base-text-int8.bin \
+            $d/pe-core-b16-text-int8.xml $d/pe-core-b16-text-int8.bin $d/text-int8-NOTICE.txt \
+            $d/text-int8-LICENSE.txt $d/text-int8-export.json

@@ -1080,7 +1080,7 @@ def round12_tables() -> dict[str, str]:
     full, eight = mem["search"]["full"]["peak_gb"], mem["search"]["onnx/text_model_int8.xml"]["peak_gb"]
     rows = [
         ["41. the mean is at most 0.3 points lower than in full precision, no test more than 0.5 points lower",
-         f"{-100 * r2['mean_lost']:+.2f} points; " + "; ".join(f"{BENCH[k]} {100 * v:+.1f}"
+         f"{-100 * r2['mean_lost']:+.2f} points; " + "; ".join(f"{BENCH[k]} {100 * v:+.2f}"
                                                               for k, v in r2["changes"].items()), m2["41"]],
         ["42. a search of the demo's library holds at most 2.5 GB, the models to download weigh at most 1.5 GB",
          f"{eight:.2f} GB (against {full:.2f} GB); {mem['download_gb']:.2f} GB", m2["42"]],

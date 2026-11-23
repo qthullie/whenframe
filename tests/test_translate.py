@@ -20,3 +20,16 @@ def test_english_descriptions_are_not():
 def test_a_tie_or_no_mark_is_english():
     assert not is_french("orchestre")  # no mark
     assert not is_french("la piscine at the hotel")  # two French marks, two English
+
+
+def test_a_search_translates_a_description_taken_for_french_unless_told_not_to(tmp_path, monkeypatch):
+    from whenframe import Library, SearchConfig, Searcher, Settings, translate
+
+    def fake(text):  # the translator, without downloading it
+        return "a dog jumps into the pool" if translate.is_french(text) else text
+
+    monkeypatch.setattr(translate, "to_english", fake)
+    lib = Library(tmp_path, Settings(model="siglip2-base"), encoder=object())
+    assert Searcher(lib).searched_as("le chien saute dans la piscine") == "a dog jumps into the pool"
+    assert Searcher(lib).searched_as("the dog") == "the dog"
+    assert Searcher(lib, SearchConfig(translate=False)).searched_as("le chien") == "le chien"

@@ -1,0 +1,16 @@
+The text towers of SigLIP 2 B/16 and PE core B/16 with their weights in 8 bits, as whenframe downloads them from
+its release models-2 (https://github.com/qthullie/whenframe/releases/tag/models-2)
+
+SigLIP 2, by Google: https://github.com/google-research/big_vision
+Licensed under the Apache License, Version 2.0. The text tower was read from onnx-community's ONNX export of
+google/siglip2-base-patch16-224 (onnx-community/siglip2-base-patch16-224-ONNX, revision ba1f3b08).
+
+Perception Encoder, PE core B/16, by Meta: https://github.com/facebookresearch/perception_models
+Copyright (c) Meta Platforms, Inc. and affiliates.
+Licensed under the Apache License, Version 2.0. The text tower was read from onnx-community's ONNX export of
+PE core B/16 in float16 (onnx-community/PE-Core-B16-224-ONNX, revision 7668f1df).
+
+whenframe changed how the weights are stored, not the towers' graphs: scripts/text8.py compresses each weight
+matrix to 8 bits with NNCF (one scale and zero point per output channel) and saves the tower for OpenVINO
+(siglip2-base-text-int8.xml and .bin, pe-core-b16-text-int8.xml and .bin). The Apache License, Version 2.0, is in
+text-int8-LICENSE.txt, next to this file.

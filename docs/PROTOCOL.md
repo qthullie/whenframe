@@ -1650,3 +1650,48 @@ tuning sets only, before the test:
 The test is run once, after this record is pushed: the test sets' French
 descriptions translated back by the translator kept, each timed alone on the
 idle machine (criterion 40), then the three ways of searching them.
+
+**Part 1's test** (`scripts/round12.py test1`; `results/round12_test.json`).
+Run once, after the record above was pushed:
+
+- translated, the French descriptions have a mean of 40.04 on the four
+  primary metrics, against 29.28 as they are: +10.76 points, with 1,220
+  items better and 433 worse, sign test p = 1.2e-86 (criterion 38 met);
+- the detector took none of the test sets' 8,149 English descriptions for
+  French, and 7,910 of their 7,942 French ones, 99.6 % (criterion 39 met);
+- translating a description took 112 ms, the median of the 7,942 French
+  ones, each translated alone on the idle machine; 90 % took at most 182 ms
+  (criterion 40 met).
+
+The English descriptions gave the eleventh round's numbers to every decimal
+(43.72). Beside: translated, the French descriptions find 3.68 points less
+than the English ones (326 items better, 586 worse). The 388 French
+descriptions of the test sets already translated on the tuning sets came out
+the same.
+
+As fixed above, the tool translates a description it takes for French before
+searching it, with Opus-MT fr-en in full precision, downloaded the first time
+one is needed (430 MB, each file's SHA-256 checked); `--as-typed` searches it
+as written.
+
+**Part 2's test** (`scripts/round12.py towers`, `test2` and `memory`;
+`results/round12_towers.json`, `results/round12_test_8bit.json`,
+`results/round12_memory.json`). NNCF 3.4.0 compressed both towers with
+OpenVINO 2026.4.1 (`scripts/text8.py`, the scales computed with numpy, so that
+the files are the same bytes on any machine): SigLIP 2 B/16's text tower from
+1,129 to 285 MB, PE core B/16's from 708 to 357 MB. The test was run once,
+while part 1's searches ran, after its translations were timed:
+
+- the mean of the four primary metrics is 43.70, against 43.72 in full
+  precision, 0.01 points lower: DiDeMo −0.08, Charades-STA −0.05, YouCook2
+  +0.08, UnAV-100 0.00 (criterion 41 met); 32 items better and 36 worse,
+  p = 0.72;
+- three searches of the demo's library (232 videos and photos), each in a
+  process of its own, peaked at 1.36 GB, against 4.78 GB in full precision;
+  the models a new library downloads weigh 1.43 GB, against 2.6 GB (criterion
+  42 met).
+
+As fixed above, the tool is to download both text towers in 8 bits, built
+again from the same files and published by the workflow Models (`scripts/text8.py
+release`, the release models-2) with their SHA-256 pinned, and to embed the
+query banks with them; libraries already indexed keep their frames.

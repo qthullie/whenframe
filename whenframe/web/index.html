@@ -122,6 +122,9 @@ function render(data) {
   const status = $("status");
   status.textContent = !data.hits.length ? "No video indexed yet: run whenframe index <folder>, then reload."
     : hits.length ? `${hits.length} moments in ${data.ms} ms` : "Nothing in the library matches this well";
+  if (data.hits.length && data.searched_as && data.searched_as !== data.query) {
+    status.append(`, searched as “${data.searched_as}”`);
+  }
   if (hidden) {
     const more = el("button", "plain", `show them`);
     more.type = "button";

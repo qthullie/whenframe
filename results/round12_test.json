@@ -1,0 +1,105 @@
+{
+ "translator": "full",
+ "runs": {
+  "english": {
+   "didemo": 0.3203485392106612,
+   "charades": 0.5548387096774193,
+   "youcook2": 0.3290758827948911,
+   "unav": 0.5444444444444445,
+   "mean": 0.43717689403185406
+  },
+  "french": {
+   "didemo": 0.19502819067145055,
+   "charades": 0.4768817204301075,
+   "youcook2": 0.15326821938392185,
+   "unav": 0.346031746031746,
+   "mean": 0.2928024691293065
+  },
+  "translated": {
+   "didemo": 0.28088159917990774,
+   "charades": 0.5344086021505376,
+   "youcook2": 0.3148009015777611,
+   "unav": 0.4714285714285713,
+   "mean": 0.40037991858419447
+  }
+ },
+ "pairs": {
+  "translated vs french": {
+   "wins": 1220,
+   "losses": 433,
+   "p": 1.2120906447858771e-86
+  },
+  "translated vs english": {
+   "wins": 326,
+   "losses": 586,
+   "p": 5.876497379929795e-18
+  },
+  "french vs english": {
+   "wins": 363,
+   "losses": 1405,
+   "p": 2.4978614681404207e-144
+  }
+ },
+ "eleventh_round_unchanged": true,
+ "detector": {
+  "english": 8149,
+  "english_taken_for_french": 0,
+  "english_rate": 0.0,
+  "french": 7942,
+  "french_taken_for_french": 7910,
+  "french_rate": 0.9959707882145555,
+  "examples": {
+   "english_taken_for_french": [],
+   "french_missed": [
+    "Bonjour, gros bus",
+    "Bouffon bloomant",
+    "bowling frappant",
+    "chant masculin",
+    "chat embrasse son pantalon",
+    "chat mur toucher",
+    "chaton attrape jouet",
+    "choeur chanteur",
+    "course automobile",
+    "danse tap",
+    "flotter presque laisses vue",
+    "foule",
+    "grenouilles croquant",
+    "groupe premiers tours",
+    "jouer harmonica",
+    "jouer tabla",
+    "motocycle-route",
+    "orchestre",
+    "panneau jaune feuille vue",
+    "pluie",
+    "premier baiser",
+    "premier flash rouge",
+    "premier orateur",
+    "premier train moteur complet cols",
+    "rose clair",
+    "scean tourne",
+    "short jaune apparaissent",
+    "skateboard",
+    "texte visible",
+    "tonnerre",
+    "vagues maritimes",
+    "voile"
+   ]
+  }
+ },
+ "same_as_tuning": [
+  388,
+  388
+ ],
+ "translation_ms": {
+  "median": 111.79254149965345,
+  "p90": 181.56174529954114,
+  "max": 1382.4333520001346,
+  "n": 7942
+ },
+ "criteria": {
+  "38": true,
+  "39": true,
+  "40": true
+ },
+ "gain": 0.10757744945488795
+}

@@ -28,7 +28,14 @@ from `results/didemo_test.json`; CI fails if they differ from that file.
   results 4 % of the time.
 - Indexing is slow on a small machine without OpenVINO (the modes'
   costs are in [TUTORIAL.md](TUTORIAL.md), measured on 4 vCPUs); OpenVINO's speed-up was measured on one processor only.
-- Descriptions in French were measured through machine translation only.
+- Descriptions in French were measured through machine translation only:
+  English descriptions translated into French, then, as the tool does, back
+  into English. Translated back, they find 3.7 points less than the English
+  ones (twelfth round). Short French phrases with no word of the detector's lists
+  ("course automobile") are searched as they are written, and so are
+  descriptions in other languages. A library whose speech is in French is
+  searched with the English words of the translation (`--as-typed` keeps the
+  French ones).
 - whenframe's own model learnt from the training videos of DiDeMo, MSR-VTT,
   Charades-STA and YouCook2. Most of its gain on Charades-STA and YouCook2
   comes from those videos: trained without them, it adds 0.8 and 0.3 points
@@ -1378,3 +1385,114 @@ indexing would cost what it costs with v3 (`scripts/round11.py v5`,
 With weight 3, v5 raises v3's mean by 0.55 points, about a third of what its
 teacher gains. The protocol asked for 1 point before any test, so v5 was not
 tested, and a new library in the standard mode keeps v3.
+
+## Twelfth round: descriptions in French, and text towers in 8 bits
+
+The twelfth round of the protocol ([PROTOCOL.md](PROTOCOL.md)) asked two
+questions of whenframe's model as the eleventh round tested it, every setting
+unchanged (`scripts/round12.py`). Does translating a description written in
+French into English on the computer find more than searching it as it is
+(part 1)? And can both text towers keep their weights in 8 bits without
+finding less (part 2)? The French descriptions stand in for French typed by
+people: every description of the four tuning and test sets and UnAV-100's
+labels, translated by Opus-MT en-fr (DiDeMo's in the second round), errors
+included.
+
+Both parts met their criteria. A search now translates a description it takes
+for French into English first (Opus-MT fr-en, in about a tenth of a second),
+and the text towers are those in 8 bits: a search of the demo's library holds
+1.36 GB of memory at most instead of 4.78 GB, and a new library downloads
+1.43 GB of models instead of 2.6 GB.
+
+### French descriptions, on the test sets
+
+<!-- table round12-criteria -->
+| criterion (fixed before its test run) | measured on test | met |
+|---|---|---|
+| 38. translated, the French descriptions find at least 1 point more than as they are, sign test p < 0.05 | +10.76 points; 1220 items better, 433 worse, p = 1.2e-86 | yes |
+| 39. the detector takes at most 0.5 % of the English descriptions for French, at least 95 % of the French | 0.00 % and 99.6 % | yes |
+| 40. translating a description takes at most 0.5 seconds (median, one at a time, 4 vCPUs) | 0.11 s (7942 descriptions; 90 % within 0.18 s) | yes |
+<!-- /table -->
+
+<!-- table round12-test -->
+| test sets | DiDeMo R@5 | Charades-STA R1 | YouCook2 R@5 | UnAV-100 P@10 | mean |
+|---|---|---|---|---|---|
+| the English descriptions, as written (the eleventh round's numbers) | 32.0 | 55.5 | 32.9 | 54.4 | **43.72** |
+| French, searched as it is (as the tool searched it until this round) | 19.5 | 47.7 | 15.3 | 34.6 | **29.28** |
+| French, translated into English on the computer, then searched | 28.1 | 53.4 | 31.5 | 47.1 | **40.04** |
+<!-- /table -->
+
+Translated, French descriptions find 10.76 points more than as they are, the
+most on YouCook2 (+16.2), whose transcripts are searched by their words, and
+UnAV-100 (+12.5), whose sounds CLAP compares with English labels. They find
+3.68 points less than the English ones: a translation of a translation loses
+part of each description (UnAV-100's labels the most, −7.3).
+
+<!-- table round12-pairs -->
+| the first finds more than the second? | items better | items worse | sign test p |
+|---|---|---|---|
+| French, translated into English on the computer, then searched / French, searched as it is (as the tool searched it until this round) | 1220 | 433 | 1.2e-86 |
+| French, translated into English on the computer, then searched / the English descriptions, as written (the eleventh round's numbers) | 326 | 586 | 5.9e-18 |
+| French, searched as it is (as the tool searched it until this round) / the English descriptions, as written (the eleventh round's numbers) | 363 | 1405 | 2.5e-144 |
+<!-- /table -->
+
+### Which descriptions are taken for French
+
+A description is taken for French when it has more French marks than English
+ones: French's function words and a few words frequent in descriptions of
+videos and photos that English does not have (homme, femme, personne, deux,
+gauche, chien, plage...), accented letters and elisions (l', d', s'...),
+against English's function words (`whenframe/translate.py`). The word lists
+were fixed on the tuning sets' descriptions in both languages, then left as
+they were for the test.
+
+<!-- table round12-detector -->
+| descriptions | English ones taken for French | French ones taken for French |
+|---|---|---|
+| tuning sets (the word lists fixed on them) | 0 of 3664 (0.00 %) | 3583 of 3607 (99.3 %) |
+| test sets | 0 of 8149 (0.00 %) | 7910 of 7942 (99.6 %) |
+<!-- /table -->
+
+The French descriptions it misses are short phrases with none of these marks
+("chant masculin", "course automobile", "orchestre"), which are searched as
+they are written.
+
+### The translator, chosen on the tuning sets
+
+<!-- table round12-tuning -->
+| tuning sets | DiDeMo R@5 | Charades-STA R1 | YouCook2 R@5 | UnAV-100 P@10 | mean | median time to translate one |
+|---|---|---|---|---|---|---|
+| English, as written | 37.4 | 52.3 | 32.1 | 43.6 | 41.34 |  |
+| French, as it is | 25.6 | 44.4 | 13.7 | 27.4 | 27.80 |  |
+| French, translated by Opus-MT fr-en in full precision (423 MB) (kept) | 31.9 | 50.3 | 27.1 | 36.7 | 36.52 | 113 ms |
+| French, translated by Opus-MT fr-en in 8 bits (107 MB) | 31.8 | 49.8 | 27.0 | 35.6 | 36.06 | 293 ms |
+<!-- /table -->
+
+### The text towers in 8 bits
+
+NNCF compressed SigLIP 2 B/16's and PE core B/16's text towers, one scale and
+zero point per output channel, without data (`scripts/text8.py`): from 1,129
+to 285 MB and from 708 to 357 MB. They embed the descriptions and the query
+banks; the frames are those of the eleventh round, from the image towers in
+full precision.
+
+<!-- table round12-8bit-criteria -->
+| criterion (fixed before its test run) | measured on test | met |
+|---|---|---|
+| 41. the mean is at most 0.3 points lower than in full precision, no test more than 0.5 points lower | -0.01 points; DiDeMo -0.08; Charades-STA -0.05; YouCook2 +0.08; UnAV-100 +0.00 | yes |
+| 42. a search of the demo's library holds at most 2.5 GB, the models to download weigh at most 1.5 GB | 1.36 GB (against 4.78 GB); 1.43 GB | yes |
+<!-- /table -->
+
+<!-- table round12-8bit -->
+| test sets | DiDeMo R@5 | Charades-STA R1 | YouCook2 R@5 | UnAV-100 P@10 | mean |
+|---|---|---|---|---|---|
+| text towers in full precision (the eleventh round's numbers) | 32.0 | 55.5 | 32.9 | 54.4 | **43.72** |
+| text towers in 8 bits | 32.0 | 55.4 | 33.0 | 54.4 | **43.70** |
+<!-- /table -->
+
+On each test, the towers in 8 bits find what the towers in full precision
+find, within a tenth of a point (32 items better, 36 worse, p = 0.72). A search
+of the demo's library, its 232 videos and photos, peaked at 1.36 GB instead of
+4.78 GB, and the models a new library downloads weigh 1.43 GB instead of
+2.6 GB: SigLIP 2 B/16's tokenizer, image tower and text tower in 8 bits, and
+PE core B/16's.

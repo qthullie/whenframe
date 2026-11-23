@@ -36,10 +36,14 @@
   licensed for non-commercial research by the Allen Institute for AI) and
   YouCook2's training videos (YouTube), all published for research; their
   weights are for research and non-commercial use (same NOTICE).
-- The benchmark also measures MobileCLIP-S2 (Apple, research-only licence),
-  describes frames with Florence-2-base (Microsoft, MIT licence) and translates
-  descriptions with Opus-MT (Helsinki-NLP, Apache 2.0); the tool uses none of
-  them.
+- Opus-MT (Tiedemann and Thottingal, *OPUS-MT: Building open translation
+  services for the World*, EAMT 2020; Helsinki-NLP, Apache 2.0): the tool
+  translates descriptions written in French with opus-mt-fr-en, in Xenova's
+  ONNX conversion; the benchmark made its French descriptions with
+  opus-mt-en-fr.
+- The benchmark also measures MobileCLIP-S2 (Apple, research-only licence) and
+  describes frames with Florence-2-base (Microsoft, MIT licence); the tool uses
+  neither.
 - The demo site searches 67 videos and 165 photos that 217 people shared on
   Flickr under CC BY 2.0, from YFCC100M's public copy (Thomee et al., *YFCC100M:
   the new data in multimedia research*, CACM 2016), renamed and made smaller; who

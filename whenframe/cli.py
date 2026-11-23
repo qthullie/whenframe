@@ -75,10 +75,14 @@ def cmd_index(args) -> int:
 
 def cmd_search(args) -> int:
     lib = Library(args.library)
-    found = Searcher(lib, SearchConfig(moments=args.moments)).search(" ".join(args.query), k=args.k)
+    searcher = Searcher(lib, SearchConfig(moments=args.moments, translate=not args.as_typed))
+    query = " ".join(args.query)
+    found = searcher.search(query, k=args.k)
     if not found:
         print("no video indexed yet: run `whenframe index <folder>` first")
         return 1
+    if searcher.searched_as(query) != query:
+        print(f"searched as: “{searcher.searched_as(query)}”")
     hits = found if args.all else [h for h in found if worth_showing(h)]
     for h in hits:
         when = f"{'photo':>17}" if h.photo else f"{clock(h.start):>7} - {clock(h.end):<7}"
@@ -151,7 +155,7 @@ def cmd_serve(args) -> int:
             print("--immich needs an API key in $IMMICH_API_KEY (Immich: Account Settings, API Keys)", file=sys.stderr)
             return 2
         links.append(Immich(args.immich, key, path_pairs(args.immich_path)))
-    serve(lib, args.host, args.port, SearchConfig(moments=args.moments), links=links)
+    serve(lib, args.host, args.port, SearchConfig(moments=args.moments, translate=not args.as_typed), links=links)
     return 0
 
 
@@ -192,6 +196,9 @@ def main(argv: list[str] | None = None) -> int:
                        help="windows: 10 seconds around the best frames, best on short clips; spans: as long as "
                             "the frames match, better on long videos; auto (default): spans when the videos last "
                             "more than a minute (median), windows otherwise")  # fmt: skip
+        p.add_argument("--as-typed", action="store_true",
+                       help="search a description written in French as it is, without translating it into English "
+                            "first")  # fmt: skip
 
     def watching_options(p: argparse.ArgumentParser) -> None:
         p.add_argument("--every", type=float, default=300.0, help="seconds between two passes (default 300)")

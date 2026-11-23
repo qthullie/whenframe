@@ -1,0 +1,39 @@
+{
+ "search": {
+  "full": {
+   "peak_gb": 4.782665728,
+   "each_gb": [
+    4.782665728,
+    4.782006272,
+    4.78257152
+   ]
+  },
+  "onnx/text_model_int8.xml": {
+   "peak_gb": 1.360089088,
+   "each_gb": [
+    1.360089088,
+    1.358106624,
+    1.349668864
+   ]
+  }
+ },
+ "download_gb": 1.426977176,
+ "files": {
+  "siglip2-base": {
+   "tokenizer.json": 34363039,
+   "onnx/vision_model.onnx": 371807752,
+   "onnx/text_model_int8.xml": 831140,
+   "onnx/text_model_int8.bin": 283690060
+  },
+  "pe-core-b16": {
+   "tokenizer.json": 3642035,
+   "onnx/vision_model_one.xml": 1224226,
+   "onnx/text_model_int8.xml": 1464284,
+   "onnx/vision_model_one.bin": 374796564,
+   "onnx/text_model_int8.bin": 355158076
+  }
+ },
+ "criteria": {
+  "42": true
+ }
+}

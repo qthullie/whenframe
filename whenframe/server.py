@@ -61,6 +61,7 @@ class App:
             hits = self.searcher.search(query, k=k)
         return {
             "query": query,
+            "searched_as": self.searcher.searched_as(query),
             "ms": round(1000 * (time.perf_counter() - t0)),
             "hits": [{"video": h.video_id, "name": Path(h.path).name, "folder": str(Path(h.path).parent),
                       "start": h.start, "end": h.end, "at": h.at, "confidence": h.confidence, "said": h.said,

@@ -25,6 +25,7 @@
 pip install git+https://github.com/qthullie/whenframe   # Python 3.10+ and ffmpeg
 whenframe index ~/Videos
 whenframe search "the dog jumps into the pool"
+whenframe search "le chien saute dans la piscine"   # French is translated on your computer
 ```
 
 ## Benchmark
