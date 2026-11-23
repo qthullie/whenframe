@@ -1618,3 +1618,35 @@ from the same files and published by the workflow Models with their SHA-256
 pinned, and embeds the query banks with them; libraries already indexed keep
 their frames. If both parts pass, the tool does both; their combination is
 not measured.
+
+**Part 1's choices** (`scripts/round12.py french`, `detect`, `back`, `tune`;
+`results/round12_detector.json`, `results/round12_tuned.json`). Made on the
+tuning sets only, before the test:
+
+- The French descriptions: the four tuning and test sets and UnAV-100's
+  labels have 11,464 different descriptions. DiDeMo's 5,806 are the second
+  round's translations; the other 5,658 were translated by Opus-MT en-fr
+  (Xenova's export at revision 2872620), greedily, 16 at a time.
+- The detector's word lists. The first lists, as written above, took none of
+  the tuning sets' 3,664 English descriptions for French, and 98.1 % of
+  their 3,607 French ones. Most French ones missed were short, with no
+  function word: "femme s'assoit", "homme en bleu", "deux poissons nagent".
+  So the lists kept count each elision as a French mark (s', l', d', qu',
+  and the others), and add French's other function words (en, y, lui, aussi,
+  tout, comme, quand...). They also add words frequent in descriptions of
+  videos and photos that English does not have (homme, femme, personne,
+  enfant, deux, gauche, droite, chien, voiture, plage, neige, anniversaire...).
+  None of them occurs in any English description of the tuning sets. With
+  these lists (`whenframe/translate.py`), no English description of the tuning
+  sets is taken for French, and 99.3 % of the French ones are. They are not
+  changed after this.
+- The translator. Translated back, the French descriptions of the tuning sets
+  have a mean of 36.52 with the translator in full precision and 36.06 with
+  its 8-bit export: 0.47 points lower, more than the 0.3 allowed, so the one in
+  full precision is kept. Reported beside: it translated a description in
+  113 ms, the 8-bit one in 293 ms (medians, one at a time); French as it is
+  has a tuning mean of 27.80, the English descriptions 41.34.
+
+The test is run once, after this record is pushed: the test sets' French
+descriptions translated back by the translator kept, each timed alone on the
+idle machine (criterion 40), then the three ways of searching them.

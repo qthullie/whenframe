@@ -311,12 +311,50 @@ def bank_params(model: str, spans: bool = False) -> tuple[float, float]:
     return spec.bank_beta, lam
 
 
+@dataclass
+class Words:
+    """How the descriptions reach the models (twelfth round, scripts/round12.py): as written (the default), or
+    another version of each (`say`: a French translation, or that translation translated back); and the text
+    towers that embed them and the query banks (`towers`: an encoder of MODELS by model, its 8-bit text tower)."""
+
+    name: str = ""  # "" for the descriptions as written and the text towers as measured until then
+    say: dict[str, str] | None = None
+    towers: dict[str, str] | None = None
+
+
+WORDS = Words()
+
+
+def said(texts: list[str]) -> list[str]:
+    return [WORDS.say.get(t, t) for t in texts] if WORDS.say else list(texts)
+
+
+def query_text(model: str, key: str, texts: list[str], base: np.ndarray | None) -> np.ndarray:
+    """The descriptions' embeddings: `base`, as each round computed them for SigLIP 2 B/16, unless the words or the
+    towers are another version (WORDS); else as text_embeddings computes them."""
+    if base is not None and not WORDS.name:
+        return base
+    return text_embeddings(model, key, texts)
+
+
 def text_embeddings(model: str, key: str, texts: list[str]) -> np.ndarray:
     """Descriptions embedded by the encoder's text tower, as the tool embeds a query; kept in the cache."""
-    path = CACHE / f"{key}_text_compare_{short(model)}.npy"
+    tag = f"_{WORDS.name}" if WORDS.name else ""
+    path = CACHE / f"{key}{tag}_text_compare_{short(model)}.npy"
     if not path.exists():
-        enc = Encoder(model, backend="openvino")
-        np.save(path, np.concatenate([enc.encode_texts(texts[i : i + 64]) for i in range(0, len(texts), 64)]))
+        enc = Encoder((WORDS.towers or {}).get(model, model), backend="openvino")
+        words = said(texts)
+        np.save(path, np.concatenate([enc.encode_texts(words[i : i + 64]) for i in range(0, len(words), 64)]))
+    return np.load(path).astype(np.float32)
+
+
+def clap_texts(clap_dir: str, texts: list[str]) -> np.ndarray:
+    """CLAP's text embeddings of UnAV-100's labels as WORDS says them (twelfth round); kept in the cache."""
+    path = CACHE / f"unav_labels_{WORDS.name}_clap.npy"
+    if not path.exists():
+        from whenframe import sounds
+
+        np.save(path, sounds.Clap(clap_dir).encode_texts(texts))
     return np.load(path).astype(np.float32)
 
 
@@ -371,7 +409,10 @@ def fused(a: np.ndarray, b: np.ndarray, w: float) -> np.ndarray:
 
 # ---------------------------------------------------------------- the four benchmarks, for one candidate
 def didemo_bank(model: str) -> np.ndarray:
-    """DiDeMo's bank as each round searched with it (the descriptions embedded by the encoder, in float32)."""
+    """DiDeMo's bank as each round searched with it (the descriptions embedded by the encoder, in float32); embedded
+    by the 8-bit text tower when WORDS measures one (the bank's descriptions are always the English ones)."""
+    if WORDS.towers and model in WORDS.towers:  # embedded by scripts/round12.py's towers stage
+        return np.load(CACHE / f"didemo_bank_text_{WORDS.towers[model]}.npy").astype(np.float32)
     key = {"siglip2-base": "", "siglip2-b32": "_siglip2-b32", "siglip2-so400m": "_siglip2-so400m_lower",
            "pe-core-b16": "_pe-core-b16"}[model]  # fmt: skip
     return np.load(CACHE / f"didemo_bank_text{key}.npy").astype(np.float32)
@@ -413,7 +454,7 @@ class Benchmarks:
         f = replace(f, emb=adapted(c, f.emb, f.times, f.starts, f.counts), _offsets={})
         if c.model == "siglip2-so400m":  # lower case, as chosen for it in the fourth round
             text = np.load(CACHE / f"didemo_{split}_text_siglip2-so400m_lower.npy").astype(np.float32)
-        elif c.model == "pe-core-b16":  # its text tower runs with OpenVINO (ninth round)
+        elif c.model == "pe-core-b16" or WORDS.name:  # its text tower runs with OpenVINO (ninth round)
             text = text_embeddings(c.model, f"didemo_{split}", [q["text"] for q in queries])
         else:
             text = didemo.text_embeddings(queries, split, self.args.model_dir, c.model)
@@ -453,8 +494,8 @@ class Benchmarks:
         assert np.array_equal(z["times"], frozen.times), "not the same frames"
         f = replace(frozen, emb=z["emb"].astype(np.float32), _offsets={}, bank=didemo_bank(c.model))
         f = replace(f, emb=adapted(c, f.emb, f.times, f.starts, f.counts), _offsets={})
-        text = base_text if c.model == "siglip2-base" else text_embeddings(
-            c.model, "charades_test", [q["text"] for q in queries])  # fmt: skip
+        text = query_text(c.model, "charades_test", [q["text"] for q in queries],
+                          base_text if c.model == "siglip2-base" else None)  # fmt: skip
         text = guided(c, "charades_test", [q["text"] for q in queries], text)
         params = self.search_params(c.model, "frame_window_bank")
         return f, queries, text, params, frame_scores(f, text, "frame_window_bank", params)
@@ -483,10 +524,11 @@ class Benchmarks:
                 z = np.load(CACHE / f"{cache_name('charades-tuning', c.model)}.npz")
                 assert np.array_equal(z["times"], held.f.times), "not the same frames"
                 held.f = replace(held.f, emb=z["emb"].astype(np.float32), _offsets={})
-                held.text = text_embeddings(c.model, "charades_tuning", [q["text"] for q in held.queries])
+            held.text = query_text(c.model, "charades_tuning", [q["text"] for q in held.queries],
+                                   held.text if c.model == "siglip2-base" else None)  # fmt: skip
             return held
 
-        held = self.once(("charades-tuning", c.model), held_out)
+        held = self.once(("charades-tuning", c.model, WORDS.name), held_out)
         f = replace(held.f, emb=adapted(c, held.f.emb, held.f.times, held.f.starts, held.f.counts), _offsets={})
         text = guided(c, "charades_tuning", [q["text"] for q in held.queries], held.text)
         return held, f, text, frame_scores(f, text, held.method, held.params)
@@ -512,8 +554,8 @@ class Benchmarks:
         assert np.array_equal(z["times"], f.times), "not the same frames"
         g = replace(f, emb=z["emb"].astype(np.float32), _offsets={}, bank=didemo_bank(c.model))
         g = replace(g, emb=adapted(c, g.emb, g.times, g.starts, g.counts), _offsets={})
-        text = base_text if c.model == "siglip2-base" else text_embeddings(
-            c.model, "youcook2", [q["text"] for q in queries])  # fmt: skip
+        text = query_text(c.model, "youcook2", [q["text"] for q in queries],
+                          base_text if c.model == "siglip2-base" else None)  # fmt: skip
         tuning = youcook2.split(f.names)
         parts = {"tuning": [i for i, q in enumerate(queries) if q["name"] in tuning],
                  "test": [i for i, q in enumerate(queries) if q["name"] not in tuning]}  # fmt: skip
@@ -536,7 +578,8 @@ class Benchmarks:
         which = parts[part]
         best = None
         for config in [cfg] if cfg is not None else youcook2.GRID:
-            r = youcook2.measure(g, queries, youcook2.with_speech(g, queries, visual, db, config, which),
+            words = [dict(q, text=t) for q, t in zip(queries, said([q["text"] for q in queries]), strict=True)]
+            r = youcook2.measure(g, queries, youcook2.with_speech(g, words, visual, db, config, which),
                                  "whenframe_bank", params, which)  # fmt: skip
             if best is None or r["corpus"]["R@5 IoU>=0.5"] > best[1]["corpus"]["R@5 IoU>=0.5"]:
                 best = (config, r)
@@ -559,10 +602,10 @@ class Benchmarks:
         starts = np.array([r for r, _ in lib.ranges])
         counts = np.array([n for _, n in lib.ranges])
         lib.emb = adapted(c, lib.emb, lib.times, starts, counts)
-        siglip = base_siglip if c.model == "siglip2-base" else text_embeddings(c.model, "unav_labels", labels)
+        siglip = query_text(c.model, "unav_labels", labels, base_siglip if c.model == "siglip2-base" else None)
         siglip = guided(c, "unav_labels", labels, siglip)
         beta, lam = bank_params(c.model)
-        packaged = qbank.load(c.model)  # the tool's bank is DiDeMo's, as each round searched with it
+        packaged = None if WORDS.towers else qbank.load(c.model)  # the tool's bank is DiDeMo's, as each round's
         bank = didemo_bank(c.model) if packaged is None else packaged.astype(np.float32)
         return z, keep, lib, labels, events, clap, unav.standardise(lib.frames(siglip, bank, beta, lam))
 
@@ -573,7 +616,9 @@ class Benchmarks:
         z, keep, lib, labels, events, clap, frames = self.unav_frames(c, part)
         if c.fuse:
             frames = unav.standardise(frames + c.fuse[1] * self.unav_frames(c.fuse[0].on("unav"), part)[-1])
-        heard = self.once(("unav-heard", part), lambda: unav.standardise(
+        if WORDS.say:  # what is heard, against the words searched (CLAP reads English)
+            clap = self.once(("unav-clap", WORDS.name), lambda: clap_texts(self.args.clap_dir, said(labels)))
+        heard = self.once(("unav-heard", part, WORDS.name), lambda: unav.standardise(
             unav.Library(z, keep).sound(clap, 5.0)))  # fmt: skip
         best = None
         for w in [weight] if weight is not None else unav.WEIGHTS:

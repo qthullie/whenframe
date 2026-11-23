@@ -1005,6 +1005,91 @@ def round11_tables() -> dict[str, str]:
     return out
 
 
+LABEL12 = {"english": "the English descriptions, as written (the eleventh round's numbers)",
+           "french": "French, searched as it is (as the tool searched it until this round)",
+           "translated": "French, translated into English on the computer, then searched"}  # fmt: skip
+
+
+def round12_tables() -> dict[str, str]:
+    """The twelfth round. Part 1: descriptions in French, searched as they are and translated back into English by
+    Opus-MT fr-en, against the English ones; the detector; the translator chosen on the tuning sets. Part 2: the text
+    towers with their weights in 8 bits, against full precision; a search's memory and the download's size."""
+    out, cols = {}, ("didemo", "charades", "youcook2", "unav")
+    head = ["DiDeMo R@5", "Charades-STA R1", "YouCook2 R@5", "UnAV-100 P@10", "mean"]
+    ft = RESULTS / "round12_tuned.json"
+    if ft.exists():
+        t = json.loads(ft.read_text())
+        names = {"english": "English, as written", "french": "French, as it is",
+                 "translated-full": "French, translated by Opus-MT fr-en in full precision (423 MB)",
+                 "translated-8bit": "French, translated by Opus-MT fr-en in 8 bits (107 MB)"}  # fmt: skip
+        rows = []
+        for k, v in t["runs"].items():
+            p = k.removeprefix("translated-")
+            ms = f"{t['median_ms_tuning'][p]:.0f} ms" if k.startswith("translated") else ""
+            mark = " (kept)" if k == f"translated-{t['translator']}" else ""
+            rows.append([names[k] + mark, *(pct(v[c]) for c in cols), f"{100 * v['mean']:.2f}", ms])
+        out["round12-tuning"] = table(["tuning sets", *head, "median time to translate one"], rows)
+    fd = RESULTS / "round12_detector.json"
+    f = RESULTS / "round12_test.json"
+    if fd.exists():
+        d = json.loads(fd.read_text())
+        parts = [("tuning sets (the word lists fixed on them)", d["tuning"])]
+        if f.exists():
+            parts.append(("test sets", json.loads(f.read_text())["detector"]))
+        out["round12-detector"] = table(
+            ["descriptions", "English ones taken for French", "French ones taken for French"],
+            [[name, f"{x['english_taken_for_french']} of {x['english']} ({100 * x['english_rate']:.2f} %)",
+              f"{x['french_taken_for_french']} of {x['french']} ({100 * x['french_rate']:.1f} %)"]
+             for name, x in parts],
+        )  # fmt: skip
+    if not f.exists():
+        return out
+    r = json.loads(f.read_text())
+    out["round12-test"] = table(
+        ["test sets", *head],
+        [[LABEL12[k], *(pct(v[c]) for c in cols), f"**{100 * v['mean']:.2f}**"] for k, v in r["runs"].items()],
+    )  # fmt: skip
+    out["round12-pairs"] = table(
+        ["the first finds more than the second?", "items better", "items worse", "sign test p"],
+        [[f"{LABEL12[a]} / {LABEL12[b]}", str(r["pairs"][f"{a} vs {b}"]["wins"]),
+          str(r["pairs"][f"{a} vs {b}"]["losses"]), f"{r['pairs'][f'{a} vs {b}']['p']:.2g}"]
+         for a, b in (("translated", "french"), ("translated", "english"), ("french", "english"))],
+    )  # fmt: skip
+    met, det, ms, pair = r["criteria"], r["detector"], r["translation_ms"], r["pairs"]["translated vs french"]
+    rows = [
+        ["38. translated, the French descriptions find at least 1 point more than as they are, sign test p < 0.05",
+         f"{100 * r['gain']:+.2f} points; {pair['wins']} items better, {pair['losses']} worse, p = {pair['p']:.2g}",
+         met["38"]],
+        ["39. the detector takes at most 0.5 % of the English descriptions for French, at least 95 % of the French",
+         f"{100 * det['english_rate']:.2f} % and {100 * det['french_rate']:.1f} %", met["39"]],
+        ["40. translating a description takes at most 0.5 seconds (median, one at a time, 4 vCPUs)",
+         f"{ms['median'] / 1000:.2f} s ({ms['n']} descriptions; 90 % within {ms['p90'] / 1000:.2f} s)", met["40"]],
+    ]  # fmt: skip
+    out["round12-criteria"] = table(["criterion (fixed before its test run)", "measured on test", "met"],
+                                    [[n, m, "yes" if ok else "no"] for n, m, ok in rows])  # fmt: skip
+    f2, fm = RESULTS / "round12_test_8bit.json", RESULTS / "round12_memory.json"
+    if not (f2.exists() and fm.exists()):
+        return out
+    r2, mem = json.loads(f2.read_text()), json.loads(fm.read_text())
+    names = {"full": "text towers in full precision (the eleventh round's numbers)", "8bit": "text towers in 8 bits"}
+    out["round12-8bit"] = table(
+        ["test sets", *head],
+        [[names[k], *(pct(v[c]) for c in cols), f"**{100 * v['mean']:.2f}**"] for k, v in r2["runs"].items()],
+    )  # fmt: skip
+    m2 = {**r2["criteria"], **mem["criteria"]}
+    full, eight = mem["search"]["full"]["peak_gb"], mem["search"]["onnx/text_model_int8.xml"]["peak_gb"]
+    rows = [
+        ["41. the mean is at most 0.3 points lower than in full precision, no test more than 0.5 points lower",
+         f"{-100 * r2['mean_lost']:+.2f} points; " + "; ".join(f"{BENCH[k]} {100 * v:+.1f}"
+                                                              for k, v in r2["changes"].items()), m2["41"]],
+        ["42. a search of the demo's library holds at most 2.5 GB, the models to download weigh at most 1.5 GB",
+         f"{eight:.2f} GB (against {full:.2f} GB); {mem['download_gb']:.2f} GB", m2["42"]],
+    ]  # fmt: skip
+    out["round12-8bit-criteria"] = table(["criterion (fixed before its test run)", "measured on test", "met"],
+                                         [[n, m, "yes" if ok else "no"] for n, m, ok in rows])  # fmt: skip
+    return out
+
+
 def readme_compare() -> dict[str, str]:
     """The README's comparison: whenframe's model (v3 and v4 together, the eleventh round's test), on a CPU, beside
     what others do on the same test sets: published systems as their authors report them (results/published_*.json),
@@ -1105,6 +1190,7 @@ def main() -> int:
     tables.update(round9_tables())
     tables.update(round10_tables())
     tables.update(round11_tables())
+    tables.update(round12_tables())
     tables.update(published_tables())
     tables.update(readme_compare())
     f2 = RESULTS / "didemo_test_round2.json"
