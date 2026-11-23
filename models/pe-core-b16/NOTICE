@@ -1,0 +1,12 @@
+PE core B/16's image tower, as whenframe downloads it from its release models-1
+(https://github.com/qthullie/whenframe/releases/tag/models-1)
+
+Perception Encoder, PE core B/16, by Meta: https://github.com/facebookresearch/perception_models
+Copyright (c) Meta Platforms, Inc. and affiliates.
+Licensed under the Apache License, Version 2.0 (pe-core-b16-LICENSE.txt, next to this file).
+
+These files hold the weights of timm/PE-Core-B-16 on Hugging Face (revision 0038414f), unchanged.
+whenframe changed how the image tower is written, not what it computes: scripts/pe_core.py writes
+the rotary position embedding of its attention with the same arithmetic in fewer memory operations,
+exports the tower to ONNX, fixes it to one image of 224 pixels at a time and saves it for OpenVINO
+(pe-core-b16-vision.xml and pe-core-b16-vision.bin).

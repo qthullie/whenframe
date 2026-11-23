@@ -1,0 +1,17 @@
+{
+ "tower": "PE core B/16's image tower measured in the ninth to eleventh rounds (`reference --export`, `one`)",
+ "weights": "timm/PE-Core-B-16, read from main on 2026-11-21 (0038414f37721c5eafc1a5e0da802d291c909de3)",
+ "built_with": {
+  "torch": "2.15.0+cpu",
+  "open_clip": "4.2.2",
+  "timm": "1.0.31",
+  "openvino": "2026.4.1"
+ },
+ "embeds": "check_inputs(), with OpenVINO in float32, one image at a time (check.npz)",
+ "min_cosine": 0.99999,
+ "sha256": {
+  "vision_model_any_batch.onnx": "67d768907153bdc1eea80ed40682d4fb4cae47cf85018a81b64ca65f7d8d8368",
+  "vision_model_one.xml": "8bb5f9908c0011ecd138cb328f1ef7dc862f890c804ff32adf7882402b3bd474",
+  "vision_model_one.bin": "dde7ec6a300b4fe7a1c4cccfa3f27fe62adbdbc7b6ea9ccea1fbb6db29e00bc1"
+ }
+}

@@ -8,6 +8,8 @@
     python scripts/pe_core.py bank      --annotations didemo_train.json --youcook2-annotations val.parquet
                                         # PE's own query bank settings, once its frames are embedded
     python scripts/pe_core.py texts     # stage 2: the training collections' descriptions, embedded by PE
+    python scripts/pe_core.py export-check --model-folder DIR   # models/pe-core-b16/check.*, from the tower measured
+    python scripts/pe_core.py export    --model-folder OUT      # that tower built again (.github/workflows/models.yml)
 
 `sample` decodes 16 frames of DiDeMo's tuning videos at the standard mode's instants (one per video, its middle
 cached frame, squashed to 224 pixels by ffmpeg) and takes one description of each, with five more sentences for the
@@ -18,11 +20,19 @@ a batch of 2, does not. `check` embeds the same frames and descriptions as whenf
 compares: the token ids must be equal and each embedding at a cosine of at least 0.999 to the reference's, the
 image tower in float32 (on this processor OpenVINO computes every tower in bfloat16, SigLIP 2's too, and the
 measure keeps that precision for both).
+
+No model hub serves the image tower `one` saves, which the ninth to eleventh rounds measured. `export` builds it
+again where whenframe's release models-1 is published, from timm/PE-Core-B-16's weights at a fixed revision, as
+`reference --export` and `one` built it, but without the check's frames: a trace keeps the operations it ran, not
+the values it was given. It then compares the tower built with the one measured: their embeddings of six fixed
+images (`check_inputs`), computed with OpenVINO in float32, must be at a cosine of at least 0.99999, and it says
+whether the files' bytes are the same. `export-check` writes what it compares with (models/pe-core-b16/check.*).
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 import time
@@ -37,6 +47,11 @@ TIMM = "timm/PE-Core-B-16"
 CHECKED = ROOT / "results" / "round9_check.json"
 BANK = ROOT / "results" / "round9_bank.json"
 MODEL = "pe-core-b16"
+REVISION = "0038414f37721c5eafc1a5e0da802d291c909de3"  # timm/PE-Core-B-16's main since 2025-07-24, as read here
+RELEASED = ROOT / "models" / MODEL  # published with the tower (NOTICE, LICENSE), and what `export` compares with
+FILES = ("vision_model_any_batch.onnx", "vision_model_one.xml", "vision_model_one.bin")
+ASSETS = {"pe-core-b16-vision.xml": "vision_model_one.xml", "pe-core-b16-vision.bin": "vision_model_one.bin"}
+MIN_COSINE = 0.99999
 # sentences that only test the tokenizer: capitals, punctuation, spaces, accents
 EXTRA = ["A man's dog jumps over the FENCE!", "the camera pans left   then right", "kids playing in the snow, 2nd time",
          "café au lait — poured slowly", "first time we see the red car's door open"]  # fmt: skip
@@ -141,23 +156,30 @@ def fast_rope(visual) -> int:
     return patched
 
 
+def load_open_clip(revision: str):
+    """open_clip's PE-Core-B-16 with timm/PE-Core-B-16's weights at a revision, read into memory (never to disk)."""
+    import open_clip
+    from safetensors.torch import load
+
+    t0 = time.time()
+    url = f"https://huggingface.co/{TIMM}/resolve/{revision}/open_clip_model.safetensors"
+    with urllib.request.urlopen(url) as r:  # noqa: S310 (fixed host)
+        data = r.read()
+    print(f"weights read into memory: {len(data) / 1e9:.2f} GB in {time.time() - t0:.0f} s", flush=True)
+    model = open_clip.create_model("PE-Core-B-16", pretrained=None)
+    model.load_state_dict(load(data), strict=True)
+    return model.eval()
+
+
 def reference(args) -> None:
     """open_clip's PE-Core-B-16, its weights read into memory; and the image tower exported with any batch size,
     its rotary position embedding written as fast_rope writes it and checked to give the same embeddings."""
     import open_clip
     import torch
-    from safetensors.torch import load
 
     here = Path(args.folder)
     torch.set_num_threads(4)
-    t0 = time.time()
-    with urllib.request.urlopen(f"https://huggingface.co/{TIMM}/resolve/main/open_clip_model.safetensors") as r:  # noqa: S310
-        data = r.read()
-    print(f"weights read into memory: {len(data) / 1e9:.2f} GB in {time.time() - t0:.0f} s", flush=True)
-    model = open_clip.create_model("PE-Core-B-16", pretrained=None)
-    model.load_state_dict(load(data), strict=True)
-    del data
-    model.eval()
+    model = load_open_clip("main")
     frames = np.load(here / "frames.npy")
     texts = json.loads((here / "texts.json").read_text())
     x = torch.from_numpy(frames.astype(np.float32) / 127.5 - 1.0).permute(0, 3, 1, 2).contiguous()  # PE's [-1, 1]
@@ -189,8 +211,7 @@ def one(args) -> None:
     """The image tower exported again, fixed to one frame at a time and saved for OpenVINO, which then runs several
     frames at once, each in a request of its own (its throughput mode, as So400m's runs). With any batch size,
     OpenVINO's memory grew with every new batch size (from 1.5 to 3.3 GB over ten); one at a time, it holds."""
-    import openvino as ov
-
+    ov = _openvino()
     folder = Path(args.model_folder) / "onnx"
     model = ov.Core().read_model(str(folder / "vision_model_any_batch.onnx"))
     model.reshape({"pixel_values": [1, 3, 224, 224]})
@@ -328,11 +349,136 @@ def texts(args) -> None:
         print(f"{name}: {len(said)} descriptions in {time.time() - t0:.0f} s", flush=True)
 
 
+def _openvino():
+    """OpenVINO, without the usage report its converter sends on import (as whenframe imports it)."""
+    sys.modules.setdefault("openvino_telemetry", None)  # a None entry makes that import fail
+    import openvino
+
+    return openvino
+
+
+def check_inputs() -> np.ndarray:
+    """Six images of 224 pixels in PE's [-1, 1], the same on every machine: four of uniform noise, two smooth."""
+    noise = np.random.default_rng(0).uniform(-1.0, 1.0, (4, 3, 224, 224))
+    u = np.linspace(-1.0, 1.0, 224)
+    s, p = np.add.outer(u, u) / 2, np.outer(u, u)
+    smooth = np.array([[s, p, np.sin(3 * s)], [np.cos(5 * s), np.sin(7 * p), s * p]])
+    return np.concatenate([noise, smooth]).astype(np.float32)
+
+
+def sha256(path: Path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        while chunk := f.read(1 << 20):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def tower_embeds(xml: Path) -> np.ndarray:
+    """An image tower's embeddings of check_inputs(), with OpenVINO in float32, one image at a time."""
+    core = _openvino().Core()
+    tower = core.compile_model(core.read_model(str(xml)), "CPU", {"INFERENCE_PRECISION_HINT": "f32"})
+    x = check_inputs()
+    return np.concatenate([tower(x[i : i + 1])[tower.output(0)] for i in range(len(x))])
+
+
+def export_check(args) -> None:
+    """What `export` compares the tower it builds with: the measured tower's embeddings of check_inputs() and its
+    files' SHA-256 (models/pe-core-b16/check.npz and check.json)."""
+    onnx = Path(args.model_folder) / "onnx"
+    np.savez_compressed(RELEASED / "check.npz", embeds=tower_embeds(onnx / "vision_model_one.xml"))
+    info = {
+        "tower": "PE core B/16's image tower measured in the ninth to eleventh rounds (`reference --export`, `one`)",
+        "weights": f"{TIMM}, read from main on 2026-11-21 ({REVISION})",
+        "built_with": {"torch": "2.15.0+cpu", "open_clip": "4.2.2", "timm": "1.0.31", "openvino": "2026.4.1"},
+        "embeds": "check_inputs(), with OpenVINO in float32, one image at a time (check.npz)",
+        "min_cosine": MIN_COSINE,
+        "sha256": {f: sha256(onnx / f) for f in FILES},
+    }  # fmt: skip
+    (RELEASED / "check.json").write_text(json.dumps(info, indent=1) + "\n")
+    print(json.dumps(info, indent=1))
+
+
+def export(args) -> None:
+    """The image tower of whenframe's release models-1, built again from timm/PE-Core-B-16's weights at REVISION
+    and checked against the tower measured (`verify`)."""
+    import torch
+
+    torch.set_num_threads(4)
+    folder = Path(args.model_folder)
+    (folder / "onnx").mkdir(parents=True, exist_ok=True)
+    model = load_open_clip(REVISION)
+    layers = fast_rope(model.visual)
+    x = torch.from_numpy(check_inputs()[:2])
+    with torch.no_grad():
+        torch.onnx.export(model.visual, (x,), str(folder / "onnx" / FILES[0]), input_names=["pixel_values"],
+                          output_names=["image_embeds"], opset_version=18, dynamo=False,
+                          dynamic_axes={"pixel_values": {0: "batch"}, "image_embeds": {0: "batch"}})  # fmt: skip
+    one(args)
+    verify(folder, layers)
+
+
+def verify(folder: Path, layers: int | None = None) -> None:
+    """The tower built in a model folder against the tower measured: export.json, and the release's notes.md if it
+    passes (its embeddings of check_inputs() at a cosine of at least MIN_COSINE to the measured tower's)."""
+    from importlib.metadata import PackageNotFoundError, version
+
+    def installed(name: str) -> str | None:
+        try:
+            return version(name)
+        except PackageNotFoundError:
+            return None
+
+    measured = json.loads((RELEASED / "check.json").read_text())
+    ref = np.load(RELEASED / "check.npz")["embeds"]
+    got = tower_embeds(folder / "onnx" / "vision_model_one.xml")
+    cos = cosines(got, ref)
+    files = {f: sha256(folder / "onnx" / f) for f in FILES}
+    same = {f: files[f] == measured["sha256"][f] for f in FILES}
+    packages = ("torch", "open_clip_torch", "timm", "onnx", "openvino", "numpy")
+    out = {
+        "weights": f"{TIMM}@{REVISION}", "layers_patched": layers,
+        "versions": {"python": sys.version.split()[0], **{p: installed(p) for p in packages}},
+        "sha256": files, "same_bytes_as_measured": same,
+        "cosine_min": float(cos.min()), "max_abs_diff": float(np.abs(got - ref).max()),
+        "passed": bool(cos.min() >= MIN_COSINE),
+    }  # fmt: skip
+    (folder / "export.json").write_text(json.dumps(out, indent=1) + "\n")
+    print(json.dumps(out, indent=1))
+    if not out["passed"]:
+        raise SystemExit(f"the tower built is not the tower measured: cosine {cos.min():.6f} < {MIN_COSINE}")
+    checked = (
+        "the same bytes"
+        if all(same.values())
+        else f"its embeddings of six fixed images at a cosine of at least {cos.min():.6f} to the measured tower's"
+    )
+    rows = "\n".join(f"| `{name}` | `{files[f]}` |" for name, f in ASSETS.items())
+    (folder / "notes.md").write_text(f"""Files whenframe downloads that no model hub serves, built and published once \
+by the workflow Models (`.github/workflows/models.yml`); a file published here is never replaced.
+
+**PE core B/16's image tower** (Meta's Perception Encoder; Apache License 2.0, `pe-core-b16-LICENSE.txt` and \
+`pe-core-b16-NOTICE.txt`), for OpenVINO, one image of 224 pixels at a time. `scripts/pe_core.py export` built it \
+from timm/PE-Core-B-16's weights (revision {REVISION[:8]}), as the ninth round built the tower that the ninth to \
+eleventh rounds measured.
+
+| file | SHA-256 |
+|---|---|
+{rows}
+
+Checked against the tower measured (`models/pe-core-b16/check.json`): {checked}.
+""")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("stage", choices=["fetch", "sample", "reference", "one", "check", "bank", "texts"])
+    ap.add_argument("stage", choices=["fetch", "sample", "reference", "one", "check", "bank", "texts", "export-check",
+                                      "export"])  # fmt: skip
     ap.add_argument("--folder", help="the check's folder: its frames, descriptions and the reference's embeddings")
-    ap.add_argument("--model-folder", help="PE core B/16's files, as `fetch` and `reference --export` leave them")
+    ap.add_argument(
+        "--model-folder",
+        help="PE core B/16's files, as `fetch` and `reference --export` leave them; "
+        "export: where to build the image tower",
+    )
     ap.add_argument("--annotations", help="DiDeMo's didemo_train.json")
     ap.add_argument("--videos", help="the folder of DiDeMo's training videos")
     ap.add_argument("--export", help="reference: where to export the image tower, taking any batch size")
@@ -340,7 +486,7 @@ def main() -> None:
     ap.add_argument("--model-dir", help="bank: folder of SigLIP 2 base's files, as scripts/compare.py's")
     args = ap.parse_args()
     stages = {"fetch": fetch, "sample": sample, "reference": reference, "one": one, "check": check, "bank": bank,
-              "texts": texts}  # fmt: skip
+              "texts": texts, "export-check": export_check, "export": export}  # fmt: skip
     stages[args.stage](args)
 
 

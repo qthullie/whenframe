@@ -1,0 +1,50 @@
+name: Models
+
+# The files whenframe downloads that no model hub serves, published once in the release models-1: PE core B/16's
+# image tower (Meta's Perception Encoder, Apache License 2.0), built again from timm/PE-Core-B-16's weights by
+# scripts/pe_core.py export, as the ninth round built the tower the ninth to eleventh rounds measured, and checked
+# against it (models/pe-core-b16/check.json). Run by hand, from the Actions tab. A release already published is
+# never replaced: whenframe pins its files' SHA-256.
+
+on:
+  workflow_dispatch:
+
+concurrency: models
+
+jobs:
+  pe-core-b16:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write  # the release
+    steps:
+      - uses: actions/checkout@v6
+      - name: Not published yet
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view models-1 > /dev/null 2>&1; then echo "models-1 is already published"; exit 1; fi
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: The export's environment, as in the ninth round
+        run: |
+          python -m pip install --index-url https://download.pytorch.org/whl/cpu torch==2.15.0 torchvision
+          python -m pip install open_clip_torch==4.2.2 timm==1.0.31 safetensors==0.8.0 onnx==1.23.2 \
+            openvino==2026.4.1 numpy==2.5.3
+      - name: Build and check
+        run: python scripts/pe_core.py export --model-folder build/pe-core-b16
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          d=build/pe-core-b16
+          mv $d/onnx/vision_model_one.xml $d/pe-core-b16-vision.xml
+          mv $d/onnx/vision_model_one.bin $d/pe-core-b16-vision.bin
+          cp models/pe-core-b16/NOTICE $d/pe-core-b16-NOTICE.txt
+          cp models/pe-core-b16/LICENSE $d/pe-core-b16-LICENSE.txt
+          mv $d/export.json $d/pe-core-b16-export.json
+          sha256sum $d/pe-core-b16-vision.xml $d/pe-core-b16-vision.bin
+          gh release create models-1 --target "$GITHUB_SHA" --title "Model files" --notes-file $d/notes.md \
+            $d/pe-core-b16-vision.xml $d/pe-core-b16-vision.bin $d/pe-core-b16-NOTICE.txt \
+            $d/pe-core-b16-LICENSE.txt $d/pe-core-b16-export.json
