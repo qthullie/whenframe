@@ -1,13 +1,15 @@
-"""The demo site's text server: a visitor's own description, embedded by the text tower whenframe searches with.
+"""The demo site's text server: a visitor's own description, embedded by the text towers whenframe searches with.
 
-The demo site (site/) searches three films in the browser, on frames embedded beforehand. A description typed there
-is sent here, embedded by SigLIP 2's text tower exactly as `whenframe search` embeds a query, and sent back; the
-browser searches with it. Only the text comes here, and nothing is logged or stored.
+The demo site (site/) searches a phone's videos and photos in the browser, on frames embedded beforehand. A
+description typed there is sent here, embedded by SigLIP 2's and PE core B/16's text towers exactly as
+`whenframe search` embeds a query, and sent back; the browser searches with it. Only the text comes here, and nothing
+is logged or stored.
 
     python demo-server/app.py [--host 0.0.0.0] [--port 7860] [--origin https://qthullie.github.io ...]
 
-    GET /embed?q=TEXT   {"vector": base64 of the unit vector, little-endian float32, "dim": 768, "ms": ...}
-    GET /health         ok, once the text tower is loaded
+    GET /embed?q=TEXT   {"vectors": {model: base64 of its unit vector, little-endian float32}, "dims": {model: ...},
+                         "ms": ...}
+    GET /health         ok, once the text towers are loaded
 
 Only the origins given (or WHENFRAME_ORIGINS, comma-separated) may read the answers from a browser. A description
 longer than LIMIT characters is refused, each address may ask RATE times a minute, and one description is
@@ -57,7 +59,7 @@ class Limiter:
 
 
 def handler(embed, origins=ORIGINS, limit: int = LIMIT, limiter: Limiter | None = None):
-    """The request handler; embed(text) -> unit vector (float32), called one at a time."""
+    """The request handler; embed(text) -> {model: unit vector (float32)}, called one at a time."""
     origins = set(origins)
     limiter = limiter or Limiter()
     lock = threading.Lock()
@@ -100,11 +102,36 @@ def handler(embed, origins=ORIGINS, limit: int = LIMIT, limiter: Limiter | None 
                 return self.send(429, {"error": "too many descriptions; try again in a minute"}, {"Retry-After": "60"})
             t0 = time.perf_counter()
             with lock:
-                v = np.asarray(embed(text), dtype="<f4").ravel()
+                vs = {m: np.asarray(v, dtype="<f4").ravel() for m, v in embed(text).items()}
             ms = round(1000 * (time.perf_counter() - t0))
-            self.send(200, {"vector": base64.b64encode(v.tobytes()).decode(), "dim": int(v.size), "ms": ms})
+            self.send(
+                200,
+                {
+                    "vectors": {m: base64.b64encode(v.tobytes()).decode() for m, v in vs.items()},
+                    "dims": {m: int(v.size) for m, v in vs.items()},
+                    "ms": ms,
+                },
+            )
 
     return Handler
+
+
+def text_encoders() -> dict:
+    """The text towers of a new library's models, downloaded once (not their image towers)."""
+    from whenframe.encoder import DEFAULT_LIBRARY, MODELS, Encoder, cache_dir, download, fetch_files
+
+    out = {}
+    for model in DEFAULT_LIBRARY.split("+"):
+        spec = MODELS[model]
+        if spec.sources:  # files pinned one by one
+            folder = cache_dir() / "models" / spec.repo.replace("/", "--")
+            for name, url, digest in spec.sources:
+                if name in (spec.tokenizer_file, spec.text_file):
+                    download(url, folder / name, digest)
+        else:
+            folder = fetch_files(spec.repo, (spec.tokenizer_file, spec.text_file))
+        out[model] = Encoder(model, folder=folder, backend="onnxruntime")
+    return out
 
 
 def main() -> None:
@@ -115,13 +142,12 @@ def main() -> None:
     a = ap.parse_args()
     origins = a.origin or [o for o in os.environ.get("WHENFRAME_ORIGINS", "").split(",") if o] or list(ORIGINS)
 
-    from whenframe.encoder import DEFAULT_MODEL, MODELS, Encoder, fetch_files
-
-    spec = MODELS[DEFAULT_MODEL]
-    folder = fetch_files(spec.repo, (spec.tokenizer_file, spec.text_file))  # the text tower only
-    encoder = Encoder(DEFAULT_MODEL, folder=folder)
-    encoder.encode_texts(["warm up"])  # loaded before the first visitor
-    httpd = ThreadingHTTPServer((a.host, a.port), handler(lambda t: encoder.encode_texts([t])[0], origins))
+    encoders = text_encoders()
+    for e in encoders.values():
+        e.encode_texts(["warm up"])  # loaded before the first visitor
+    httpd = ThreadingHTTPServer(
+        (a.host, a.port), handler(lambda t: {m: e.encode_texts([t])[0] for m, e in encoders.items()}, origins)
+    )
     print(f"embedding descriptions for {', '.join(origins)} at http://{a.host}:{a.port}", flush=True)
     try:
         httpd.serve_forever()

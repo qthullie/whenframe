@@ -19,9 +19,12 @@ spec.loader.exec_module(app)
 SITE = "https://qthullie.github.io"
 
 
-def fake_embed(text: str) -> np.ndarray:
-    v = np.arange(1, 769, dtype=np.float32) * (len(text) % 7 + 1)
-    return v / np.linalg.norm(v)
+def fake_embed(text: str) -> dict[str, np.ndarray]:
+    out = {}
+    for model, dim in (("siglip2-base", 768), ("pe-core-b16", 1024)):
+        v = np.arange(1, dim + 1, dtype=np.float32) * (len(text) % 7 + 1)
+        out[model] = v / np.linalg.norm(v)
+    return out
 
 
 class Clock:
@@ -52,16 +55,17 @@ def get(url, origin=SITE):
         return e.code, dict(e.headers), e.read()
 
 
-def test_a_description_comes_back_as_its_unit_vector(server):
+def test_a_description_comes_back_as_each_models_unit_vector(server):
     base, _ = server
     status, headers, body = get(f"{base}/embed?q=a%20dragon%20over%20the%20mountains")
     assert status == 200
     assert headers["Access-Control-Allow-Origin"] == SITE
     assert headers["Cache-Control"] == "no-store"
     answer = json.loads(body)
-    v = np.frombuffer(base64.b64decode(answer["vector"]), dtype="<f4")
-    assert answer["dim"] == 768 and len(v) == 768
-    np.testing.assert_allclose(v, fake_embed("a dragon over the mountains"), rtol=1e-6)
+    assert answer["dims"] == {"siglip2-base": 768, "pe-core-b16": 1024}
+    for model, want in fake_embed("a dragon over the mountains").items():
+        v = np.frombuffer(base64.b64decode(answer["vectors"][model]), dtype="<f4")
+        np.testing.assert_allclose(v, want, rtol=1e-6)
 
 
 def test_only_the_site_may_read_the_answers(server):

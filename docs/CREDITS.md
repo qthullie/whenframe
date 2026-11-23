@@ -40,8 +40,13 @@
   describes frames with Florence-2-base (Microsoft, MIT licence) and translates
   descriptions with Opus-MT (Helsinki-NLP, Apache 2.0); the tool uses none of
   them.
-- The demo uses Big Buck Bunny, Sintel and Tears of Steel, © Blender Foundation,
-  CC BY 3.0.
+- The demo site searches 67 videos and 165 photos that 217 people shared on
+  Flickr under CC BY 2.0, from YFCC100M's public copy (Thomee et al., *YFCC100M:
+  the new data in multimedia research*, CACM 2016), renamed and made smaller; who
+  took each one is on the [site's credits page](https://qthullie.github.io/whenframe/credits.html)
+  (`site/library.json`). None is from DiDeMo, a benchmark built on YFCC100M.
+  The pictures of `whenframe serve` in the tutorial use Big Buck Bunny, Sintel
+  and Tears of Steel, © Blender Foundation, CC BY 3.0.
 
 ## Licence
 

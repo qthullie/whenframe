@@ -21,9 +21,9 @@ await page.goto(url);
 await page.waitForFunction(() => [...document.querySelectorAll(".card .shot")].length > 0);
 await page.evaluate(() => window.scrollTo(0, document.querySelector(".demo").offsetTop - 12));
 await page.waitForTimeout(300);
-await snap(8);  // the films, before any description is picked
-await page.click("text=a girl hugging a baby dragon");
-await page.waitForFunction(() => document.querySelector("#status").textContent.includes("dragon"));
+await snap(8);  // the library, before any description is picked
+await page.click('.chip >> text="a geyser shooting steam into the sky"');
+await page.waitForFunction(() => document.querySelector("#status").textContent.includes("geyser"));
 await page.waitForTimeout(400);
 await snap(10);
 await page.click(".card");  // the first moment plays its ten seconds
@@ -33,8 +33,8 @@ for (let i = 0; i < 18; i++) {
   await page.waitForTimeout(110);
 }
 await page.click("#m-close");
-await page.click("text=two people arguing on a bridge");
-await page.waitForFunction(() => document.querySelector("#status").textContent.includes("bridge"));
+await page.click('.chip >> text="a pipe band marching down the street"');
+await page.waitForFunction(() => document.querySelector("#status").textContent.includes("pipe band"));
 await page.waitForTimeout(400);
 await snap(12);
 await browser.close();

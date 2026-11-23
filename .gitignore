@@ -9,6 +9,6 @@ results/cache/
 !whenframe/data/cast16.onnx
 /build/
 /dist/
-/site/videos/
+/site/media/
 results/temporal/*.npz
 results/temporal/logs/

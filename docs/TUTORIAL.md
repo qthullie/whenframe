@@ -58,7 +58,7 @@ mean of their primary metrics, more on each of them than SigLIP 2 B/16 with v3
 alone (41.90, the default until the eleventh round) and than SigLIP 2 So400m
 (40.63). Indexing costs about 9 CPU minutes per hour of video, each frame
 decoded once for both encoders, and a search holds both text towers in memory
-(at most 4.7 GB for a search of the demo's three films). The measured numbers
+(at most 4.7 GB for a search of three films, 37 minutes). The measured numbers
 are in [RESULTS.md](RESULTS.md), "Eleventh round".
 
 Libraries built by earlier versions, in their standard, economy, precision or

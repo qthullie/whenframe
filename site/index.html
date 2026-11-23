@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>whenframe</title>
-<meta name="description" content="Find the moment you are looking for in your own videos, on your own computer. See it at work on three open movies.">
+<meta name="description" content="Describe a moment, find it in your videos and photos, on your own computer. See it at work on someone's phone: real videos and photos shared under CC BY.">
 <link rel="icon" href="logo.svg" type="image/svg+xml">
 <style>
   :root {
@@ -47,6 +47,7 @@
   .chip:hover { border-color: var(--accent); }
   #status { color: var(--muted); font-size: 14px; min-height: 22px; margin: 10px 0 0; }
   .note { color: var(--ink2); font-size: 15px; margin: -4px 0 4px; }
+  .note code { font-size: 13px; }
   button.link { border: none; padding: 0; background: none; color: var(--accent); text-decoration: underline;
                 font: inherit; cursor: pointer; }
   .chip.on { background: var(--accent); color: var(--on-accent); }
@@ -56,20 +57,23 @@
   .card:hover, .card:focus-visible { border-color: var(--accent); outline: none; }
   .card.unlikely { opacity: .5; }
   .card.unlikely:hover { opacity: 1; }
-  .shot { position: relative; aspect-ratio: 16 / 9; background-repeat: no-repeat; background-size: 1000% 1000%; }
+  .shot { position: relative; aspect-ratio: 4 / 3; background-repeat: no-repeat; background-size: 1000% 1000%; }
   .when { position: absolute; left: 8px; bottom: 8px; background: var(--shade); color: #fff; font-size: 12px;
           padding: 2px 8px; border-radius: 6px; font-variant-numeric: tabular-nums; }
   .rank { position: absolute; left: 8px; top: 8px; background: var(--accent); color: #fff; font-size: 12px;
           padding: 1px 7px; border-radius: 6px; }
   .meta { padding: 9px 12px 11px; }
-  .title { font-weight: 600; }
+  .title { font-weight: 600; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px;
+           overflow-wrap: anywhere; }
+  .more-files { grid-column: 1 / -1; justify-self: center; }
   .conf { color: var(--ink2); font-size: 13px; }
   dialog { border: none; border-radius: 16px; padding: 18px; background: var(--card); color: var(--ink); width: min(980px, 94vw); }
   dialog::backdrop { background: var(--shade); }
   dialog .head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; margin-bottom: 12px; }
   dialog .head span { color: var(--ink2); }
-  dialog .head #m-again { margin-left: auto; }
-  dialog video { width: 100%; max-height: 62vh; display: block; background: #000; border-radius: 10px; }
+  dialog .head .actions { margin-left: auto; display: flex; gap: 8px; }
+  dialog video, dialog img { width: 100%; max-height: 62vh; display: block; background: #000; border-radius: 10px;
+                             object-fit: contain; }
   .caption { color: var(--ink2); font-size: 14px; }
   .board { display: grid; grid-template-columns: repeat(10, 1fr); gap: 6px; margin: 12px 0; }
   .board:empty { display: none; }
@@ -97,18 +101,19 @@
       <nav><a href="https://github.com/qthullie/whenframe">Code</a>
            <a href="https://github.com/qthullie/whenframe/blob/main/docs/RESULTS.md">Results</a></nav>
     </div>
-    <p class="lead">Find the moment you are looking for in your own videos: describe it, and get the video and the
-      seconds where it happens. It runs on your computer, without a GPU, and sends nothing anywhere.</p>
+    <p class="lead">Describe a moment, find it in your videos and photos: the file, and the seconds where it happens.
+      It runs on your own computer, without a GPU, and sends nothing anywhere.</p>
   </header>
 
   <div class="demo">
-    <h2 id="what">Three open movies</h2>
-    <p class="note"><span id="how">Pick a description:</span> the search runs in your browser, on the frames
-      whenframe embedded. Pick a moment to watch its ten seconds, or
-      <button class="link" id="all" type="button">watch the films</button>.</p>
+    <h2 id="what">Someone's phone</h2>
+    <p class="note">Real videos and photos, named as a phone names them (<code>VID_20140425_181116.mp4</code>):
+      searching the names finds nothing. <span id="how">Pick a description:</span> the search runs in your browser,
+      on what whenframe indexed. Pick a moment to watch it, or
+      <button class="link" id="all" type="button">browse the library</button>.</p>
     <form id="ask" hidden>
       <input id="q" type="search" maxlength="200" autocomplete="off" spellcheck="false" enterkeyhint="search"
-             placeholder="a dragon flying over the mountains" aria-label="Describe a moment">
+             placeholder="a dog running in a field" aria-label="Describe a moment">
       <button type="submit">Search</button>
     </form>
     <div class="chips" id="chips"></div>
@@ -121,9 +126,10 @@
   <section class="more">
     <div class="box">
       <h3>On personal videos</h3>
-      <p><span class="big" id="n-default">…</span><br>of descriptions find their moment among the first five results,
-        searching <span id="n-videos">…</span> personal videos at once (DiDeMo test). One keyframe per shot, as some
-        home video tools index video: <b id="n-shots">…</b>.</p>
+      <p><span class="big" id="n-video">…</span><br>of descriptions find their video among the first five of 979
+        personal videos (DiDeMo test), against 25.4 % for the best published system, trained on them on a GPU; the
+        right moment of the whole collection among the first five: <b id="n-moment">…</b>.
+        <a href="https://github.com/qthullie/whenframe/blob/main/docs/RESULTS.md">How it was measured</a>.</p>
     </div>
     <div class="box">
       <h3>Install</h3>
@@ -131,24 +137,27 @@
 whenframe index ~/Videos
 whenframe search "the dog jumps into the pool"
 whenframe serve</pre>
-      <p>Python 3.10+ and ffmpeg. The first run downloads the model (1.5 GB).</p>
+      <p>Python 3.10+ and ffmpeg. The first run downloads the models (2.6 GB).</p>
     </div>
     <div class="box">
       <h3>How it works</h3>
       <ul>
-        <li>One frame per second, repeated frames skipped, embedded by SigLIP 2 on the CPU.</li>
-        <li>whenframe's own model, trained on more than 100,000 descriptions written by people, rewrites each
+        <li>One frame per second, repeated frames skipped, embedded on the CPU by two encoders that see
+          differently: Google's SigLIP 2 and Meta's Perception Encoder.</li>
+        <li>whenframe's own models, trained on more than 100,000 descriptions written by people, rewrite each
           frame with what the frames around it show: an action, not only a picture.</li>
-        <li>Frames that match almost any text are marked down (query-bank normalisation).</li>
-        <li>Moments of ten seconds around the best frames, ranked across all videos.</li>
+        <li>Frames that match almost any text are marked down (query-bank normalisation), and the two encoders'
+          scores are added.</li>
+        <li>Moments of ten seconds around the best frames, ranked with the photos across the whole library.</li>
       </ul>
       <p>The protocol was fixed before each test run, and the criteria it missed are listed with the ones it met.</p>
     </div>
   </section>
 
   <footer>
-    Films: Big Buck Bunny, Sintel and Tears of Steel, © Blender Foundation, CC BY 3.0, shown here in small copies.
-    Models: SigLIP 2 (Google, Apache 2.0), and whenframe's own model (its weights are for research and
+    Videos and photos: shared on Flickr by their authors under CC BY 2.0 (YFCC100M), renamed, the videos shown
+    smaller and without their sound; <a href="credits.html">who took each one</a>. Models: SigLIP 2 (Google,
+    Apache 2.0), PE core B/16 (Meta, Apache 2.0), and whenframe's own models (their weights are for research and
     non-commercial use). The search runs in your browser, on frames embedded beforehand. whenframe is
     MIT-licensed.
   </footer>
@@ -157,10 +166,11 @@ whenframe serve</pre>
 <dialog id="moment">
   <div class="head">
     <strong id="m-title"></strong><span id="m-when"></span>
-    <button id="m-again" type="button">Play the moment again</button>
-    <button id="m-close" type="button">Close</button>
+    <span class="actions"><button id="m-again" type="button">Play the moment again</button>
+      <button id="m-close" type="button">Close</button></span>
   </div>
-  <video id="m-video" controls playsinline preload="metadata"></video>
+  <video id="m-video" controls muted playsinline preload="metadata"></video>
+  <img id="m-photo" alt="" hidden>
   <div class="board" id="m-board"></div>
   <div class="caption" id="m-caption"></div>
 </dialog>

@@ -1,24 +1,26 @@
-"""Build the data of the demo site (site/): three Blender films, indexed once in the standard mode, searched in the
-browser.
+"""Build the data of the demo site (site/): someone's phone library, videos and photos that their authors shared on
+Flickr under CC BY 2.0 (YFCC100M), indexed once as `whenframe index` indexes a new library, searched in the browser.
 
-    python scripts/site.py --films DIR      # Big Buck Bunny, Sintel, Tears of Steel (Blender Foundation, CC BY 3.0)
-    python scripts/site.py --preview        # then the README's animation of the site, docs/figures/site(-dark).webp
+    python scripts/site_media.py site/media --originals DIR  # site/library.json's files, from YFCC100M's copy
+    python scripts/site.py --media DIR                       # site/data/ and site/credits.html, from the originals
+    python scripts/site.py --preview                         # the README's animation, docs/figures/site(-dark).webp
 
-The films are indexed as `whenframe index` indexes a new library: SigLIP 2 B/16's frames, each rewritten by
-whenframe's own model (whenframe/temporal.py). Writes site/data/ (and scripts/site_videos.sh the films' small copies,
-in site/videos/):
-    frames.bin       the frame embeddings, float16, as the tool stores them
-    offsets.bin      each frame's query-bank offset times the tuned strength, float32
-    frames.json      when each frame is, which film it belongs to, the films, the model's calibration
-    sheets/N.webp    the frames' thumbnails, 10 x 10 per sheet, in frame order
-    queries.bin      the suggested searches, embedded here (float32), and queries.json their text
-
-A description of the visitor's own is embedded by the demo's text server (site/server/), the same text model.
+site/library.json lists the files: their names as a phone names them (VID_20140425_181116.mp4), their author, title,
+page and licence on Flickr, and the hash that finds them in YFCC100M's copy. They were chosen by hand among the media
+shared under CC BY 2.0 that are not DiDeMo's (a benchmark): animals, places, events seen from the crowd, sport, food,
+nothing centred on a child or private. Writes site/data/:
+    frames.MODEL.bin   each model's frame embeddings, float16, as the tool stores them
+    offsets.MODEL.bin  each frame's query-bank offset times its strength, float32
+    frames.json        when each frame is, which file it belongs to, the files, the models and how they are combined
+    sheets/N.webp      the frames' thumbnails, 10 x 10 per sheet, in frame order (a photo is one frame)
+    queries.MODEL.bin  the suggested searches, embedded here by each model (float32), and queries.json their text
+    expected.json      what the tool itself finds for each suggestion, which the page is checked against
 """
 
 from __future__ import annotations
 
 import argparse
+import html
 import json
 import subprocess
 import sys
@@ -30,22 +32,18 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from whenframe import Library, Searcher, temporal  # noqa: E402
-from whenframe.encoder import DEFAULT_MODEL, MODELS  # noqa: E402
+from whenframe.encoder import DEFAULT_LIBRARY, FUSED, MODELS  # noqa: E402
 from whenframe.library import Settings  # noqa: E402
-from whenframe.video import find_videos  # noqa: E402
 
-TILE = (192, 108)
+TILE = (160, 120)
 COLS, ROWS = 10, 10
-FILMS = {  # file indexed: title, the film's page, and the name of its small copy in site/videos (site_videos.sh)
-    "BigBuckBunny_640x360.m4v": ("Big Buck Bunny", "https://peach.blender.org/", "big-buck-bunny"),
-    "Sintel.2010.720p.mkv": ("Sintel", "https://durian.blender.org/", "sintel"),
-    "tears_of_steel_720p.mov": ("Tears of Steel", "https://mango.blender.org/", "tears-of-steel"),
-}
+# chosen among others for what they find (scripts/site.py prints the tool's first answers to each)
 SUGGESTIONS = [
-    "two people arguing on a bridge", "a girl hugging a baby dragon", "a giant rabbit wakes up and stretches",
-    "a sword fight in the snow", "a robot with glowing eyes", "a butterfly flying in a meadow",
-    "a dragon flying over the mountains", "an old man in a dark room", "people running away from an explosion",
-    "a close-up of a woman crying", "a squirrel holding a nut", "a city at night",
+    "a geyser shooting steam into the sky", "a pipe band marching down the street", "snow falling at night",
+    "two cats cuddling", "a dog running in a field", "a boat in the fog", "cooking with big flames",
+    "a bee on an orchid", "a clownfish", "an elevated subway train", "people dancing in a bar",
+    "a vintage car in a parade", "the pyramids", "a striped lighthouse", "a leopard",
+    "hot chocolate with marshmallows", "fireworks", "a castle on a hill by the sea",
 ]  # fmt: skip
 
 
@@ -56,6 +54,66 @@ def frames_at_one_fps(path: Path) -> np.ndarray:
            "rgb24", "-"]  # fmt: skip
     raw = subprocess.run(cmd, capture_output=True, check=True).stdout
     return np.frombuffer(raw, dtype=np.uint8).reshape(-1, h, w, 3)
+
+
+def photo_tile(path: Path) -> np.ndarray:
+    from PIL import Image, ImageOps
+
+    im = ImageOps.exif_transpose(Image.open(path)).convert("RGB")
+    im.thumbnail(TILE, Image.LANCZOS)
+    tile = Image.new("RGB", TILE)
+    tile.paste(im, ((TILE[0] - im.width) // 2, (TILE[1] - im.height) // 2))
+    return np.asarray(tile)
+
+
+def credits_page(items: list[dict], out: Path) -> None:
+    """site/credits.html: every file, its title and author on Flickr, and its licence."""
+    rows = "\n".join(
+        f'<tr><td>{html.escape(it["file"])}</td><td><a href="{html.escape(it["page"])}">'
+        f"{html.escape(it['title'] or 'untitled')}</a></td><td>{html.escape(it['author'])}</td>"
+        f'<td><a href="{html.escape(it["license_url"])}">CC BY 2.0</a></td></tr>'
+        for it in items
+    )
+    out.write_text(f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>whenframe demo credits</title>
+<link rel="icon" href="logo.svg" type="image/svg+xml">
+<style>
+  :root {{ --page: #f6f6f3; --ink: #0b0b0b; --ink2: #52514e; --line: #e1e0d9; --accent: #2a78d6;
+           color-scheme: light; }}
+  @media (prefers-color-scheme: dark) {{
+    :root {{ --page: #121211; --ink: #f0efec; --ink2: #c3c2b7; --line: #2c2c2a; --accent: #3987e5;
+             color-scheme: dark; }}
+  }}
+  body {{ margin: 0; background: var(--page); color: var(--ink); font: 15px/1.5 system-ui, sans-serif; }}
+  .wrap {{ max-width: 1000px; margin: 0 auto; padding: 32px 16px 48px; }}
+  a {{ color: var(--accent); }}
+  p {{ color: var(--ink2); }}
+  .scroll {{ overflow-x: auto; }}
+  table {{ border-collapse: collapse; width: 100%; font-size: 14px; }}
+  td, th {{ border-bottom: 1px solid var(--line); padding: 6px 8px; text-align: left; vertical-align: top; }}
+  td:first-child {{ font-family: ui-monospace, monospace; font-size: 13px; white-space: nowrap; }}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>The demo's videos and photos</h1>
+<p>{len(items)} files that {len({it["author"] for it in items})} people shared on Flickr under the
+<a href="https://creativecommons.org/licenses/by/2.0/">Creative Commons Attribution 2.0</a> licence, taken from
+YFCC100M's public copy. The demo renames them as a phone names its files, shows the videos in smaller copies without
+their sound and the photos at 500 pixels, and embeds them with whenframe; nothing else is changed.
+<a href="./">Back to the demo</a>.</p>
+<div class="scroll"><table>
+<tr><th>file in the demo</th><th>title on Flickr</th><th>author</th><th>licence</th></tr>
+{rows}
+</table></div>
+</div>
+</body>
+</html>
+""")
 
 
 def preview(out: Path, scheme: str) -> None:
@@ -119,40 +177,41 @@ def main() -> None:
 
     ap = argparse.ArgumentParser()
     ap.add_argument("--preview", action="store_true", help="only make the animation of the site")
-    ap.add_argument("--films")
-    ap.add_argument("--library", default=str(ROOT / "results" / "cache" / "demo-library"))
+    ap.add_argument("--media", help="the folder of site/library.json's files (scripts/site_media.sh)")
+    ap.add_argument("--library", default=str(ROOT / "results" / "cache" / "site-library"))
     ap.add_argument("--out", default=str(ROOT / "site" / "data"))
     a = ap.parse_args()
     if a.preview:
         preview(ROOT / "docs" / "figures" / "site.webp", "light")
         preview(ROOT / "docs" / "figures" / "site-dark.webp", "dark")
         return
-    if not a.films:
-        ap.error("--films is required to build the data")
-    out = Path(a.out)
+    if not a.media:
+        ap.error("--media is required to build the data")
+    out, media = Path(a.out), Path(a.media)
     (out / "sheets").mkdir(parents=True, exist_ok=True)
+    items = json.loads((ROOT / "site" / "library.json").read_text())
+    credits_page(items, ROOT / "site" / "credits.html")
 
-    # a new library in the standard mode, as `whenframe index` makes it: through whenframe's temporal model
-    name = temporal.MODELS.get(DEFAULT_MODEL)
-    lib = Library(a.library, Settings(temporal=name) if name and temporal.load(name=f"{name}.npz") else None)
-    for path in find_videos([a.films]):
-        lib.add(path)
-    model = lib.settings.models[0]
+    # a new library, as `whenframe index` makes it: both encoders, each through its own temporal model
+    lib = Library(a.library, Settings(temporal=temporal.for_library(DEFAULT_LIBRARY)))
+    for it in items:
+        lib.add(media / it["file"])
     videos, embs, times = lib.snapshot()
+    by_file = {Path(v.path).name: v for v in videos}
+    order = [by_file[it["file"]] for it in items]
+    rows = np.concatenate([np.arange(v.start, v.start + v.count) for v in order])
     searcher = Searcher(lib)
-    offsets = searcher.offsets(model) * searcher.config.bank * MODELS[model].bank_lambda
+    models = lib.settings.models
+    fused = FUSED[lib.settings.model]
 
-    rows = np.concatenate([np.arange(v.start, v.start + v.count) for v in videos])
-    thumbs, films, film_of = [], [], []
-    for i, v in enumerate(videos):
-        name = Path(v.path).name
-        title, url, video = FILMS.get(name, (Path(v.path).stem, "", Path(v.path).stem))
-        films.append({"title": title, "file": name, "duration": round(v.duration, 2), "url": url,
-                      "video": f"videos/{video}"})  # fmt: skip
-        frames = frames_at_one_fps(Path(v.path))
-        for t in times[v.start : v.start + v.count]:
-            thumbs.append(frames[min(int(round(float(t))), len(frames) - 1)])
-            film_of.append(i)
+    thumbs, item_of = [], []
+    for i, (it, v) in enumerate(zip(items, order, strict=True)):
+        if it["kind"] == "photo":
+            thumbs.append(photo_tile(media / it["file"]))
+        else:
+            frames = frames_at_one_fps(media / it["file"])
+            thumbs += [frames[min(int(round(float(t))), len(frames) - 1)] for t in times[v.start : v.start + v.count]]
+        item_of += [i] * v.count
     per_sheet = COLS * ROWS
     for s in range(0, len(thumbs), per_sheet):
         sheet = Image.new("RGB", (COLS * TILE[0], ROWS * TILE[1]))
@@ -160,29 +219,46 @@ def main() -> None:
             sheet.paste(Image.fromarray(img), ((k % COLS) * TILE[0], (k // COLS) * TILE[1]))
         sheet.save(out / "sheets" / f"{s // per_sheet}.webp", "WEBP", quality=72, method=6)
 
-    embs[model][rows].astype("<f2").tofile(out / "frames.bin")
-    offsets[rows].astype("<f4").tofile(out / "offsets.bin")
-    spec = MODELS[model]
+    spec = []
+    for model, weight in zip(models, fused.weights, strict=True):
+        embs[model][rows].astype("<f2").tofile(out / f"frames.{model}.bin")
+        strength = searcher.config.bank * searcher._tuned(model)[1]
+        (searcher.offsets(model) * strength)[rows].astype("<f4").tofile(out / f"offsets.{model}.bin")
+        lib.encoder_for(model).encode_texts(SUGGESTIONS).astype("<f4").tofile(out / f"queries.{model}.bin")
+        spec.append({"name": model, "dim": int(embs[model].shape[1]), "weight": weight})
+    first = MODELS[models[0]]
     meta = {
-        "model": spec.repo, "temporal": lib.settings.temporal, "dim": int(embs[model].shape[1]),
-        "count": int(len(rows)),
-        "scale": spec.logit_scale, "bias": spec.logit_bias, "text_length": spec.text_length,
-        "window": searcher.config.window, "per_video": searcher.config.per_video,
+        "models": spec, "temporal": lib.settings.temporal, "count": int(len(rows)),
+        "scale": first.logit_scale, "bias": first.logit_bias,  # the first model's, for how sure a match is
+        "window": searcher.config.window, "per_video": searcher.config.per_video, "moments": searcher.moments,
         "tile": list(TILE), "cols": COLS, "per_sheet": per_sheet,
-        "times": [round(float(t), 2) for t in times[rows]], "film": film_of, "films": films,
+        "times": [round(float(t), 2) for t in times[rows]], "item": item_of,
+        "items": [{"file": it["file"], "kind": it["kind"], "duration": round(v.duration, 2), "taken": it["taken"],
+                   "title": it["title"], "author": it["author"], "page": it["page"]}
+                  for it, v in zip(items, order, strict=True)],
     }  # fmt: skip
-    (out / "frames.json").write_text(json.dumps(meta, separators=(",", ":")))
-    results = ROOT / "results" / "didemo_test.json"
-    if results.exists():  # the page's numbers come from the benchmark's results, like the docs'
-        r = json.loads(results.read_text())
-        summary = {"default": r[r["default"]]["corpus"]["R@5 IoU>=0.5"], "shots": r["scene"]["corpus"]["R@5 IoU>=0.5"],
-                   "videos": r["cost"]["videos"], "queries": r["queries"]}  # fmt: skip
-        (out / "summary.json").write_text(json.dumps(summary))
-    q = lib.encoder.encode_texts(SUGGESTIONS).astype("<f4")
-    q.tofile(out / "queries.bin")
+    (out / "frames.json").write_text(json.dumps(meta, separators=(",", ":"), ensure_ascii=False))
     (out / "queries.json").write_text(json.dumps(SUGGESTIONS, indent=1))
+    # what the tool finds, for the check that the page searches as it does (scripts/site_check.mjs)
+    expected = {}
+    for q in SUGGESTIONS:
+        hits = searcher.search(q, k=10)
+        expected[q] = [{"file": Path(h.path).name, "start": round(h.start, 2), "end": round(h.end, 2),
+                        "confidence": round(h.confidence, 4)} for h in hits]  # fmt: skip
+    (out / "expected.json").write_text(json.dumps(expected, indent=1))
+    for old in ("frames.bin", "offsets.bin", "queries.bin", "summary.json"):  # the three films' data, before
+        (out / old).unlink(missing_ok=True)
+    results = ROOT / "results" / "round11_test.json"
+    if results.exists():  # the page's numbers come from the benchmark's results, like the docs'
+        r = json.loads(results.read_text())["fusion"]
+        summary = {"video": r["didemo"]["full"]["video"]["R@5"], "moment": r["didemo"]["value"]}
+        (out / "summary.json").write_text(json.dumps(summary))
     size = sum(f.stat().st_size for f in out.rglob("*") if f.is_file()) / 1e6
-    print(f"{len(rows)} frames from {len(films)} films, {len(thumbs) // per_sheet + 1} sheets, {size:.1f} MB")
+    n_video = sum(it["kind"] == "video" for it in items)
+    print(f"{len(rows)} frames from {n_video} videos and {len(items) - n_video} photos, "
+          f"{len(thumbs) // per_sheet + 1} sheets, {size:.1f} MB")  # fmt: skip
+    for q, hits in expected.items():
+        print(f"  {q}: " + ", ".join(f"{h['file']} {h['start']:.0f}s {h['confidence']:.2f}" for h in hits[:3]))
 
 
 if __name__ == "__main__":

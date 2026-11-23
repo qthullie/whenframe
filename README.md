@@ -14,11 +14,11 @@
   <a href="https://qthullie.github.io/whenframe/">
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/qthullie/whenframe/main/docs/figures/site-dark.webp">
-      <img src="https://raw.githubusercontent.com/qthullie/whenframe/main/docs/figures/site.webp" alt="The demo site: 'a girl hugging a baby dragon' finds three moments of Sintel, and the first, at 3:28, plays its ten seconds; then 'two people arguing on a bridge' finds the opening scene of Tears of Steel" width="800">
+      <img src="https://raw.githubusercontent.com/qthullie/whenframe/main/docs/figures/site.webp" alt="The demo site: in someone's phone, 67 videos and 165 photos named VID_ and IMG_, 'a geyser shooting steam into the sky' finds the eruption in two videos, and the first plays its ten seconds; then 'a pipe band marching down the street' finds the parade, and a photo of it" width="800">
     </picture>
   </a>
   <br>
-  <sub>Big Buck Bunny, Sintel and Tears of Steel (© Blender Foundation, CC BY 3.0), searched in the browser.</sub>
+  <sub>Real videos and photos, shared on Flickr under CC BY 2.0 (YFCC100M; <a href="https://qthullie.github.io/whenframe/credits.html">credits</a>), searched in the browser.</sub>
 </p>
 
 ```bash

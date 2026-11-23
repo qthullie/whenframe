@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- The demo site searches someone's phone instead of three Blender films: 67
+  videos and 165 photos that 217 people shared on Flickr under CC BY 2.0
+  (YFCC100M), chosen by hand, named as a phone names them, with whenframe's
+  one model (both encoders, v3 and v4) as `whenframe index` builds a library.
+  The page searches them as the tool does (`scripts/site_check.mjs` checks
+  every suggestion against the tool's own answers), photos and video moments
+  together, and credits each author (`site/credits.html`). The deploy workflow
+  downloads the files from YFCC100M's public copy and makes them smaller,
+  without their sound or metadata (`scripts/site_media.py`); the demo's text
+  server embeds a typed description with both text towers.
 - One model: a new library is indexed with SigLIP 2 B/16 and Meta's PE core
   B/16, each frame decoded once, each encoder's frames through whenframe's own
   model trained on them (v3 and v4), and searched through both together. On
@@ -10,7 +20,7 @@
   them `--mode`; libraries built in them are searched and kept up to date as
   they were built. OpenVINO is a dependency now (PE core B/16's image tower
   runs with it), the first run downloads about 2.6 GB, and a search holds both
-  text towers in memory (at most 4.7 GB for the demo's three films).
+  text towers in memory (at most 4.7 GB for a search of three films, 37 minutes).
 - whenframe's own model: a temporal adapter of 1.45 million weights rewrites
   each frame's SigLIP 2 embedding with what the frames around it show. A new
   library in the standard mode goes through it (`whenframe index
