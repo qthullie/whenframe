@@ -4,12 +4,11 @@
 
 NNCF compresses each tower's weights to 8 bits (`nncf.compress_weights`, INT8_ASYM, data-free, one scale per
 output channel, computed with numpy) and OpenVINO saves it; the activations stay in the precision OpenVINO computes
-in. The source files
-are the ones the eleventh round's text towers were read from, at fixed revisions, their SHA-256 checked:
-onnx-community's ONNX exports of SigLIP 2 B/16's text tower (float32) and PE core B/16's (float16).
-scripts/round12.py's towers stage compressed the files measured; `release` does it again from the downloaded
-sources, where whenframe's release models-2 is published (.github/workflows/models.yml), and checks that the files
-are the bytes measured (results/round12_towers.json).
+in. The source files are the ones the eleventh round's text towers were read from, at fixed revisions, their
+SHA-256 checked: onnx-community's ONNX exports of SigLIP 2 B/16's text tower (float32) and PE core B/16's
+(float16). scripts/round12.py's towers stage compressed the files measured; `release` does it again from the
+downloaded sources, each tower in a process of its own, where whenframe's release models-2 is published
+(.github/workflows/models.yml), and checks the files against the towers measured (results/round12_towers.json).
 
 NNCF is not a dependency of whenframe or of its benchmarks (it pins numpy below 2.5): it is installed beside them,
 without its dependencies' pins, as in .github/workflows/models.yml.
@@ -20,6 +19,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -68,9 +68,17 @@ def compress(source: Path, dest: Path) -> None:
     tmp.replace(dest)
 
 
+def structure(path: Path) -> str:
+    """The SHA-256 of a tower's .xml with every name set aside: its graph, whatever OpenVINO named the nodes."""
+    return hashlib.sha256(re.sub(rb'name="[^"]*"', b'name=""', path.read_bytes())).hexdigest()
+
+
 def release(args) -> None:
-    """Both towers compressed again from their sources, and checked against the towers measured: export.json, and
-    the release's notes.md when each file has the bytes measured."""
+    """Both towers compressed again from their sources, each in a process of its own (OpenVINO names the nodes it
+    adds with a counter of the process), and checked against the towers measured: the weights (.bin) must be the
+    same bytes, the graph (.xml) the same once its names are set aside, and both files the bytes whenframe pins
+    (results/round12_towers.json). export.json, and the release's notes.md when every check passes."""
+    import subprocess
     from importlib.metadata import version
 
     from whenframe.encoder import download
@@ -80,24 +88,30 @@ def release(args) -> None:
     measured = json.loads(MEASURED.read_text())
     record = {"versions": {p: version(p) for p in ("openvino", "nncf", "numpy")}, "towers": {}}
     for model, (url, digest) in SOURCES.items():
-        assert measured[model]["source_sha256"] == digest, f"{model}: not the source measured"
+        m = measured[model]
+        assert m["source_sha256"] == digest, f"{model}: not the source measured"
         source = out / "source" / model / Path(url).name
         download(url, source, digest)
         dest = out / f"{ASSET.format(model)}.xml"
-        compress(source, dest)
+        subprocess.run([sys.executable, "-I", __file__, "compress", "--source", str(source), "--out", str(dest)],
+                       check=True)  # fmt: skip
         got = {"text_model_int8.xml": sha256(dest), "text_model_int8.bin": sha256(dest.with_suffix(".bin"))}
-        same = got == measured[model]["sha256"]
-        record["towers"][model] = {"source": url, "sha256": got, "same_bytes_as_measured": same}
-        print(f"{model}: {got}, {'the bytes measured' if same else 'NOT the bytes measured'}")
+        checks = {"weights_as_measured": got["text_model_int8.bin"] == m["sha256"]["text_model_int8.bin"],
+                  "graph_as_measured": structure(dest) == m["structure_sha256"],
+                  "files_as_pinned": got == m["release_sha256"]}  # fmt: skip
+        record["towers"][model] = {"source": url, "sha256": got, **checks}
+        print(f"{model}: {got}, {checks}", flush=True)
     (out / "export.json").write_text(json.dumps(record, indent=1))
-    if not all(t["same_bytes_as_measured"] for t in record["towers"].values()):
+    if not all(all(t[k] for k in ("weights_as_measured", "graph_as_measured", "files_as_pinned"))
+               for t in record["towers"].values()):  # fmt: skip
         sys.exit("the towers built are not the ones measured: nothing to publish")
     lines = ["The text towers of SigLIP 2 B/16 and PE core B/16 with their weights in 8 bits, as whenframe",
              "searches with them since the twelfth round (docs/PROTOCOL.md; docs/RESULTS.md, twelfth round).", "",
              "Built by `scripts/text8.py release` from:"]  # fmt: skip
     lines += [f"- {model}: {url} (SHA-256 {digest})" for model, (url, digest) in SOURCES.items()]
     v = record["versions"]
-    lines += ["", f"with OpenVINO {v['openvino']} and NNCF {v['nncf']}; each file has the bytes of the tower measured:",
+    lines += ["", f"with OpenVINO {v['openvino']} and NNCF {v['nncf']}, each tower in a process of its own. The",
+              "weights are the bytes of the towers measured, and the graphs theirs (results/round12_towers.json):",
               ""]  # fmt: skip
     lines += [f"- {ASSET.format(m)}.{ext}: {t['sha256'][f'text_model_int8.{ext}']}"
               for m, t in record["towers"].items() for ext in ("xml", "bin")]  # fmt: skip
@@ -106,10 +120,14 @@ def release(args) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("stage", choices=["release"])
-    ap.add_argument("--out", required=True)
+    ap.add_argument("stage", choices=["release", "compress"])
+    ap.add_argument("--out", required=True, help="release: a folder; compress: the tower's .xml")
+    ap.add_argument("--source", help="compress: the tower's ONNX file")
     args = ap.parse_args()
-    {"release": release}[args.stage](args)
+    if args.stage == "compress":
+        compress(Path(args.source), Path(args.out))
+        return
+    release(args)
 
 
 if __name__ == "__main__":

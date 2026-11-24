@@ -8,6 +8,11 @@
   "sha256": {
    "text_model_int8.xml": "e18ff373d9a8174509f69f9a7de067d99ff116b11f60ebb617fec03a300ba639",
    "text_model_int8.bin": "11ba698c1abcbbdff6527c6187da8707dcaa6080ee872d18b4b0e161c2ea4f6b"
+  },
+  "structure_sha256": "30e8e2ea64d98cbeba69099a77649d42c29e8a9c394939ccd0c8a071a79c992d",
+  "release_sha256": {
+   "text_model_int8.xml": "e18ff373d9a8174509f69f9a7de067d99ff116b11f60ebb617fec03a300ba639",
+   "text_model_int8.bin": "11ba698c1abcbbdff6527c6187da8707dcaa6080ee872d18b4b0e161c2ea4f6b"
   }
  },
  "pe-core-b16": {
@@ -19,6 +24,12 @@
   "sha256": {
    "text_model_int8.xml": "7514446153cc75ec2c356bba205a97b431a849665bbdb3428075d93b595fa290",
    "text_model_int8.bin": "ad94692b99865c4eea1aacb25eff76ec9b5098662da32ed1c1ea981f67622166"
+  },
+  "structure_sha256": "747115f726fc21867357ff8e5347060743452ff77b5a3bf6a48f47f6cf7f0d55",
+  "release_sha256": {
+   "text_model_int8.xml": "a95c1b12b688a33d3a23cf42797eb04e69276da42cdb6c107599bca1408d385e",
+   "text_model_int8.bin": "ad94692b99865c4eea1aacb25eff76ec9b5098662da32ed1c1ea981f67622166"
   }
- }
+ },
+ "release_note": "each tower compressed in a process of its own (scripts/text8.py release): OpenVINO names the nodes it adds with a counter of the process, so PE core B/16's .xml measured, compressed after SigLIP 2 B/16's tower in the same process, differs from the release's in those names only (structure_sha256, the .xml with every name set aside, is the same); the weights (.bin) are the same bytes, and the embeddings of 1,024 bank descriptions are the same to the bit"
 }
