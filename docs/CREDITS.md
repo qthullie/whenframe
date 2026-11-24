@@ -12,14 +12,18 @@
   Hugging Face Hub by onnx-community (B/16, and B/32 for libraries built in the
   economy and precision modes of earlier versions) and by Immich (So400m, for
   those built in their large mode); these conversions state no licence of
-  their own.
+  their own. B/16's text tower comes with its weights compressed to 8 bits, as
+  whenframe's release models-2 publishes it, with a NOTICE of what was changed
+  ([models/text-int8](https://github.com/qthullie/whenframe/tree/main/models/text-int8)).
 - Perception Encoder's PE core B/16: Bolya et al., *Perception Encoder*,
   2025. The weights are Meta's, under the Apache 2.0 licence.
-  whenframe downloads onnx-community's conversion of its text tower, timm's
-  tokenizer, and its image tower as whenframe's release models-1 publishes it,
-  exported again from timm's weights, unchanged, with Meta's licence and a
-  NOTICE of what was changed in how it is written
-  ([models/pe-core-b16](https://github.com/qthullie/whenframe/tree/main/models/pe-core-b16)).
+  whenframe downloads timm's tokenizer, its image tower as whenframe's release
+  models-1 publishes it, exported again from timm's weights, unchanged, with
+  Meta's licence and a NOTICE of what was changed in how it is written
+  ([models/pe-core-b16](https://github.com/qthullie/whenframe/tree/main/models/pe-core-b16)),
+  and onnx-community's conversion of its text tower with its weights
+  compressed to 8 bits, as the release models-2 publishes it
+  ([models/text-int8](https://github.com/qthullie/whenframe/tree/main/models/text-int8)).
 - CLAP (`--sounds`): Wu et al., *Large-scale Contrastive Language-Audio
   Pretraining*, ICASSP 2023; LAION's larger_clap_general weights (Apache 2.0),
   in Xenova's ONNX conversion.

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- The text towers in 8 bits: SigLIP 2 B/16's and PE core B/16's text towers
+  keep their weights in 8 bits (NNCF, one scale per output channel), from
+  whenframe's release models-2, built by GitHub Actions to the bytes measured
+  (`scripts/text8.py`). A new library downloads 1.4 GB of models instead of
+  2.6 GB, and a search of the demo's library holds 1.4 GB of memory instead
+  of 4.8 GB; on the four test sets they find what the towers in full
+  precision found (mean 43.70 against 43.72, twelfth round). The query banks
+  are embedded by them; libraries already indexed keep their frames. Both
+  text towers run with OpenVINO, whatever `--backend` says.
 - Descriptions in French: a search translates a description it takes for
   French into English on the computer first (Opus-MT fr-en, from the
   University of Helsinki, Apache 2.0: 430 MB, downloaded the first time one is

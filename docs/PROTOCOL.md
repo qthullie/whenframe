@@ -1691,7 +1691,21 @@ while part 1's searches ran, after its translations were timed:
   the models a new library downloads weigh 1.43 GB, against 2.6 GB (criterion
   42 met).
 
-As fixed above, the tool is to download both text towers in 8 bits, built
-again from the same files and published by the workflow Models (`scripts/text8.py
-release`, the release models-2) with their SHA-256 pinned, and to embed the
-query banks with them; libraries already indexed keep their frames.
+**The text towers in 8 bits.** The workflow Models built both towers again
+on GitHub's machines (`scripts/text8.py release`), from the source files
+downloaded at the revisions measured, with the same versions of OpenVINO,
+NNCF and numpy. Its first run published nothing: PE core B/16's .xml was not
+the file measured. OpenVINO names the nodes it adds with a counter of the
+process, and the towers stage had compressed PE's tower after compressing
+SigLIP 2's and embedding its bank in the same process; compressed here after
+SigLIP 2's alone, as on GitHub's machine, the file was the one built there.
+The two files differ in those names only: the weights are the same bytes, the
+graphs are the same once every name is set aside, and the embeddings of 1,024
+bank descriptions are the same to the bit. `release` now compresses each
+tower in a process of its own, and checks the weights' bytes and the graph
+against the towers measured. Its second run published both towers once, in
+the release models-2, with the Apache License and a NOTICE
+(`results/round12_towers.json` holds their SHA-256). As fixed above,
+whenframe then downloads them, each file's SHA-256 checked, embeds
+descriptions with them and searches with the query banks they embed;
+libraries already indexed keep their frames.

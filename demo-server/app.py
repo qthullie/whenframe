@@ -125,8 +125,9 @@ def text_encoders() -> dict:
         spec = MODELS[model]
         if spec.sources:  # files pinned one by one
             folder = cache_dir() / "models" / spec.repo.replace("/", "--")
+            text = (spec.tokenizer_file, spec.text_file, spec.text_file.removesuffix(".xml") + ".bin")
             for name, url, digest in spec.sources:
-                if name in (spec.tokenizer_file, spec.text_file):
+                if name in text:  # a tower saved for OpenVINO (.xml) has its weights in a .bin beside
                     download(url, folder / name, digest)
         else:
             folder = fetch_files(spec.repo, (spec.tokenizer_file, spec.text_file))

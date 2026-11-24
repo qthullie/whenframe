@@ -5,7 +5,9 @@ SigLIP 2 base (google/siglip2-base-patch16-224), B/32
 (google/siglip2-base-patch32-256), So400m (google/siglip2-so400m-patch14-224,
 through Immich's ONNX export) and Perception Encoder's PE core B/16 (Meta,
 Apache 2.0, through onnx-community's ONNX export) text embeddings, rounded to
-float16, of the same 4,096 descriptions from the training split of DiDeMo:
+float16, of the same 4,096 descriptions from the training split of DiDeMo;
+SigLIP 2 base's and PE core B/16's by their text towers with their weights in
+8 bits, as whenframe searches with them since the twelfth round:
 
     Lisa Anne Hendricks, Oliver Wang, Eli Shechtman, Josef Sivic, Trevor Darrell
     and Bryan Russell. Localizing Moments in Video with Natural Language.

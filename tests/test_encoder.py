@@ -118,22 +118,52 @@ def test_a_download_is_kept_only_when_its_digest_matches(tmp_path):
     assert good.read_bytes() == b"whenframe"
 
 
-def test_pe_core_comes_from_fixed_revisions_and_whenframes_release():
-    """PE core B/16's files as measured: Hugging Face at fixed revisions, and the image tower of the release
-    models-1, which the workflow Models built to the bytes of the tower measured (models/pe-core-b16/check.json)."""
+def test_a_new_librarys_encoders_come_from_fixed_revisions_and_whenframes_releases():
+    """The files of SigLIP 2 B/16 and PE core B/16 as measured: Hugging Face at fixed revisions, PE core B/16's image
+    tower from the release models-1 and both text towers in 8 bits from models-2, which the workflow Models built to
+    the bytes measured (models/pe-core-b16/check.json, results/round12_towers.json)."""
     import json
     from pathlib import Path
 
-    spec = enc.MODELS["pe-core-b16"]
-    sources = {name: (url, digest) for name, url, digest in spec.sources}
-    assert set(sources) == {spec.tokenizer_file, spec.text_file, spec.vision_file,
-                            spec.vision_file.removesuffix(".xml") + ".bin"}  # fmt: skip
-    for url, digest in sources.values():
-        assert len(digest) == 64 and "/resolve/main/" not in url
-        assert url.startswith(("https://huggingface.co/", enc.RELEASE + "/"))
-    measured = json.loads((Path(__file__).parents[1] / "models" / "pe-core-b16" / "check.json").read_text())
+    root = Path(__file__).parents[1]
+    towers = json.loads((root / "results" / "round12_towers.json").read_text())
+    for model in ("siglip2-base", "pe-core-b16"):
+        spec = enc.MODELS[model]
+        sources = {name: (url, digest) for name, url, digest in spec.sources}
+        bins = {f.removesuffix(".xml") + ".bin" for f in (spec.vision_file, spec.text_file) if f.endswith(".xml")}
+        assert set(sources) == {spec.tokenizer_file, spec.text_file, spec.vision_file} | bins, model
+        for url, digest in sources.values():
+            assert len(digest) == 64 and "/resolve/main/" not in url
+            assert url.startswith(("https://huggingface.co/", enc.RELEASE + "/", enc.RELEASE2 + "/"))
+        for ext in ("xml", "bin"):
+            pinned = towers[model]["release_sha256"][f"text_model_int8.{ext}"]
+            assert ext == "xml" or pinned == towers[model]["sha256"][f"text_model_int8.{ext}"]  # the weights measured
+            want = (f"{enc.RELEASE2}/{model}-text-int8.{ext}", pinned)
+            assert sources[f"onnx/text_model_int8.{ext}"] == want
+    measured = json.loads((root / "models" / "pe-core-b16" / "check.json").read_text())
+    pe = {name: (url, digest) for name, url, digest in enc.MODELS["pe-core-b16"].sources}
     for f in ("vision_model_one.xml", "vision_model_one.bin"):
-        assert sources[f"onnx/{f}"] == (f"{enc.RELEASE}/pe-core-b16-vision.{f.split('.')[-1]}", measured["sha256"][f])
+        assert pe[f"onnx/{f}"] == (f"{enc.RELEASE}/pe-core-b16-vision.{f.split('.')[-1]}", measured["sha256"][f])
+
+
+def test_a_text_tower_saved_for_openvino_runs_with_it_whatever_the_backend(tiny, monkeypatch):
+    """As both text towers in 8 bits: a tower in ONNX runs with the backend asked for."""
+    used = []
+
+    class Tower:
+        def __init__(self, path, *args):
+            used.append((type(self).__name__, path.suffix))
+
+        def __call__(self, ids):
+            return np.ones((len(ids), 4), np.float32)
+
+    monkeypatch.setattr(enc, "_OpenVINO", type("_OpenVINO", (Tower,), {}))
+    monkeypatch.setattr(enc, "_OnnxRuntime", type("_OnnxRuntime", (Tower,), {}))
+    eight = enc.ModelSpec("test/tiny", 8, 10.0, 0.0, text_file="onnx/text.xml", text_openvino=True)
+    monkeypatch.setitem(enc.MODELS, "tiny-text8", eight)
+    enc.Encoder("tiny-text8", folder=tiny, backend="onnxruntime").encode_texts(["a"])
+    enc.Encoder("tiny", folder=tiny, backend="onnxruntime").encode_texts(["a"])
+    assert used == [("_OpenVINO", ".xml"), ("_OnnxRuntime", ".onnx")]
 
 
 @pytest.mark.skipif(importlib.util.find_spec("openvino") is None, reason="OpenVINO is not installed")

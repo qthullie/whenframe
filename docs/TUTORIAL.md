@@ -21,17 +21,17 @@ on the Xeon of the benchmark, SigLIP 2's encoding took 4.8 CPU minutes per hour
 of video instead of 22.6 with ONNX Runtime, and the search found as many
 moments ([RESULTS.md](RESULTS.md), third round). Other processors were not
 measured. `--backend onnxruntime` runs SigLIP 2's image encoder with ONNX
-Runtime; PE core B/16's runs with OpenVINO either way.
+Runtime; PE core B/16's and both text towers run with OpenVINO either way.
 
-The first run downloads the models (about 2.6 GB: SigLIP 2 B/16 and PE core
-B/16) into `~/.cache/whenframe` (or `$WHENFRAME_CACHE`), each file checked
-against its SHA-256 where whenframe pins one, and the first description written
-in French downloads the translator (430 MB), checked the same way; `--speech`
-downloads Whisper (145 MB for base, 480 MB for small). Nothing else goes over
-the network. whenframe turns off ONNX Runtime's usage telemetry
-(`ORT_DISABLE_TELEMETRY=1`) and keeps OpenVINO's from loading (`import
-openvino` otherwise reports to Google Analytics); every connection of an
-indexing and a search run was traced to check it.
+The first run downloads the models (about 1.4 GB: SigLIP 2 B/16 and PE core
+B/16, their text towers in 8 bits) into `~/.cache/whenframe` (or
+`$WHENFRAME_CACHE`), each file checked against its SHA-256, and the first
+description written in French downloads the translator (430 MB), checked the
+same way; `--speech` downloads Whisper (145 MB for base, 480 MB for small).
+Nothing else goes over the network. whenframe turns off ONNX Runtime's usage
+telemetry (`ORT_DISABLE_TELEMETRY=1`) and keeps OpenVINO's from loading
+(`import openvino` otherwise reports to Google Analytics); every connection of
+an indexing and a search run was traced to check it.
 
 ## Index a folder
 
@@ -58,8 +58,9 @@ the four test sets, this found the most of everything measured: 43.72 on the
 mean of their primary metrics, more on each of them than SigLIP 2 B/16 with v3
 alone (41.90, the default until the eleventh round) and than SigLIP 2 So400m
 (40.63). Indexing costs about 9 CPU minutes per hour of video, each frame
-decoded once for both encoders, and a search holds both text towers in memory
-(at most 4.7 GB for a search of three films, 37 minutes). The measured numbers
+decoded once for both encoders, and a search holds both text towers in memory,
+their weights in 8 bits (at most 1.4 GB for a search of the demo's 232 videos
+and photos). The measured numbers
 are in [RESULTS.md](RESULTS.md), "Eleventh round".
 
 Libraries built by earlier versions, in their standard, economy, precision or

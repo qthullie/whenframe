@@ -81,10 +81,29 @@ class ModelSpec:
 
 
 RELEASE = "https://github.com/qthullie/whenframe/releases/download/models-1"  # files no model hub serves
+RELEASE2 = "https://github.com/qthullie/whenframe/releases/download/models-2"  # the text towers in 8 bits
+SIGLIP2_BASE = (
+    "https://huggingface.co/onnx-community/siglip2-base-patch16-224-ONNX/resolve/"
+    "ba1f3b0843f24bc5417d38e19c37b287d719b2f4"
+)  # the revision measured
 
 MODELS = {
-    "siglip2-base": ModelSpec("onnx-community/siglip2-base-patch16-224-ONNX", 224, 112.6689, -16.7717,
-                              spans_lambda=0.5),
+    # SigLIP 2 B/16: onnx-community's image tower, and its text tower with its weights in 8 bits (twelfth round,
+    # scripts/text8.py), which whenframe's release models-2 serves
+    "siglip2-base": ModelSpec(
+        "onnx-community/siglip2-base-patch16-224-ONNX", 224, 112.6689, -16.7717, spans_lambda=0.5,
+        text_file="onnx/text_model_int8.xml", text_openvino=True,
+        sources=(
+            ("tokenizer.json", f"{SIGLIP2_BASE}/tokenizer.json",
+             "cb9140fae3ac5122c972d37adf83e1248471a38147ad76f8215c8872c6fd8322"),
+            ("onnx/vision_model.onnx", f"{SIGLIP2_BASE}/onnx/vision_model.onnx",
+             "c0573e3f4140c3a7c4e9cc5912bd6b26a033b46a6a8e8af26cbea262b163bcad"),
+            ("onnx/text_model_int8.xml", f"{RELEASE2}/siglip2-base-text-int8.xml",
+             "e18ff373d9a8174509f69f9a7de067d99ff116b11f60ebb617fec03a300ba639"),
+            ("onnx/text_model_int8.bin", f"{RELEASE2}/siglip2-base-text-int8.bin",
+             "11ba698c1abcbbdff6527c6187da8707dcaa6080ee872d18b4b0e161c2ea4f6b"),
+        ),
+    ),
     "siglip2-b32": ModelSpec("onnx-community/siglip2-base-patch32-256-ONNX", 256, 111.8326, -16.7669,
                              bank_lambda=0.5, speech_pad=5.0, sound_weight=1.5),
     # research use only (Apple Machine Learning Research Model licence)
@@ -98,15 +117,15 @@ MODELS = {
         text_input="text", text_dtype="int32", image_output="embedding", text_output="embedding",
         clean="lower", weights_folder="textual", text_openvino=True, sound_weight=1.5,
     ),
-    # Meta's Perception Encoder, PE core B/16 (Apache License 2.0), measured in the ninth to eleventh rounds:
-    # onnx-community's text tower, timm/PE-Core-B-16's tokenizer, and its image tower exported again from
-    # timm/PE-Core-B-16's weights, for OpenVINO, one frame at a time (scripts/pe_core.py), which no model hub serves:
-    # whenframe's release models-1 does, built there again to the same bytes (.github/workflows/models.yml). CLIP
-    # has no bias of its own: the bias only places the probability shown with a result, at even odds for a cosine
-    # of 0.2.
+    # Meta's Perception Encoder, PE core B/16 (Apache License 2.0), measured in the ninth to twelfth rounds:
+    # timm/PE-Core-B-16's tokenizer, its image tower exported again from timm/PE-Core-B-16's weights, for OpenVINO,
+    # one frame at a time (scripts/pe_core.py), and onnx-community's text tower with its weights in 8 bits (twelfth
+    # round, scripts/text8.py), which no model hub serves: whenframe's releases models-1 and models-2 do, built there
+    # again to the same bytes (.github/workflows/models.yml). CLIP has no bias of its own: the bias only places the
+    # probability shown with a result, at even odds for a cosine of 0.2.
     "pe-core-b16": ModelSpec(
         "onnx-community/PE-Core-B16-224-ONNX", 224, 99.9263, -19.9853, vision_file="onnx/vision_model_one.xml",
-        text_file="onnx/text_model_fp16.onnx", image_output="image_embeds", text_output="text_embeds",
+        text_file="onnx/text_model_int8.xml", image_output="image_embeds", text_output="text_embeds",
         text_length=32, pad_token=None, clean="none", text_openvino=True,
         # its query bank and spans' strength as chosen on the tuning sets (results/round9_bank.json)
         bank_beta=50.0, bank_lambda=1.0, spans_lambda=0.5,
@@ -114,9 +133,10 @@ MODELS = {
             ("tokenizer.json", "https://huggingface.co/timm/PE-Core-B-16/resolve/"
              "0038414f37721c5eafc1a5e0da802d291c909de3/tokenizer.json",
              "43d4281659ce30b6aca2c7485944b3d73925bb7f87c7234daf3b6b094a6d618c"),
-            ("onnx/text_model_fp16.onnx", "https://huggingface.co/onnx-community/PE-Core-B16-224-ONNX/resolve/"
-             "7668f1df203c393f95310563ff999bfc8fd627b4/onnx/text_model_fp16.onnx",
-             "d837a6e29246892cafb195c92265899defd2ca89166a692f61e0c5b6a57ff65f"),
+            ("onnx/text_model_int8.xml", f"{RELEASE2}/pe-core-b16-text-int8.xml",
+             "a95c1b12b688a33d3a23cf42797eb04e69276da42cdb6c107599bca1408d385e"),
+            ("onnx/text_model_int8.bin", f"{RELEASE2}/pe-core-b16-text-int8.bin",
+             "ad94692b99865c4eea1aacb25eff76ec9b5098662da32ed1c1ea981f67622166"),
             ("onnx/vision_model_one.xml", f"{RELEASE}/pe-core-b16-vision.xml",
              "8bb5f9908c0011ecd138cb328f1ef7dc862f890c804ff32adf7882402b3bd474"),
             ("onnx/vision_model_one.bin", f"{RELEASE}/pe-core-b16-vision.bin",
@@ -372,7 +392,8 @@ class Encoder:
 
     def encode_texts(self, texts: list[str]) -> np.ndarray:
         if self._text is None:  # the text tower is only needed at query time
-            openvino = self.backend == "openvino" and self.spec.text_openvino
+            # a tower saved for OpenVINO (.xml) runs with it whatever the backend
+            openvino = self._text_path.suffix == ".xml" or (self.backend == "openvino" and self.spec.text_openvino)
             runtime = _OpenVINO if openvino else _OnnxRuntime
             self._text = runtime(self._text_path, self.spec.text_input, self.spec.text_output, self._threads)
         return _normalize(self._text(self.tokenize(texts)))
