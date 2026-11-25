@@ -1313,7 +1313,7 @@ in the tenth round.
 
 The three criteria are met. As fixed before the test, the large mode became
 both encoders searched through v3 and v4 together. Since then it is
-whenframe's only model: every new library is indexed that way, and the other
+whenframe's only model, named Déclic: every new library is indexed that way, and the other
 modes are gone (libraries built in them are searched as they were built). PE
 core B/16's image tower, exported again from timm's weights in the ninth round, is not served by
 any model hub: whenframe's release models-1 publishes it, built again on

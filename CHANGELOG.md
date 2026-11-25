@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+- Déclic: whenframe's model is named, the README and the site put it first.
+  It is the model of the eleventh round: SigLIP 2 B/16's frames through v3
+  and PE core B/16's through v4, each encoder's scores corrected by its query
+  bank, standardised and added.
+- `whenframe film` cuts a film from a story, one shot per sentence, each the
+  best moment found for it that the film does not use yet (a sentence ending
+  with `#2` takes its second best; `--plan` prints the shots). `whenframe
+  supercut` cuts the best moments of one description in the order they were
+  filmed. A shot lasts three seconds from the moment's best frame; a video of
+  another shape is shown over a blurred copy of itself, a photo slowly zoomed
+  into; the shots are joined with cross-fades, the sentences drawn in the
+  picture and written in an .srt, and `--music` puts a music under the film
+  (`whenframe/film.py`, ffmpeg).
+- The demo site opens on a film cut from someone's phone, three stories (one
+  written in French) and one of the visitor's own, planned in the browser as
+  `whenframe film` plans them, with a switch to see the same film and the same
+  search with one image per video instead of Déclic, a section on Déclic and
+  its numbers, and a music composed by `scripts/music.py` (CC0), off until
+  asked for. The page now embeds its sentences one at a time, as a search
+  does: for all 18 suggestions it shows what the tool finds (17 before, where
+  a batch's padding had turned a near tie), and it plans the films the tool
+  plans (`scripts/site_check.mjs`).
 - The text towers in 8 bits: SigLIP 2 B/16's and PE core B/16's text towers
   keep their weights in 8 bits (NNCF, one scale per output channel), from
   whenframe's release models-2, built by GitHub Actions to the bytes measured

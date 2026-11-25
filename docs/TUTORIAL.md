@@ -53,7 +53,8 @@ on its only one, which can favour videos slightly; it was not measured.
 Each frame is looked at by two image encoders, Google's SigLIP 2 B/16 and
 Meta's PE core B/16, which learnt from different images and miss different
 things. Each encoder's frames then go through whenframe's own model trained on
-its frames (v3 and v4, below), and a search adds the two encoders' scores. On
+its frames (v3 and v4, below), and a search adds the two encoders' scores:
+together, this is Déclic, whenframe's model. On
 the four test sets, this found the most of everything measured: 43.72 on the
 mean of their primary metrics, more on each of them than SigLIP 2 B/16 with v3
 alone (41.90, the default until the eleventh round) and than SigLIP 2 So400m
@@ -221,6 +222,66 @@ has more French marks than English ones: words such as le, une, dans, avec,
 homme or plage, accented letters, l' and d'. `--as-typed` searches it as
 written, and descriptions in other languages are searched as written.
 
+## Films and supercuts
+
+Déclic finds the seconds where a moment happens; `whenframe film` cuts them
+into a film. Write the story, one sentence a line:
+
+```text
+a pipe band marching down the street
+a vintage car in a parade
+cooking with big flames
+people dancing in a bar
+fireworks
+```
+
+```bash
+whenframe film story.txt -o festival.mp4 --music ~/Music/summer.mp3
+```
+
+```
+ 1. “a pipe band marching down the street”
+  80%     0:02 - 0:05     /home/me/Videos/2012/VID_20120526_194248.mp4
+ 2. “a vintage car in a parade”
+  48%     0:03 - 0:06     /home/me/Videos/2009/VID_20090704_114925.mp4
+ ...
+rendering 5 shots, music from /home/me/Music/summer.mp3
+written: festival.mp4 (0:13), captions in festival.srt
+```
+
+Each sentence takes the best moment found for it that the film does not use
+yet, so two sentences never show the same seconds; a sentence ending with `#2`
+takes its second best moment instead (`#3` its third), and `--plan` prints the
+shots chosen without making the film. The sentences can also be given as
+arguments (`whenframe film "a dog on the beach" "the sunset"`), in French as
+well as in English; lines starting with `#` are left out.
+
+A shot lasts three seconds (`--seconds`): from the moment's best frame when the
+picture stays the same that long, centred on it otherwise, inside the video; a
+photo stays on screen as long, slowly zoomed into. The film is 1280 x 720 at 30
+frames a second, H.264 and AAC in an MP4 file: a video of another shape (a phone
+held upright) is shown whole over a blurred copy of itself, and the shots are
+joined with half-second cross-fades. Each sentence is drawn in the picture
+during its shot, when ffmpeg was built with libass as the usual builds are
+(`--no-captions` leaves them out), and written in an .srt file beside the film.
+The film keeps the sound of its shots; `--music FILE` puts a music under it
+instead, looped if it is shorter and faded out at the end.
+
+```bash
+whenframe supercut "fireworks" -o fireworks.mp4
+```
+
+A supercut takes the best moments of one description, at most twelve
+(`--max`), one shot each, and puts them in the order they were filmed: the
+creation time the file records (phones and cameras write it in their videos),
+else a date in its name (`IMG_20230812_153012.jpg`), else when the file was last
+modified. Its .srt says where each moment comes from.
+
+ffmpeg does the cutting: each shot is rendered on its own in a temporary folder
+beside the film, then all are joined. Here (4 vCPU), six shots took about ten
+seconds once the search was done. Videos filmed in HDR are converted to the
+film's colours without tone mapping, and look washed out.
+
 ## In the browser
 
 ```bash
@@ -316,8 +377,9 @@ defaults are the ones chosen on DiDeMo training videos.
 
 ## How it works
 
-A description taken for French is first translated into English on the
-computer ([Opus-MT](https://github.com/Helsinki-NLP/Opus-MT) fr-en, greedily).
+Steps 2, 3 and 5 are Déclic, whenframe's model. A description taken for French
+is first translated into English on the computer
+([Opus-MT](https://github.com/Helsinki-NLP/Opus-MT) fr-en, greedily).
 
 1. ffmpeg reads one frame per second; frames that barely differ from the last
    one kept are skipped.

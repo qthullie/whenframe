@@ -54,7 +54,9 @@
   took each one is on the [site's credits page](https://qthullie.github.io/whenframe/credits.html)
   (`site/library.json`). None is from DiDeMo, a benchmark built on YFCC100M.
   The pictures of `whenframe serve` in the tutorial use Big Buck Bunny, Sintel
-  and Tears of Steel, © Blender Foundation, CC BY 3.0.
+  and Tears of Steel, © Blender Foundation, CC BY 3.0. The site's music was
+  composed for it by a program, `scripts/music.py`, and is dedicated to the
+  public domain (CC0 1.0).
 
 ## Licence
 
