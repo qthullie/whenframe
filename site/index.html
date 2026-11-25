@@ -4,18 +4,20 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>whenframe</title>
-<meta name="description" content="Describe a moment, find it in your videos and photos, on your own computer. See it at work on someone's phone: real videos and photos shared under CC BY.">
+<meta name="description" content="Write a story, and Déclic, whenframe's model, finds each shot in someone's phone and cuts the film. Describe a moment, find it in your videos and photos, on your own computer.">
 <link rel="icon" href="logo.svg" type="image/svg+xml">
 <style>
   :root {
     --page: #f6f6f3; --surface: #fcfcfb; --card: #ffffff; --ink: #0b0b0b; --ink2: #52514e; --muted: #898781;
     --line: #e1e0d9; --accent: #2a78d6; --accent-soft: #e8f1fb; --shade: rgba(11, 11, 11, .55); --on-accent: #fff;
+    --mark: #2a78d6; --mark-other: #93928c; --base: #c9c8c1;
     color-scheme: light;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --page: #121211; --surface: #1a1a19; --card: #1f1f1d; --ink: #f0efec; --ink2: #c3c2b7; --muted: #898781;
       --line: #2c2c2a; --accent: #3987e5; --accent-soft: #1c2a3b; --shade: rgba(0, 0, 0, .7); --on-accent: #fff;
+      --mark: #3987e5; --mark-other: #77766f; --base: #474745;
       color-scheme: dark;
     }
   }
@@ -24,18 +26,98 @@
   body { margin: 0; background: var(--page); color: var(--ink);
          font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
   a { color: var(--accent); }
-  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 20px; }
-  header { padding: 40px 0 8px; }
-  .brand { display: flex; align-items: center; gap: 12px; }
-  .brand img { width: 44px; height: 44px; }
-  .brand h1 { font-size: 28px; margin: 0; letter-spacing: -.02em; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88em; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
+  header { padding: 32px 0 4px; }
+  .brand { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .brand img { width: 40px; height: 40px; }
+  .brand h1 { font-size: 26px; margin: 0; letter-spacing: -.02em; }
   .brand nav { margin-left: auto; display: flex; gap: 16px; font-size: 14px; }
-  .lead { font-size: 20px; color: var(--ink2); max-width: 760px; margin: 18px 0 6px; }
-  .demo { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 20px; margin: 24px 0; }
-  .demo h2 { font-size: 15px; font-weight: 600; margin: 0 0 12px; color: var(--ink2); }
   button { font: inherit; border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--ink);
-           padding: 10px 16px; cursor: pointer; }
+           padding: 9px 15px; cursor: pointer; }
   button:hover { border-color: var(--accent); }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button:disabled { opacity: .5; cursor: default; border-color: var(--line); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .kicker { text-transform: uppercase; letter-spacing: .08em; font-size: 12px; font-weight: 650; color: var(--accent);
+            margin: 0 0 6px; }
+
+  /* the film */
+  .hero { padding: 26px 0 8px; }
+  .hero h2 { font-size: clamp(28px, 4.6vw, 46px); line-height: 1.08; letter-spacing: -.03em; margin: 0 0 12px;
+             max-width: 820px; }
+  .lead { font-size: 18px; color: var(--ink2); max-width: 780px; margin: 0 0 18px; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
+  .tab { border-radius: 999px; padding: 6px 14px; font-size: 14px; }
+  .tab[aria-selected="true"] { background: var(--ink); color: var(--page); border-color: var(--ink); }
+  .tab small { color: inherit; opacity: .7; }
+  .stage { position: relative; aspect-ratio: 16 / 9; background: #000; border-radius: 16px; overflow: hidden;
+           box-shadow: 0 18px 50px -24px rgba(0, 0, 0, .55); --fade: .5s; }
+  .layer { position: absolute; inset: 0; opacity: 0; z-index: 1; }
+  .layer.on { opacity: 1; }
+  .layer.in { z-index: 2; animation: fade-in var(--fade) linear forwards; }
+  @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+  .layer canvas { position: absolute; inset: -8%; width: 116%; height: 116%; filter: blur(16px) brightness(.6); }
+  .layer video, .layer img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+  .layer .shot { position: absolute; top: 0; bottom: 0; left: 50%; height: 100%; transform: translateX(-50%); }
+  .layer img.zoom { animation: zoom var(--shot, 3s) linear forwards; }
+  @keyframes zoom { from { transform: scale(1); } to { transform: scale(1.08); } }
+  .bars { position: absolute; top: 12px; left: 14px; right: 14px; display: flex; gap: 4px; z-index: 5; }
+  .bars span { flex: 1; height: 3px; border-radius: 2px; background: rgba(255, 255, 255, .3); overflow: hidden; }
+  .bars i { display: block; height: 100%; width: 0; background: #fff; }
+  .tag { position: absolute; top: 26px; left: 14px; z-index: 5; color: #fff; font-size: 13px; line-height: 1.35;
+         background: rgba(0, 0, 0, .5); padding: 5px 10px; border-radius: 8px; max-width: calc(100% - 28px);
+         transition: opacity .25s; }
+  .tag b { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 600; font-size: 12px; }
+  .tag span { opacity: .85; }
+  .subtitle { position: absolute; left: 5%; right: 5%; bottom: 7%; z-index: 5; text-align: center; color: #fff;
+              font-size: clamp(16px, 3.1vw, 32px); font-weight: 650; line-height: 1.2; transition: opacity .25s;
+              text-shadow: 0 2px 14px rgba(0, 0, 0, .7), 0 0 2px rgba(0, 0, 0, .9); }
+  .subtitle small { display: block; font-size: max(.5em, 12px); font-weight: 500; opacity: .9; margin-top: 4px; }
+  .curtain { position: absolute; inset: 0; background: #000; opacity: 0; transition: opacity .8s; z-index: 4;
+             pointer-events: none; }
+  .curtain.on { opacity: 1; }
+  .big { position: absolute; inset: 0; margin: auto; width: max-content; height: max-content; z-index: 6;
+         font-size: 17px; font-weight: 600; padding: 13px 22px; border-radius: 999px; border: none;
+         background: rgba(255, 255, 255, .94); color: #0b0b0b; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0 6px; }
+  .switch { display: inline-flex; border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
+            background: var(--card); margin-left: auto; }
+  .switch button { border: none; border-radius: 0; padding: 8px 14px; font-size: 14px; }
+  .switch button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
+  .without { color: var(--ink2); font-size: 14px; margin: 4px 0 0; }
+  .strip { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(150px, 1fr); gap: 10px;
+           overflow-x: auto; padding: 8px 0 6px; }
+  .strip button { text-align: left; padding: 0; border-radius: 12px; overflow: hidden; display: flex;
+                  flex-direction: column; }
+  .strip button.now { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  .strip .say { padding: 8px 10px 2px; font-size: 13px; font-weight: 600; line-height: 1.3; }
+  .strip .src { padding: 2px 10px 9px; font-size: 12px; color: var(--ink2); overflow-wrap: anywhere; }
+  .strip .src code { font-size: 11px; }
+  .strip .gone { padding: 18px 10px; font-size: 13px; color: var(--muted); border: 1px dashed var(--line);
+                 border-radius: 12px; }
+  pre.cli { margin: 8px 0 0; background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+            padding: 10px 12px; overflow-x: auto; font-size: 13px; color: var(--ink2); }
+
+  /* writing one's own */
+  .compose { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 20px;
+             margin: 26px 0; }
+  .compose h2, .demo h2, .model h2 { font-size: 22px; letter-spacing: -.01em; margin: 0 0 6px; }
+  .picks { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+  .pick { font-size: 14px; padding: 5px 11px; border-radius: 999px; background: var(--accent-soft);
+          border: 1px solid transparent; }
+  .pick:hover { border-color: var(--accent); }
+  .pick::before { content: "+ "; color: var(--accent); font-weight: 650; }
+  .mine { margin: 10px 0 12px; padding-left: 26px; }
+  .mine:empty { display: none; }
+  .mine li { padding: 3px 0; }
+  .mine button { padding: 0 8px; margin-left: 6px; border-radius: 8px; font-size: 13px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  /* the search */
+  .demo { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 20px; margin: 26px 0; }
+  .demo .head { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .demo .head .switch { margin-left: auto; }
   .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 4px; }
   #ask { display: flex; gap: 8px; margin: 14px 0 4px; }
   #q { flex: 1; min-width: 0; font: inherit; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--line);
@@ -46,7 +128,7 @@
   .chip { font-size: 14px; padding: 5px 11px; border-radius: 999px; background: var(--accent-soft); border: 1px solid transparent; }
   .chip:hover { border-color: var(--accent); }
   #status { color: var(--muted); font-size: 14px; min-height: 22px; margin: 10px 0 0; }
-  .note { color: var(--ink2); font-size: 15px; margin: -4px 0 4px; }
+  .note { color: var(--ink2); font-size: 15px; margin: 4px 0; }
   .note code { font-size: 13px; }
   button.link { border: none; padding: 0; background: none; color: var(--accent); text-decoration: underline;
                 font: inherit; cursor: pointer; }
@@ -81,15 +163,59 @@
   .board .shot span { position: absolute; right: 4px; bottom: 4px; background: var(--shade); color: #fff; font-size: 11px;
                       padding: 0 6px; border-radius: 5px; }
   .board .shot.best { outline: 3px solid var(--accent); outline-offset: -3px; }
-  section.more { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px; margin: 28px 0; }
+
+  /* the model */
+  .model { margin: 34px 0; }
+  .model .intro { color: var(--ink2); max-width: 820px; font-size: 17px; margin: 0 0 18px; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin: 0 0 18px; }
+  .tile { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; }
+  .tile .label { font-size: 14px; color: var(--ink2); }
+  .tile .value { font-size: 40px; font-weight: 650; letter-spacing: -.02em; line-height: 1.15; margin: 4px 0 2px; }
+  .tile .sub { font-size: 13px; color: var(--muted); }
+  figure.chart { margin: 0 0 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+                 padding: 18px; position: relative; }
+  figure.chart figcaption { font-weight: 600; margin: 0 0 2px; }
+  figure.chart .sub { color: var(--ink2); font-size: 14px; margin: 0 0 14px; }
+  .panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 22px 28px; }
+  .panel h3 { font-size: 15px; margin: 0; }
+  .panel p { font-size: 13px; color: var(--ink2); margin: 2px 0 10px; }
+  .bar-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 3px; padding: 5px 0; outline: none;
+             border-radius: 6px; }
+  .bar-row:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+  .bar-row .name { font-size: 13px; color: var(--ink2); }
+  .bar-row.me .name { color: var(--ink); font-weight: 650; }
+  .track { display: flex; align-items: center; gap: 8px; border-left: 1px solid var(--base); min-height: 20px; }
+  .bar { height: 18px; border-radius: 0 4px 4px 0; background: var(--mark-other); min-width: 2px; }
+  .bar-row.me .bar { background: var(--mark); }
+  .bar-row:hover .bar, .bar-row:focus-visible .bar { filter: brightness(1.12); }
+  .track .v { font-size: 13px; color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .tip { position: absolute; z-index: 3; pointer-events: none; background: var(--card); color: var(--ink);
+         border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font-size: 13px;
+         box-shadow: 0 8px 24px -12px rgba(0, 0, 0, .4); max-width: 260px; }
+  .tip b { display: block; font-size: 15px; }
+  .tip span { color: var(--ink2); }
+  details.table { margin-top: 14px; font-size: 14px; }
+  details.table summary { cursor: pointer; color: var(--accent); }
+  details.table table { border-collapse: collapse; margin-top: 8px; width: 100%; }
+  details.table td, details.table th { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line);
+                                       font-weight: normal; }
+  details.table td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+  section.more { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; margin: 28px 0; }
   .box { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px; }
   .box h3 { margin: 0 0 8px; font-size: 16px; }
   .box p, .box li { color: var(--ink2); font-size: 15px; }
-  .big { font-size: 34px; font-weight: 700; color: var(--ink); letter-spacing: -.02em; }
   pre { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px; overflow-x: auto;
         font-size: 13px; margin: 8px 0 0; }
   footer { color: var(--muted); font-size: 13px; padding: 24px 0 48px; border-top: 1px solid var(--line); }
-  @media (max-width: 560px) { .board { grid-template-columns: repeat(5, 1fr); } }
+  @media (max-width: 560px) {
+    .board { grid-template-columns: repeat(5, 1fr); }
+    .switch { margin-left: 0; }
+    .tag { font-size: 11px; top: 22px; left: 10px; padding: 3px 8px; }
+    .tag b { font-size: 10px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .layer img.zoom { animation: none; }
+  }
 </style>
 </head>
 <body>
@@ -98,15 +224,63 @@
     <div class="brand">
       <img src="logo.svg" alt="">
       <h1>whenframe</h1>
-      <nav><a href="https://github.com/qthullie/whenframe">Code</a>
+      <nav><a href="#declic">Déclic</a>
+           <a href="https://github.com/qthullie/whenframe">Code</a>
            <a href="https://github.com/qthullie/whenframe/blob/main/docs/RESULTS.md">Results</a></nav>
     </div>
-    <p class="lead">Describe a moment, find it in your videos and photos: the file, and the seconds where it happens.
-      It runs on your own computer, without a GPU, and sends nothing anywhere.</p>
   </header>
 
+  <section class="hero" aria-labelledby="film-title">
+    <p class="kicker">Déclic, whenframe's model</p>
+    <h2 id="film-title">Write a story. Déclic finds every shot in someone's phone.</h2>
+    <p class="lead">Each sentence finds its shot among <span id="n-files">232</span> real videos and photos, cut at
+      the second it happens, and the shots are joined into a film. It runs in your browser, on what whenframe indexed;
+      <code>whenframe film</code> does the same on your computer, with your own videos.</p>
+    <div class="tabs" id="tabs" role="tablist" aria-label="Stories"></div>
+    <div class="stage" id="stage">
+      <div class="layer"><canvas width="32" height="18"></canvas><video muted playsinline preload="auto"></video><img alt=""></div>
+      <div class="layer"><canvas width="32" height="18"></canvas><video muted playsinline preload="auto"></video><img alt=""></div>
+      <div class="curtain" id="curtain"></div>
+      <div class="bars" id="bars"></div>
+      <div class="tag" id="tag"><b id="tag-file"></b> <span id="tag-when"></span><br><span id="tag-sure"></span></div>
+      <div class="subtitle" id="subtitle" aria-live="polite"><span id="line"></span><small id="searched"></small></div>
+      <button class="big" id="big" type="button" hidden>Play the film</button>
+    </div>
+    <div class="controls">
+      <button id="play" type="button">Pause</button>
+      <button id="replay" type="button">Replay</button>
+      <button id="sound" type="button" aria-pressed="false">♪ Music: off</button>
+      <div class="switch" role="group" aria-label="Who picks the shots">
+        <button type="button" data-declic="1" aria-pressed="true">With Déclic</button>
+        <button type="button" data-declic="0" aria-pressed="false">One image per video</button>
+      </div>
+    </div>
+    <p class="without" id="without" hidden>Without Déclic: each file is one image, the middle frame of a video, as photo
+      libraries index videos. It finds a file when that image matches, never the second where it happens, and cuts
+      the middle. On 979 personal videos, the right one is among its first five for <b id="w-one">…</b> of
+      descriptions, against <b id="w-declic">…</b> with Déclic.</p>
+    <div class="strip" id="strip"></div>
+    <pre class="cli"><code id="cli"></code></pre>
+  </section>
+
+  <section class="compose" aria-labelledby="compose-title">
+    <h2 id="compose-title">Write your own film</h2>
+    <p class="note">Pick sentences in the order they should play, up to eight. Déclic plans the film in your browser:
+      each sentence takes the best moment the film does not use yet.</p>
+    <div class="picks" id="pool"></div>
+    <ol class="mine" id="mine"></ol>
+    <div class="row"><button class="primary" id="play-mine" type="button" disabled>Play my film</button>
+      <button id="clear" type="button" disabled>Start again</button></div>
+  </section>
+
   <div class="demo">
-    <h2 id="what">Someone's phone</h2>
+    <div class="head">
+      <h2 id="what">Someone's phone</h2>
+      <div class="switch" role="group" aria-label="Who searches">
+        <button type="button" data-declic="1" aria-pressed="true">With Déclic</button>
+        <button type="button" data-declic="0" aria-pressed="false">One image per video</button>
+      </div>
+    </div>
     <p class="note">Real videos and photos, named as a phone names them (<code>VID_20140425_181116.mp4</code>):
       searching the names finds nothing. <span id="how">Pick a description:</span> the search runs in your browser,
       on what whenframe indexed. Pick a moment to watch it, or
@@ -123,45 +297,69 @@
     <div class="grid" id="results"></div>
   </div>
 
-  <section class="more">
-    <div class="box">
-      <h3>On personal videos</h3>
-      <p><span class="big" id="n-video">…</span><br>of descriptions find their video among the first five of 979
-        personal videos (DiDeMo test), against 25.4 % for the best published system, trained on them on a GPU; the
-        right moment of the whole collection among the first five: <b id="n-moment">…</b>.
-        <a href="https://github.com/qthullie/whenframe/blob/main/docs/RESULTS.md">How it was measured</a>.</p>
+  <section class="model" id="declic" aria-labelledby="declic-title">
+    <p class="kicker">The model</p>
+    <h2 id="declic-title">Déclic</h2>
+    <p class="intro">Déclic is the model whenframe searches with. Two image encoders that see differently, Google's
+      SigLIP 2 and Meta's Perception Encoder, embed one frame per second on your computer's processor. Two small models
+      that whenframe trained on more than 100,000 descriptions written by people rewrite each frame with what the
+      frames around it show, so that an action is found, not only a picture. Frames that match almost any text are
+      marked down, and the two encoders' scores are added. It found the shots of the film above.</p>
+    <div class="tiles">
+      <div class="tile"><div class="label">Find the video among 979</div><div class="value" id="t-video">…</div>
+        <div class="sub">of descriptions, in the first five (DiDeMo test)</div></div>
+      <div class="tile"><div class="label">Find the moment among 979 videos</div><div class="value" id="t-moment">…</div>
+        <div class="sub">the right seconds in the first five, the whole collection at once</div></div>
+      <div class="tile"><div class="label">Runs on</div><div class="value">your CPU</div>
+        <div class="sub">no GPU, no cloud: the videos never leave the computer</div></div>
     </div>
+    <figure class="chart" id="chart">
+      <figcaption>Déclic beside the other ways, on the same test sets</figcaption>
+      <p class="sub">The share of descriptions answered right. Published systems as their authors report them; the
+        others measured here on the same videos.</p>
+      <div class="panels" id="panels"></div>
+      <div class="tip" id="tip" hidden></div>
+      <details class="table"><summary>The numbers as a table</summary><table id="chart-table"></table></details>
+    </figure>
+    <p class="note">Where Déclic is not first: placing a moment in a video it was never trained on, a 7-billion-parameter
+      vision-language model on a GPU does better. The protocol of each test was written before it ran, and the
+      criteria it missed are listed with the ones it met:
+      <a href="https://github.com/qthullie/whenframe/blob/main/docs/RESULTS.md">results</a> ·
+      <a href="https://github.com/qthullie/whenframe/blob/main/docs/PROTOCOL.md">protocol</a>.</p>
+  </section>
+
+  <section class="more">
     <div class="box">
       <h3>Install</h3>
       <pre>pip install git+https://github.com/qthullie/whenframe
 whenframe index ~/Videos
 whenframe search "the dog jumps into the pool"
-whenframe serve</pre>
-      <p>Python 3.10+ and ffmpeg. The first run downloads the models (2.6 GB).</p>
+whenframe film story.txt -o film.mp4
+whenframe supercut "fireworks" -o fireworks.mp4</pre>
+      <p>Python 3.10+ and ffmpeg. The first run downloads the models (1.4 GB). <code>film</code> cuts one shot per
+        line of a story, <code>supercut</code> every moment of one description in the order they were filmed;
+        <code>--music</code> puts your own music under them.</p>
     </div>
     <div class="box">
-      <h3>How it works</h3>
-      <ul>
-        <li>One frame per second, repeated frames skipped, embedded on the CPU by two encoders that see
-          differently: Google's SigLIP 2 and Meta's Perception Encoder.</li>
-        <li>whenframe's own models, trained on more than 100,000 descriptions written by people, rewrite each
-          frame with what the frames around it show: an action, not only a picture.</li>
-        <li>Frames that match almost any text are marked down (query-bank normalisation), and the two encoders'
-          scores are added.</li>
-        <li>Moments of ten seconds around the best frames, ranked with the photos across the whole library.</li>
-      </ul>
-      <p>The protocol was fixed before each test run, and the criteria it missed are listed with the ones it met.</p>
+      <h3>On your computer</h3>
+      <p>The videos are read, embedded and searched on your computer, and nothing is sent anywhere. Descriptions
+        written in French are translated there too, then searched. <code>whenframe serve</code> opens the same
+        search in your browser, and links each moment to Immich or Jellyfin.</p>
+      <p>MIT licence. The weights of whenframe's own models are for research and non-commercial use.</p>
     </div>
   </section>
 
   <footer>
     Videos and photos: shared on Flickr by their authors under CC BY 2.0 (YFCC100M), renamed, the videos shown
-    smaller and without their sound; <a href="credits.html">who took each one</a>. Models: SigLIP 2 (Google,
-    Apache 2.0), PE core B/16 (Meta, Apache 2.0), and whenframe's own models (their weights are for research and
-    non-commercial use). The search runs in your browser, on frames embedded beforehand. whenframe is
-    MIT-licensed.
+    smaller and without their sound; <a href="credits.html">who took each one</a>. Music: composed for this page by a
+    program (<a href="https://github.com/qthullie/whenframe/blob/main/scripts/music.py">scripts/music.py</a>),
+    dedicated to the public domain (CC0 1.0). Models: SigLIP 2 (Google, Apache 2.0), PE core B/16 (Meta, Apache 2.0),
+    and whenframe's own models (their weights are for research and non-commercial use). The search runs in your
+    browser, on frames embedded beforehand. whenframe is MIT-licensed.
   </footer>
 </div>
+
+<audio id="music" src="music.m4a" loop preload="none"></audio>
 
 <dialog id="moment">
   <div class="head">

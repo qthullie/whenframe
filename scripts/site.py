@@ -13,8 +13,13 @@ nothing centred on a child or private. Writes site/data/:
     offsets.MODEL.bin  each frame's query-bank offset times its strength, float32
     frames.json        when each frame is, which file it belongs to, the files, the models and how they are combined
     sheets/N.webp      the frames' thumbnails, 10 x 10 per sheet, in frame order (a photo is one frame)
-    queries.MODEL.bin  the suggested searches, embedded here by each model (float32), and queries.json their text
-    expected.json      what the tool itself finds for each suggestion, which the page is checked against
+    queries.MODEL.bin  the suggested searches and the films' sentences, embedded here by each model (float32), and
+                       queries.json their text, and the English searched for those written in French
+    baseline.MODEL.bin one image per video, its middle frame, as SigLIP 2 B/16 embeds it without whenframe's model:
+                       the page's search "without Déclic" (one per file, a photo being its own image)
+    film.json          the films of the page's opening (STORIES), and how `whenframe film` cuts a shot
+    expected.json      what the tool itself finds for each suggestion and plans for each film, with Déclic and with
+                       one image per video, which the page is checked against (scripts/site_check.mjs)
 """
 
 from __future__ import annotations
@@ -31,9 +36,10 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from whenframe import Library, Searcher, temporal  # noqa: E402
+from whenframe import Library, Searcher, film, temporal  # noqa: E402
 from whenframe.encoder import DEFAULT_LIBRARY, FUSED, MODELS  # noqa: E402
 from whenframe.library import Settings  # noqa: E402
+from whenframe.video import read_photo  # noqa: E402
 
 TILE = (160, 120)
 COLS, ROWS = 10, 10
@@ -45,6 +51,44 @@ SUGGESTIONS = [
     "a vintage car in a parade", "the pyramids", "a striped lighthouse", "a leopard",
     "hot chocolate with marshmallows", "fireworks", "a castle on a hill by the sea",
 ]  # fmt: skip
+# the films of the page's opening, one shot per sentence as `whenframe film` plans them; the third one written in
+# French, translated on the computer as the tool translates it (chosen for what they find, by looking at the shots)
+STORIES = [
+    ("A summer of festivals", ["a pipe band marching down the street", "a vintage car in a parade",
+                               "cooking with big flames", "people dancing in a bar", "a dragon boat race",
+                               "fireworks"]),
+    ("Animals", ["two cats cuddling", "a dog running in a field", "a horse galloping", "a monkey", "a clownfish",
+                 "a bee on an orchid"]),
+    ("Au grand air", ["un geyser en éruption", "la neige tombe sur la forêt", "un bateau dans le brouillard",
+                      "des milliers d'oies sur un lac", "une cascade", "le soleil se couche"]),
+]  # fmt: skip
+BASELINE = "siglip2-base"  # the encoder of one image per video, as docs/RESULTS.md measures it (30.7 % among five)
+
+
+def middle_frame(path: Path, duration: float, size: int) -> np.ndarray:
+    """The frame in the middle of a video, squashed to size x size as the encoder expects; a photo itself."""
+    if duration == 0:
+        return read_photo(path, size)
+    cmd = ["ffmpeg", "-v", "error", "-nostdin", "-ss", f"{duration / 2:.3f}", "-i", str(path), "-frames:v", "1",
+           "-vf", f"scale={size}:{size}:flags=bilinear", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"]  # fmt: skip
+    raw = subprocess.run(cmd, capture_output=True, check=True).stdout
+    return np.frombuffer(raw[: size * size * 3], dtype=np.uint8).reshape(1, size, size, 3)
+
+
+def baseline_film(lines: list[str], base: np.ndarray, queries: np.ndarray, durations: list[float],
+                  seconds: float = film.SECONDS) -> list[tuple[int, float, float]]:  # fmt: skip
+    """The film one image per video makes of a story: for each sentence, the file whose image matches it best
+    among those the film does not use yet, cut around its middle (a photo held). (file, start, length) by sentence;
+    queries: the sentences embedded by SigLIP 2, in order."""
+    used, shots = set(), []
+    for q in queries[: len(lines)]:
+        order = np.argsort(-(base @ q), kind="stable")
+        f = next(int(i) for i in order if int(i) not in used)
+        used.add(f)
+        d = durations[f]
+        length = seconds if d == 0 else min(seconds, d)
+        shots.append((f, 0.0 if d == 0 else max(d / 2 - length / 2, 0.0), length))
+    return shots
 
 
 def frames_at_one_fps(path: Path) -> np.ndarray:
@@ -163,13 +207,35 @@ def preview(out: Path, scheme: str) -> None:
                                   tmp, scheme], capture_output=True, text=True, check=True)  # fmt: skip
         finally:
             httpd.shutdown()
-        # captured at twice the size, kept at 1600 pixels wide: sharp at the README's 800
-        frames = [Image.open(line).convert("RGB") for line in run.stdout.split()]
-        size = (1600, round(frames[0].height * 1600 / frames[0].width))
+        # captured at twice the size, kept at 1200 pixels wide: sharp at the README's 800; each frame stays as long
+        # as it took to take the next one, so that the film plays at its own pace
+        lines = [line.rsplit(" ", 1) for line in run.stdout.splitlines() if line.strip()]
+        frames = [Image.open(file).convert("RGB") for file, _ in lines]
+        size = (1200, round(frames[0].height * 1200 / frames[0].width))
         frames = [f.resize(size, Image.LANCZOS) for f in frames]
-        frames[0].save(out, "WEBP", save_all=True, append_images=frames[1:], duration=140, loop=0, quality=60,
-                       method=6)  # fmt: skip
+        frames[0].save(out, "WEBP", save_all=True, append_images=frames[1:], duration=[int(ms) for _, ms in lines],
+                       loop=0, quality=55, method=6)  # fmt: skip
     print(f"wrote {out}: {len(frames)} frames, {out.stat().st_size / 1e6:.1f} MB")
+
+
+def summary() -> dict:
+    """The page's numbers, from the benchmark's results like the docs' (scripts/tables.py, readme_compare): Déclic's
+    on DiDeMo's test and on Charades-STA, one image per video's, and what others report."""
+    get = {
+        n: json.loads((ROOT / "results" / f"{n}.json").read_text())
+        for n in ("round11_test", "published_didemo", "published_charades", "didemo_test_thumbnail", "didemo_test")
+    }
+    r, video = get["round11_test"], get["round11_test"]["fusion"]["didemo"]["full"]["video"]
+    name, best = max(get["published_didemo"]["video_retrieval"].items(), key=lambda kv: kv[1]["R@5"])
+    others = sorted(get["published_charades"]["zero_shot"], key=lambda x: -x["R1@0.5"])[:2]
+    return {
+        "video": video["R@5"], "video_r1": video["R@1"],
+        "moment": r["fusion"]["didemo"]["value"], "one_image": get["didemo_test_thumbnail"]["middle"]["R@5"],
+        "published": {"name": name, "R@5": best["R@5"] / 100},
+        "keyframe": get["didemo_test"]["scene"]["corpus"]["R@5 IoU>=0.5"],  # one keyframe per shot, the moments
+        "charades": r["fusion-no-charades"]["charades"]["value"],
+        "charades_others": [{"name": x["short"], "R1": x["R1@0.5"] / 100} for x in others],
+    }  # fmt: skip
 
 
 def main() -> None:
@@ -219,13 +285,23 @@ def main() -> None:
             sheet.paste(Image.fromarray(img), ((k % COLS) * TILE[0], (k // COLS) * TILE[1]))
         sheet.save(out / "sheets" / f"{s // per_sheet}.webp", "WEBP", quality=72, method=6)
 
-    spec = []
+    # the suggestions, then the films' sentences; those written in French are embedded as the tool searches them
+    texts = list(dict.fromkeys(SUGGESTIONS + [line for _, lines in STORIES for line in lines]))
+    searched = [searcher.searched_as(t) for t in texts]
+    spec, queries = [], {}
     for model, weight in zip(models, fused.weights, strict=True):
         embs[model][rows].astype("<f2").tofile(out / f"frames.{model}.bin")
         strength = searcher.config.bank * searcher._tuned(model)[1]
         (searcher.offsets(model) * strength)[rows].astype("<f4").tofile(out / f"offsets.{model}.bin")
-        lib.encoder_for(model).encode_texts(SUGGESTIONS).astype("<f4").tofile(out / f"queries.{model}.bin")
+        # one at a time, as the tool embeds a search: a batch's padding changes the last digits, enough to turn a tie
+        queries[model] = np.concatenate([lib.encoder_for(model).encode_texts([t]) for t in searched]).astype("<f4")
+        queries[model].tofile(out / f"queries.{model}.bin")
         spec.append({"name": model, "dim": int(embs[model].shape[1]), "weight": weight})
+    # without Déclic: one image per file, the middle frame of a video, as SigLIP 2 embeds it (float16, as stored)
+    enc = lib.encoder_for(BASELINE)
+    base = np.concatenate([enc.encode_images(middle_frame(media / it["file"], v.duration, enc.size))
+                           for it, v in zip(items, order, strict=True)]).astype("<f2")  # fmt: skip
+    base.tofile(out / f"baseline.{BASELINE}.bin")
     first = MODELS[models[0]]
     meta = {
         "models": spec, "temporal": lib.settings.temporal, "count": int(len(rows)),
@@ -238,27 +314,42 @@ def main() -> None:
                   for it, v in zip(items, order, strict=True)],
     }  # fmt: skip
     (out / "frames.json").write_text(json.dumps(meta, separators=(",", ":"), ensure_ascii=False))
-    (out / "queries.json").write_text(json.dumps(SUGGESTIONS, indent=1))
+    (out / "queries.json").write_text(json.dumps({"suggestions": len(SUGGESTIONS), "texts": texts,
+                                                  "searched_as": searched}, indent=1, ensure_ascii=False))  # fmt: skip
+    (out / "film.json").write_text(json.dumps({
+        "stories": [{"title": title, "lines": lines} for title, lines in STORIES],
+        "seconds": film.SECONDS, "fade": film.FADE, "shortest": film.SHORTEST, "candidates": 30,
+        "baseline": {"model": BASELINE, "dim": int(base.shape[1])},
+    }, indent=1, ensure_ascii=False))  # fmt: skip
     # what the tool finds, for the check that the page searches as it does (scripts/site_check.mjs)
-    expected = {}
+    expected = {"searches": {}, "films": {}}
     for q in SUGGESTIONS:
         hits = searcher.search(q, k=10)
-        expected[q] = [{"file": Path(h.path).name, "start": round(h.start, 2), "end": round(h.end, 2),
-                        "confidence": round(h.confidence, 4)} for h in hits]  # fmt: skip
-    (out / "expected.json").write_text(json.dumps(expected, indent=1))
+        expected["searches"][q] = [{"file": Path(h.path).name, "start": round(h.start, 2), "end": round(h.end, 2),
+                                    "confidence": round(h.confidence, 4)} for h in hits]  # fmt: skip
+    durations = [v.duration for v in order]
+    for title, lines in STORIES:
+        shots, _ = film.plan_film(searcher, lines)
+        rows_of = [texts.index(line) for line in lines]
+        plain = baseline_film(lines, base.astype(np.float32), queries[BASELINE][rows_of], durations)
+        expected["films"][title] = {
+            "declic": [{"file": Path(s.path).name, "start": round(s.start, 2), "length": round(s.length, 2)}
+                       for s in shots],
+            "baseline": [{"file": items[f]["file"], "start": round(a, 2), "length": round(n, 2)} for f, a, n in plain],
+        }  # fmt: skip
+    (out / "expected.json").write_text(json.dumps(expected, indent=1, ensure_ascii=False))
     for old in ("frames.bin", "offsets.bin", "queries.bin", "summary.json"):  # the three films' data, before
         (out / old).unlink(missing_ok=True)
-    results = ROOT / "results" / "round11_test.json"
-    if results.exists():  # the page's numbers come from the benchmark's results, like the docs'
-        r = json.loads(results.read_text())["fusion"]
-        summary = {"video": r["didemo"]["full"]["video"]["R@5"], "moment": r["didemo"]["value"]}
-        (out / "summary.json").write_text(json.dumps(summary))
+    (out / "summary.json").write_text(json.dumps(summary()))
     size = sum(f.stat().st_size for f in out.rglob("*") if f.is_file()) / 1e6
     n_video = sum(it["kind"] == "video" for it in items)
     print(f"{len(rows)} frames from {n_video} videos and {len(items) - n_video} photos, "
           f"{len(thumbs) // per_sheet + 1} sheets, {size:.1f} MB")  # fmt: skip
-    for q, hits in expected.items():
+    for q, hits in expected["searches"].items():
         print(f"  {q}: " + ", ".join(f"{h['file']} {h['start']:.0f}s {h['confidence']:.2f}" for h in hits[:3]))
+    for title, plans in expected["films"].items():
+        for which, shots in plans.items():
+            print(f"  {title}, {which}: " + ", ".join(f"{s['file']} {s['start']:.0f}s" for s in shots))
 
 
 if __name__ == "__main__":

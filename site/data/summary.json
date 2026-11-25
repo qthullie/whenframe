@@ -1,1 +1,1 @@
-{"video": 0.5107637109174782, "moment": 0.3203485392106612}
+{"video": 0.5107637109174782, "video_r1": 0.28446950281906713, "moment": 0.3203485392106612, "one_image": 0.30676576114812915, "published": {"name": "EventFormer (2024)", "R@5": 0.2539}, "keyframe": 0.023321373654536137, "charades": 0.4991935483870968, "charades_others": [{"name": "a 7B vision-language model", "R1": 0.568}, {"name": "TFVTG", "R1": 0.4997}]}
