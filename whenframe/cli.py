@@ -1,4 +1,4 @@
-"""whenframe index | watch | search | serve | stats | compact"""
+"""whenframe index | watch | search | film | supercut | serve | stats | compact"""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from pathlib import Path
 
 from . import __version__, temporal
 from .encoder import BACKENDS, DEFAULT_LIBRARY
+from .film import clock
 from .library import Library, Settings
 from .search import HEARD, SearchConfig, Searcher, worth_showing
 from .video import find_media
@@ -17,13 +18,6 @@ from .video import find_media
 
 def default_library() -> Path:
     return Path(os.environ.get("WHENFRAME_LIBRARY") or Path.home() / ".local" / "share" / "whenframe" / "library")
-
-
-def clock(t: float) -> str:
-    t = int(round(t))
-    h, rem = divmod(t, 3600)
-    m, s = divmod(rem, 60)
-    return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
 
 
 def open_library(args) -> Library:
@@ -96,6 +90,88 @@ def cmd_search(args) -> int:
     if len(hits) < len(found):  # 0 % sure, and nothing said or heard there matches
         print(f"({len(found) - len(hits)} more at 0 % left out; --all shows them)")
     return 0
+
+
+def print_plan(shots, numbered: bool) -> None:
+    for i, s in enumerate(shots, 1):
+        where = f"{'photo':>17}" if s.photo else f"{clock(s.start):>7} - {clock(s.start + s.length):<7}"
+        if numbered:
+            searched = f"  (searched as “{s.searched_as}”)" if s.searched_as else ""
+            print(f"{i:>2}. “{s.caption}”{searched}")
+        print(f"{'' if numbered else f'{i:>2}. '}{s.confidence:5.0%}  {where}  {s.path}")
+
+
+def montage_errors(args) -> str:
+    if args.seconds < 1:
+        return "--seconds: a shot lasts at least 1 second"
+    if getattr(args, "max", 1) < 1:
+        return "--max: at least 1 moment"
+    if args.music and not Path(args.music).is_file():
+        return f"--music: no file {args.music}"
+    return ""
+
+
+def render_film(shots, args, captions: bool) -> int:
+    from . import film
+
+    def report(i, shot):
+        print(f"  shot {i + 1} of {len(shots)}" if shot else "  joining the shots", flush=True)
+
+    print(f"rendering {len(shots)} shots" + (f", music from {args.music}" if args.music else ""), flush=True)
+    try:
+        seconds, drawn = film.render(shots, args.output, music=args.music, captions=captions, report=report)
+    except film.FilmError as e:
+        print(f"ffmpeg could not make the film: {e}", file=sys.stderr)
+        return 1
+    print(f"written: {args.output} ({clock(seconds)}), captions in {Path(args.output).with_suffix('.srt')}")
+    if captions and not drawn:
+        print("this ffmpeg cannot draw text in the picture (it was built without libass): the captions are only in "
+              "the .srt file")  # fmt: skip
+    return 0
+
+
+def cmd_film(args) -> int:
+    from . import film
+
+    if montage_errors(args):
+        print(montage_errors(args), file=sys.stderr)
+        return 2
+    lines = film.story(args.story)
+    if not lines:
+        print("the story is empty: give its sentences, or a text file with one sentence a line", file=sys.stderr)
+        return 2
+    searcher = Searcher(Library(args.library), SearchConfig(moments=args.moments, translate=not args.as_typed))
+    shots, missing = film.plan_film(searcher, lines, args.seconds)
+    print_plan(shots, numbered=True)
+    for line in missing:
+        print(f"left out, nothing else in the library matches it well enough: “{line}”")
+    if not shots:
+        print("no shot for this story: is the library indexed? (`whenframe index <folder>`)")
+        return 1
+    if args.plan:
+        print("(a sentence ending with #2 takes its second best moment, #3 its third)")
+        return 0
+    return render_film(shots, args, captions=not args.no_captions)
+
+
+def cmd_supercut(args) -> int:
+    from . import film
+
+    if montage_errors(args):
+        print(montage_errors(args), file=sys.stderr)
+        return 2
+    searcher = Searcher(Library(args.library), SearchConfig(moments=args.moments, translate=not args.as_typed))
+    description = " ".join(args.description)
+    shots = film.plan_supercut(searcher, description, args.seconds, args.max)
+    if searcher.searched_as(description) != description:
+        print(f"searched as: “{searcher.searched_as(description)}”")
+    if not shots:
+        print("nothing in the library matches this well")
+        return 1
+    print_plan(shots, numbered=False)
+    if args.plan:
+        return 0
+    return render_film(shots, args, captions=False)
 
 
 def cmd_stats(args) -> int:
@@ -221,6 +297,27 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--all", action="store_true", help="also show the moments the model is 0 %% sure of")
     moment_options(p)
     p.set_defaults(fn=cmd_search)
+
+    def montage_options(p: argparse.ArgumentParser, output: str) -> None:
+        p.add_argument("-o", "--output", default=output, help=f"the film to write, an MP4 file (default {output}), "
+                       "its captions beside it (.srt)")  # fmt: skip
+        p.add_argument("--seconds", type=float, default=3.0, help="length of each shot (default 3)")
+        p.add_argument("--music", metavar="FILE", help="put this music under the film instead of the shots' sound "
+                       "(looped if shorter, faded out at the end)")  # fmt: skip
+        p.add_argument("--plan", action="store_true", help="print the shots chosen, make no film")
+        moment_options(p)
+
+    p = sub.add_parser("film", help="a film written sentence by sentence: one shot per sentence, in its order")
+    p.add_argument("story", nargs="+", help="the sentences, or a text file with one sentence a line")
+    montage_options(p, "film.mp4")
+    p.add_argument("--no-captions", action="store_true", help="leave the sentences out of the picture "
+                   "(they are still written in the .srt)")  # fmt: skip
+    p.set_defaults(fn=cmd_film)
+    p = sub.add_parser("supercut", help="every moment a description matches, in the order they were filmed")
+    p.add_argument("description", nargs="+")
+    montage_options(p, "supercut.mp4")
+    p.add_argument("--max", type=int, default=12, help="most moments in the supercut (default 12)")
+    p.set_defaults(fn=cmd_supercut)
     p = sub.add_parser("serve", help="a search page in the browser, with the model kept loaded")
     p.add_argument("--host", default="127.0.0.1", help="address to listen on (default: this computer only)")
     p.add_argument("--port", type=int, default=8765)
