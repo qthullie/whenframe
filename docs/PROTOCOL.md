@@ -1804,3 +1804,108 @@ the demo site searches its library with it in the browser, a description of
 the visitor's own embedded there without a server. The current model stays
 the default. The test is run once, after stage 1's numbers and stage 2's
 training are recorded here.
+
+## Fourteenth round: a large model, at most three times the cost
+
+Written before any of its numbers was computed.
+
+**The question.** whenframe's model reads each frame with two image towers
+of base size, SigLIP 2 B/16 and PE core B/16, for 9.4 CPU minutes per hour
+of video. Does a larger tower find more, for at most three times that cost?
+And can one model hear what a video says and what it sounds like, in place
+of a transcription and of CLAP?
+
+### Part A: PE core L/14 in place of PE core B/16
+
+**The encoder.** Meta's Perception Encoder in its large size, PE core L/14
+(`facebook/PE-Core-L14-336`, Apache License 2.0): a ViT-L/14 image tower of
+0.32 billion weights trained at 336 pixels, and a text tower of 24 layers of
+width 1024 and 32 tokens. Its authors report, zero-shot, 83.5 % on ImageNet,
+73.4 % on Kinetics-400 and 50.3 on MSR-VTT's text-to-video retrieval, where
+PE core B/16 has 78.4, 65.6 and 47.6.
+
+**Files.** Exported here from open_clip's weights (`timm/PE-Core-L-14-336` at
+revision 8eff41b3), as the thirteenth round exported S/16 and T/16: the
+image tower read at 224 pixels, 256 patches, its positions computed for that
+size as open_clip computes them, so that both encoders together cost at
+most three times what the current model costs; its weights in float, as PE
+core B/16's; the text tower with 32 tokens and its weights in 8 bits, as the
+twelfth round's (NNCF, INT8_ASYM). **Checked before any benchmark number**
+as the thirteenth round's exports were: the token ids equal to open_clip's,
+and each embedding of the export in float32 at a cosine of at least 0.999
+to open_clip's, on the ninth round's 16 frames and descriptions.
+
+**Stage 1, on the tuning sets.** The four tuning sets at the standard
+mode's instants, read again at 224 pixels; PE core L/14's own settings
+chosen there as PE core B/16's were (the query bank's beta and strength,
+the spans' strength, the speech and sound weights). Measured: PE core L/14
+alone, PE core B/16 alone (its text tower in 8 bits, measured again the same
+way), and the cost of SigLIP 2 B/16 and PE core L/14 together, each frame
+decoded once, against the current model's, both measured again one after
+the other as in the eleventh round. **The rule:** stage 2 only if PE core
+L/14 alone has a higher tuning mean than PE core B/16 alone, and if the two
+encoders together cost at most three times the current model.
+
+**Stage 2.** PE core L/14 embeds the frames of the collections v3 and v4
+trained on, at the same instants, and those of the four test sets. v6 is v4's
+recipe, unchanged, on its frames (scripts/round9.py's flags, no teacher),
+with its two left-out runs (without Charades-STA's videos, without
+YouCook2's). The large model is v3 and v6 fused as the tenth round fused v3
+and v4, PE's weight chosen on the tuning sets among the tenth round's (0.5,
+0.75, 1, 1.5, 2); its speech and sound weights are chosen there too.
+
+### Part B: what is heard, by EmbeddingGemma 2
+
+**The model.** Google DeepMind's EmbeddingGemma 2 (`google/embeddinggemma-2`
+at revision f9972ac2, Apache License 2.0, 740 million weights): text in
+more than 100 languages, images, video and audio in one space of 768
+dimensions. Its image tower costs too much for whenframe's frames: on this
+machine (PyTorch, float32, one thread), a frame at its smallest vision
+budget, 70 tokens, takes 6.6 times what SigLIP 2 B/16 takes, so it is not a
+candidate for them. Its audio tower is: 2.0 CPU seconds for 10 seconds of
+sound.
+
+**What it replaces, where.** A video's sound, mono at 16 kHz, cut into
+CLAP's windows (5 seconds, overlapping by half), each embedded by its audio
+tower as its model card says (sound without a prefix), and each description
+by its text tower after `task: search result | query: `. A frame takes the
+best cosine of the windows around its middle; these scores are standardised
+as CLAP's are and added to the frames' with a weight chosen over the grid of
+the scores they replace:
+
+- on UnAV-100's tuning videos, in place of CLAP's (the fourth round's
+  weights, 0.25 to 3);
+- on YouCook2's tuning steps, in place of the transcript's full-text scores
+  (the third round's speech weights).
+
+Measured on the tuning sets with the reference implementation (PyTorch,
+transformers 5.24.1, float32), over the current model's frames. **The rule,
+for each set:** EmbeddingGemma 2 is kept in place of what it replaces only
+if that set's tuning metric is higher with it. If it is kept for either,
+its audio and text towers are exported for OpenVINO and checked before the
+test (each embedding at a cosine of at least 0.999 to the reference's, on
+50 windows of UnAV-100's tuning videos and 50 descriptions), and its CPU
+minutes per hour of sound are measured as the transcription's and CLAP's
+are, one after the other.
+
+### Test and criteria
+
+Once, on the four tests, with the four primary metrics and the sign test of
+the earlier rounds, after stage 1's numbers, stage 2's training and part B's
+choices are recorded here. Candidates: the large model, with what part B
+kept; the current model (the twelfth round's test: mean 43.70); and, beside,
+PE core L/14 alone, the left-out runs on the test they left out, and the
+large model without part B's choices.
+
+48. Indexing with the large model costs at most three times what the
+    current model costs, with what each hears (CLAP and the transcription,
+    or EmbeddingGemma 2 where it replaces them).
+49. Its mean of the four primary metrics is at least 1 point higher than the
+    current model's (at least 44.70), with a sign test p < 0.05.
+50. It loses at most 1 point on each of the four tests against the current
+    model.
+
+If 48 to 50 hold, whenframe ships it as `whenframe index --model large`. It
+becomes the default for new libraries only if its mean is at least 3 points
+higher than the current model's (at least 46.70); otherwise the current model
+stays the default. Libraries already indexed keep their model.
