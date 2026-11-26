@@ -56,6 +56,7 @@ TEXT_LENGTH = 32
 MIN_COSINE = 0.999
 VISION, TEXT = "onnx/vision_model.onnx", "onnx/text_model.onnx"
 VISION8, TEXT8 = "onnx/vision_model_int8.xml", "onnx/text_model_int8.xml"
+WEB = "onnx/text_model_web.onnx"  # the text tower for a browser: TEXT8's 8-bit weights, in ONNX
 
 
 def sample(args) -> None:
@@ -240,16 +241,141 @@ def install(args) -> None:
     print(f"{info['model']}: installed in {dest}, {total / 1e6:.1f} MB")
 
 
+def compressed_weights(xml: Path) -> dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]]:
+    """Each weight NNCF compressed in an OpenVINO model (INT8_ASYM): its 8-bit values, zero points and scales, by the
+    name of the ONNX initializer it was converted from; OpenVINO computes the weight as (q - zero point) * scale."""
+    from pe_core import _openvino
+
+    model = _openvino().Core().read_model(str(xml))
+    out = {}
+    for op in model.get_ordered_ops():
+        name = op.get_friendly_name()
+        if op.get_type_name() != "Constant" or op.get_output_element_type(0).get_type_name() != "u8":
+            continue
+        if name.endswith("/zero_point"):
+            continue
+        (convert,) = [t.get_node() for t in op.output(0).get_target_inputs()]
+        (subtract,) = [t.get_node() for t in convert.output(0).get_target_inputs()]
+        (multiply,) = [t.get_node() for t in subtract.output(0).get_target_inputs()]
+        assert (subtract.get_type_name(), multiply.get_type_name()) == ("Subtract", "Multiply"), name
+
+        def other(node, source):
+            inputs = [i.get_source_output().get_node() for i in node.inputs()]
+            (x,) = [n for n in inputs if n.get_friendly_name() != source.get_friendly_name()]
+            while x.get_type_name() == "Convert":  # the zero point, converted before the subtraction
+                x = x.input(0).get_source_output().get_node()
+            return x.get_data()
+
+        zero, scale = other(subtract, convert), other(multiply, subtract)
+        out[name] = (op.get_data().copy(), zero.copy(), scale.astype(np.float32))
+    return out
+
+
+def web(args) -> None:
+    """The text tower for a browser (onnxruntime-web): the float32 export's graph with the 8-bit weights the tool
+    runs (TEXT8). Each compressed weight is kept as its 8-bit values, zero points and scales and dequantized before
+    its product as OpenVINO dequantizes it, (q - zero point) * scale; the token embeddings after the lookup, only the
+    rows of the description's tokens, so that the table stays in 8 bits in memory. Writes onnx/text_model_web.onnx
+    and checks it with ONNX Runtime against the 8-bit tower as OpenVINO runs it (web.json)."""
+    import onnx
+    import onnxruntime as ort
+    from onnx import TensorProto, helper, numpy_helper
+    from pe_core import cosines
+
+    from whenframe.encoder import Encoder
+
+    folder = Path(args.folder)
+    weights = compressed_weights(folder / TEXT8)
+    model = onnx.load(str(folder / TEXT))
+    graph = model.graph
+    floats = {i.name: i for i in graph.initializer}
+    first, inits = [], []
+    for name, (q, zero, scale) in weights.items():
+        w = numpy_helper.to_array(floats[name])
+        assert w.shape == q.shape, (name, w.shape, q.shape)
+        deq = (q.astype(np.float32) - zero.astype(np.float32)) * scale
+        # within a step of its channel (half a step, and the scale's own rounding to 16 bits): this weight's 8 bits
+        assert (np.abs(deq - w) <= scale + 1e-7).all(), f"{name}: not this weight's 8 bits"
+        axis = 1 if zero.shape[0] == 1 else 0
+        z, s = zero.reshape(-1), scale.reshape(-1)
+        graph.initializer.remove(floats[name])
+        inits += [numpy_helper.from_array(q, f"{name}.q"), numpy_helper.from_array(z, f"{name}.zero"),
+                  numpy_helper.from_array(s, f"{name}.scale")]  # fmt: skip
+        users = [n for n in graph.node if name in n.input]
+        if [n.op_type for n in users] == ["Gather"] and axis == 0:  # the token embeddings: the rows looked up only
+            (g,) = users
+            ids, out = g.input[1], g.output[0]
+            p = f"{name}.rows"
+            nodes = [helper.make_node("Gather", [f"{name}.q", ids], [f"{p}.q"], axis=0),
+                     helper.make_node("Gather", [f"{name}.zero", ids], [f"{p}.zero"], axis=0),
+                     helper.make_node("Gather", [f"{name}.scale", ids], [f"{p}.scale"], axis=0),
+                     helper.make_node("Cast", [f"{p}.q"], [f"{p}.qf"], to=TensorProto.FLOAT),
+                     helper.make_node("Cast", [f"{p}.zero"], [f"{p}.zf"], to=TensorProto.FLOAT),
+                     helper.make_node("Unsqueeze", [f"{p}.zf", f"{p}.last"], [f"{p}.zu"]),
+                     helper.make_node("Unsqueeze", [f"{p}.scale", f"{p}.last"], [f"{p}.su"]),
+                     helper.make_node("Sub", [f"{p}.qf", f"{p}.zu"], [f"{p}.d"]),
+                     helper.make_node("Mul", [f"{p}.d", f"{p}.su"], [out])]  # fmt: skip
+            inits.append(numpy_helper.from_array(np.array([-1], np.int64), f"{p}.last"))
+            at = list(graph.node).index(g)
+            graph.node.remove(g)
+            for k, n in enumerate(nodes):
+                graph.node.insert(at + k, n)
+        else:  # a matrix of a product: dequantized whole, as its operator reads it
+            first.append(helper.make_node("DequantizeLinear", [f"{name}.q", f"{name}.scale", f"{name}.zero"], [name],
+                                          axis=axis))  # fmt: skip
+    for k, n in enumerate(first):
+        graph.node.insert(k, n)
+    graph.initializer.extend(inits)
+    # any length up to 32: the tower is causal and reads the end token's output, so the tokens after it change
+    # nothing, and a browser computes only the description's own (checked below)
+    length = graph.input[0].type.tensor_type.shape.dim[1]
+    length.ClearField("dim_value")
+    length.dim_param = "length"
+    onnx.checker.check_model(model)
+    out = folder / WEB
+    onnx.save(model, str(out))
+    texts = json.loads((folder / "texts.json").read_text()) + list(args.sentences or [])
+    if args.annotations:  # and the 200 descriptions round13.py's stage 1 timed the tool's tower on
+        import didemo
+
+        texts += [q["text"] for q in didemo.load("train", args.annotations)[1][:200]]
+    enc = Encoder(json.loads((folder / "export.json").read_text())["model"], folder=folder)
+    ids = enc.tokenize(texts).astype(np.int64)
+    session = ort.InferenceSession(str(out), providers=["CPUExecutionProvider"])
+    got = np.concatenate([session.run(["text_embeds"], {"input_ids": ids[i : i + 1]})[0] for i in range(len(ids))])
+    ends = ids.argmax(axis=1) + 1  # the end token is the largest id
+    short = np.concatenate([session.run(["text_embeds"], {"input_ids": ids[i : i + 1, :n]})[0]
+                            for i, n in enumerate(ends)])  # fmt: skip
+    # the 8-bit tower as the tool runs it (OpenVINO, normalised), a description at a time as a search embeds it
+    tool = np.concatenate([enc.encode_texts([t]) for t in texts])
+    ref = np.load(folder / "ref_texts.npy")
+    result = {"mb": out.stat().st_size / 1e6, "weights_8bit": len(weights), "texts": len(texts),
+              "cosine_to_tool_min": float(cosines(got, tool).min()),
+              "own_tokens_only_cosine_min": float(cosines(short, got).min()),
+              "cosine_to_reference_min": float(cosines(got[: len(ref)], ref).min()),
+              "tool_to_reference_min": float(cosines(tool[: len(ref)], ref).min())}  # fmt: skip
+    (folder / "web.json").write_text(json.dumps(result, indent=1))
+    print(json.dumps(result, indent=1))
+    # for the browser (site/clip.js, scripts/web_text.mjs): CLIP's merges, from which its vocabulary follows, and
+    # what the browser must find: the tool's token ids and embeddings
+    merges = json.loads((folder / "tokenizer.json").read_text())["model"]["merges"]
+    (folder / "merges.txt").write_text("".join(f"{' '.join(m) if isinstance(m, list) else m}\n" for m in merges))
+    (folder / "web_check.json").write_text(json.dumps({"texts": texts, "ids": ids.tolist(),
+                                                        "tool": tool.astype(float).round(7).tolist()}))  # fmt: skip
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("stage", choices=["sample", "export", "check", "compress", "install"])
-    ap.add_argument("--annotations", help="sample: DiDeMo's didemo_train.json")
+    ap.add_argument("stage", choices=["sample", "export", "check", "compress", "install", "web"])
+    ap.add_argument("--sentences", nargs="*", help="web: more descriptions to check the tower on")
+    ap.add_argument("--annotations", help="sample: DiDeMo's didemo_train.json; web: its 200 tuning descriptions too")
     ap.add_argument("--videos", help="sample: the folder of DiDeMo's tuning videos")
     ap.add_argument("--folder", help="sample: where the sample goes; export: where it is; others: the export's")
     ap.add_argument("--model", choices=list(CANDIDATES), help="export: the candidate")
     ap.add_argument("--out", help="export: the candidate's folder")
     args = ap.parse_args()
-    {"sample": sample, "export": export, "check": check, "compress": compress, "install": install}[args.stage](args)
+    stages = {"sample": sample, "export": export, "check": check, "compress": compress, "install": install, "web": web}
+    stages[args.stage](args)
 
 
 if __name__ == "__main__":

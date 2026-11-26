@@ -30,7 +30,8 @@ trained with these losses, each after a published idea:
   and over a video's frames, on the frames it saw, followed by the model's
   (knowledge distillation, Hinton et al., 2015; TeachCLIP, Tian et al., 2024);
   with --fusion-teacher as well (eleventh round), the teacher is v3 and v4
-  together, their scores fused as the tenth round fused them, on every frame.
+  together, their scores fused as the tenth round fused them, on every frame;
+  it teaches a model of another encoder's frames too (thirteenth round).
 
 Frames are dropped at random (the tool skips repeats); a DiDeMo or TEMPO-HL
 description's moment is, half the time, one of its annotators' instead of the
@@ -85,10 +86,12 @@ TEACHER_BANK = CACHE / "didemo_bank_text_siglip2-so400m_lower.npy"
 # descriptions as PE core B/16's text tower embedded them; both banks' strength, as the tool gives it to either
 FUSION_B, FUSION_LAM = "pe-core-b16", (1.0, 1.0)
 # the image encoder the model is trained for (--encoder): SigLIP 2 base, or the ninth round's PE core B/16, whose
-# frames and descriptions scripts/compare.py and scripts/pe_core.py embedded again at the same instants; each
-# encoder's own logit scale and bias (CLIP's PE has none), which the losses use as the search does
+# frames and descriptions scripts/compare.py and scripts/pe_core.py embedded again at the same instants, or one of
+# the thirteenth round's small PE cores (scripts/round13.py), embedded the same way; each encoder's own logit scale
+# and bias (CLIP's PE has none), which the losses use as the search does
 ENCODER = "siglip2-base"
-SCALES = {"siglip2-base": (112.6689, -16.7717), "pe-core-b16": (99.9263, 0.0)}
+SCALES = {"siglip2-base": (112.6689, -16.7717), "pe-core-b16": (99.9263, 0.0),
+          **{f"pe-core-{s}-{px}": (100.0, 0.0) for s in ("s16", "t16") for px in (224, 384)}}  # fmt: skip
 
 
 def frames_file(name: str) -> str:
@@ -416,26 +419,37 @@ class Videos:
 
     def load_fusion(self, names, sets, tag: str, weight: float) -> None:
         """The eleventh round's teacher, read from disk as batches need it: each frame through v3 and through v4,
-        each one's bank offset, and the descriptions as PE core B/16's text tower embedded them."""
+        each one's bank offset, and the descriptions as PE core B/16's text tower embedded them. For a model of
+        another encoder's frames (thirteenth round), the teacher read SigLIP 2 base's frames at the same instants,
+        and the descriptions as SigLIP 2 base's text tower embedded them, which v3 reads."""
         parts, first = [], 0
         for c in names:
-            stem_ = CACHE / f"{frames_file(COLLECTIONS[c][0])}_teacher_{tag}"
+            stem_ = CACHE / f"{COLLECTIONS[c][0]}_teacher_{tag}"  # named after SigLIP 2 base's frames, which v3 read
             a, b = (np.load(f"{stem_}_{x}.npy", mmap_mode="r") for x in ("a", "b"))
             off = np.load(f"{stem_}_off.npy")
             assert len(a) == len(b) == len(off), stem_
             parts.append((first, a, b, off))
             first += len(a)
         assert first == len(self.times), "the teacher's frames are the collections' frames, in their order"
-        assert parts[0][1].shape[1] == self.emb.shape[1], "the teacher's first model reads the model's own frames"
+        own = ENCODER == "siglip2-base"
+        if own:
+            assert parts[0][1].shape[1] == self.emb.shape[1], "the teacher's first model reads the model's own frames"
+        else:
+            base = [np.load(CACHE / f"{COLLECTIONS[c][0]}.npz") for c in names]
+            assert np.array_equal(np.concatenate([z["times"] for z in base]), self.times), "the same instants"
+            assert np.array_equal(np.concatenate([z["counts"] for z in base]), self.counts), "the same videos"
         self.fusion_parts, self.fusion_first = parts, np.array([p[0] for p in parts])
         self.fusion_text = np.concatenate([np.load(CACHE / f"{s}_text_{FUSION_B}.npy") for _, s in sets])
         assert len(self.fusion_text) == len(self.text), "PE's embeddings of the same descriptions"
+        self.fusion_text_a = None if own else np.concatenate([np.load(CACHE / f"{s}_text.npy") for _, s in sets])
+        assert own or len(self.fusion_text_a) == len(self.text), "SigLIP 2's embeddings of the same descriptions"
         self.fusion, self.fusion_weight = tag, weight
 
     def fusion_logits(self, ta, tb, off, q, qb, mask) -> np.ndarray:
         """(V, Q, L): the fusion's scores of the batch's frames for its descriptions, as the tenth round fused them
         (scripts/compare.py, fused): each model's scores corrected by its bank, standardised per description over the
-        batch's frames, added with PE's weight, put back on v3's spread, times SigLIP 2's logit scale."""
+        batch's frames, added with PE's weight, put back on v3's spread, times SigLIP 2's logit scale: the teacher's
+        own, whichever encoder's frames the model is trained on."""
         m = mask[:, None, :]
         n = float(m.sum())
 
@@ -447,7 +461,7 @@ class Videos:
         za, spread = standardised(np.einsum("vld,qd->vql", ta, q) - FUSION_LAM[0] * off[:, None, :, 0])
         zb, _ = standardised(np.einsum("vld,qd->vql", tb, qb) - FUSION_LAM[1] * off[:, None, :, 1])
         z, _ = standardised(za + self.fusion_weight * zb)
-        return (SCALES[ENCODER][0] * spread[None, :, None] * z).astype(np.float32)
+        return (SCALES["siglip2-base"][0] * spread[None, :, None] * z).astype(np.float32)
 
     def load_teacher(self, names, zs, sets, first_frame, teacher) -> None:
         """So400m's embeddings of the frames it saw, each frame's row among them (-1: unseen), and of the
@@ -519,10 +533,11 @@ class Videos:
             tx, seen = np.zeros((n, length, width), np.float32), np.zeros((n, length), bool)
             tq, valid = np.zeros((n, width), np.float32), np.zeros(n, bool)
         fused = self.fusion is not None
-        if fused:
-            wb = self.fusion_parts[0][2].shape[1]
-            ta, tb = np.zeros((n, length, dim), np.float32), np.zeros((n, length, wb), np.float32)
+        if fused:  # v3's width, which is the model's own unless it reads another encoder's frames, and v4's
+            wa, wb = self.fusion_parts[0][1].shape[1], self.fusion_parts[0][2].shape[1]
+            ta, tb = np.zeros((n, length, wa), np.float32), np.zeros((n, length, wb), np.float32)
             toff, tqb = np.zeros((n, length, 2), np.float32), np.zeros((n, wb), np.float32)
+            tqa = np.zeros((n, wa), np.float32)
         for i, v in enumerate(vids):
             s, c = int(self.starts[v]), int(self.counts[v])
             rows = np.arange(s, s + c)
@@ -562,10 +577,11 @@ class Videos:
                 first, a, b, off = self.fusion_parts[int(np.searchsorted(self.fusion_first, rows[0], "right")) - 1]
                 local = rows - first
                 ta[i, :k], tb[i, :k], toff[i, :k], tqb[i] = a[local], b[local], off[local], self.fusion_text[qi]
+                tqa[i] = q[i] if self.fusion_text_a is None else self.fusion_text_a[qi]
         drawn = self.np_rng.choice(len(self.bank), self.bank_sample, replace=False)
         out = (x, t, mask, q, inside, ends[:, 0], ends[:, 1], self.bank[drawn])
         if fused:  # the teacher's logits, every frame seen, every description taught
-            return out + (self.fusion_logits(ta, tb, toff, q, tqb, mask), mask.copy(), np.ones(n, bool))
+            return out + (self.fusion_logits(ta, tb, toff, tqa, tqb, mask), mask.copy(), np.ones(n, bool))
         return out + ((tx, seen, tq, valid, self.teacher_bank[drawn]) if taught else ())
 
 
