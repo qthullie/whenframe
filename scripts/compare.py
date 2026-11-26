@@ -414,8 +414,11 @@ def didemo_bank(model: str) -> np.ndarray:
     if WORDS.towers and model in WORDS.towers:  # embedded by scripts/round12.py's towers stage
         return np.load(CACHE / f"didemo_bank_text_{WORDS.towers[model]}.npy").astype(np.float32)
     key = {"siglip2-base": "", "siglip2-b32": "_siglip2-b32", "siglip2-so400m": "_siglip2-so400m_lower",
-           "pe-core-b16": "_pe-core-b16"}[model]  # fmt: skip
-    return np.load(CACHE / f"didemo_bank_text{key}.npy").astype(np.float32)
+           "pe-core-b16": "_pe-core-b16"}.get(model, f"_{model}")  # fmt: skip
+    path = CACHE / f"didemo_bank_text{key}.npy"
+    if not path.exists():  # an encoder measured since (the thirteenth round's): its bank is embedded by round13.py
+        raise FileNotFoundError(f"{path}: embed the bank first (scripts/round13.py bank)")
+    return np.load(path).astype(np.float32)
 
 
 class Benchmarks:
@@ -454,7 +457,7 @@ class Benchmarks:
         f = replace(f, emb=adapted(c, f.emb, f.times, f.starts, f.counts), _offsets={})
         if c.model == "siglip2-so400m":  # lower case, as chosen for it in the fourth round
             text = np.load(CACHE / f"didemo_{split}_text_siglip2-so400m_lower.npy").astype(np.float32)
-        elif c.model == "pe-core-b16" or WORDS.name:  # its text tower runs with OpenVINO (ninth round)
+        elif c.model.startswith("pe-core-") or WORDS.name:  # PE's text towers run with OpenVINO (ninth round)
             text = text_embeddings(c.model, f"didemo_{split}", [q["text"] for q in queries])
         else:
             text = didemo.text_embeddings(queries, split, self.args.model_dir, c.model)
@@ -685,7 +688,7 @@ def candidate(spec: str) -> Candidate:
     model, _, rest = rest.rpartition(":")
     assert not model or model in MODELS, spec
     weights, _, alpha = rest.partition("@")
-    return Candidate(name, model or "siglip2-base", weights=weights, alpha=float(alpha or 1.0))
+    return Candidate(name, model or "siglip2-base", weights=weights or None, alpha=float(alpha or 1.0))
 
 
 TUNED = ROOT / "results" / "compare_tuned.json"
@@ -708,6 +711,9 @@ LEFT_OUT9 = {"charades": ("v4-no-charades", "v3-no-charades"), "youcook2": ("v4-
 # the eleventh round's: the tenth round's fusion of v3 and v4 tested (part 1), then v5, whenframe's model taught by
 # it (part 2, scripts/round11.py); both encoders' indexing cost, each frame decoded once
 TUNED11 = ROOT / "results" / "round11_tuned.json"
+# the thirteenth round's: the small model's candidates on the tuning sets, and their indexing costs
+TUNED13 = ROOT / "results" / "round13_tuned.json"
+COST13 = ROOT / "results" / "round13_cost.json"
 TEST11 = ROOT / "results" / "round11_test.json"
 TEST11_V5 = ROOT / "results" / "round11_test_v5.json"
 COST11 = ROOT / "results" / "round11_cost.json"
@@ -758,7 +764,7 @@ def tune(args) -> None:
     and the mean of the primary metrics: DiDeMo, YouCook2 and UnAV-100 (sixth round; Charades-STA had none), and
     Charades-STA's 500 held-out training videos (seventh round, --round 7)."""
     b = Benchmarks(args)
-    path = {7: TUNED7, 8: TUNED8, 9: TUNED9, 10: TUNED10, 11: TUNED11}.get(args.round, TUNED)
+    path = {7: TUNED7, 8: TUNED8, 9: TUNED9, 10: TUNED10, 11: TUNED11, 13: TUNED13}.get(args.round, TUNED)
     out = json.loads(path.read_text()) if path.exists() else {}
     for spec in args.candidates.split(","):
         c = candidate(spec)
@@ -925,7 +931,7 @@ def cost(args) -> None:
     names = sorted(str(n) for n in np.load(CACHE / f"{BASE['didemo-test']}.npz")["names"])[: args.cost_videos]
     # the ninth round's: both encoders measured again, one after the other; the eleventh's: SigLIP 2 B/16 again,
     # then SigLIP 2 B/16 and PE core B/16 together (A+B), each frame decoded once and embedded by both
-    dest = {9: COST9, 11: COST11}.get(args.round, COST)
+    dest = {9: COST9, 11: COST11, 13: COST13}.get(args.round, COST)
     out = json.loads(dest.read_text()) if dest.exists() else {}
     for m in args.models.split(","):
         encs = [Encoder(x, backend="openvino") for x in m.split("+")]
@@ -975,7 +981,7 @@ def main() -> None:
     ap.add_argument(
         "--round",
         type=int,
-        choices=[6, 7, 8, 9, 10, 11],
+        choices=[6, 7, 8, 9, 10, 11, 13],
         default=6,
         help="tune, evaluate: the sixth round's or a later one's (results/roundN_*.json; from the seventh, "
         "Charades-STA's held-out videos among the tuning sets; 10, the tenth round's screening, tunes only); cost: 9 "
