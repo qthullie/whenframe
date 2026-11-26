@@ -1709,3 +1709,98 @@ the release models-2, with the Apache License and a NOTICE
 whenframe then downloads them, each file's SHA-256 checked, embeds
 descriptions with them and searches with the query banks they embed;
 libraries already indexed keep their frames.
+
+## Thirteenth round: a small model, for phones
+
+Written before any of its numbers was computed.
+
+**The question.** whenframe's model downloads 1.4 GB, a search holds 1.4 GB
+of memory, and indexing costs 9.4 CPU minutes per hour of video: too much
+for a phone, or for its browser. Can a model of at most 150 MB find most of
+what it finds, by learning from it?
+
+**The encoders.** Meta's Perception Encoder in its two small sizes, PE core
+S/16 and T/16 (`facebook/PE-Core-S16-384` and `PE-Core-T16-384`, Apache
+License 2.0): a ViT-S/16 and a ViT-Ti/16 image tower trained at 384 pixels,
+and the same text tower, of 12 layers of width 512 and 32 tokens. Their
+checkpoints weigh 349 and 278 MB in float32, most of it the text tower. Their
+authors report 72.7 and 62.1 % on ImageNet, zero-shot; PE core B/16, which
+whenframe's model uses beside SigLIP 2 B/16, 78.4 %.
+
+**Files.** Exported here to ONNX from open_clip's weights
+(`timm/PE-Core-S-16-384` and `timm/PE-Core-T-16-384`, at fixed revisions), in
+PyTorch, as the ninth round exported PE core B/16's image tower: the image
+tower at 224 and at 384 pixels (its positions computed for that size, as
+open_clip computes them), the text tower with 32 tokens and CLIP's
+tokenizer as published with the weights. For OpenVINO, both towers' weights
+are then compressed to 8 bits as in the twelfth round (NNCF, INT8_ASYM,
+data-free). **Checked before any benchmark number**, against open_clip in
+PyTorch, on the ninth round's 16 frames of DiDeMo's tuning videos and 16 of
+their descriptions (`scripts/pe_core.py sample`): the token ids must be equal,
+and each embedding of the export in float32 at a cosine of at least 0.999 to
+the reference's. If the check fails, the size is left out. The 8-bit towers
+are measured on the tuning sets like any candidate.
+
+### Stage 1, on the tuning sets: the encoders alone
+
+**Candidates.** Four, neither with whenframe's model: S/16 and T/16, each at
+224 and at 384 pixels, both towers in 8 bits.
+
+**The same frames** as the ninth round's stage 1: the four tuning sets at
+the instants of the standard mode's caches, read again and decoded at each
+candidate's size. Each candidate's own settings are chosen on them as PE
+core B/16's were (the query bank's beta and strength on DiDeMo's tuning
+videos, the spans' strength on YouCook2's tuning steps, the weights of
+speech and of sound), and the metric is the mean of the four tuning metrics.
+
+Reported beside each: the files to download, the CPU minutes per hour of
+DiDeMo's test videos to index (decoding included, OpenVINO, measured as in
+the eleventh round), and the text tower's time per description.
+
+**The rule.** The candidate kept has the highest tuning mean among those that
+weigh at most 150 MB and index at most at half the current model's cost. If
+none does, the round ends there: nothing is trained and no test is run.
+
+### Stage 2: whenframe's model on its frames
+
+**Frames.** The kept candidate embeds the frames of the collections v3 and
+v4 trained on, at the same instants (DiDeMo's training videos with TEMPO-HL's
+sentences, MSR-VTT's 9,000 clips, Charades-STA's training videos without the
+500 held out, YouCook2's training videos), and those of the four test sets.
+
+**Training.** Three runs of v4's recipe on its dimensions, unchanged:
+
+- without a teacher, as v4;
+- taught by the current model (v3's and v4's scores of the training frames,
+  together, as in the eleventh round), the teacher's losses at weight 1;
+- the same at weight 3.
+
+The run with the highest tuning mean is kept (alpha 1); its speech and sound
+weights are chosen on the tuning sets. Its two left-out runs (without
+Charades-STA's videos, without YouCook2's) are trained as v4's were.
+
+### Test and criteria
+
+Once, on the four tests, with the four primary metrics. Candidates: the
+small model, its encoder alone, and as the reference, the current model
+with its text towers in 8 bits (the twelfth round's test: mean 43.70).
+
+43. The small model's files to download weigh at most 150 MB.
+44. Its mean of the four primary metrics is at least 85 % of the current
+    model's: at least 37.15.
+45. On DiDeMo's test, it puts the right video among its first five more often
+    than the best published system (EventFormer, 25.4 %).
+46. Indexing with it costs at most half of what the current model costs.
+47. A search of the demo's library holds at most 0.5 GB of memory (the
+    process's peak).
+
+Reported beside, deciding nothing: its text tower's median time to embed a
+description in a browser (onnxruntime-web, WebAssembly, in headless
+Chromium on this machine), and each left-out run on the test it left out.
+
+If 43 to 47 hold, whenframe ships the small model as `whenframe index
+--model small`: a library built with it is indexed and searched with it, and
+the demo site searches its library with it in the browser, a description of
+the visitor's own embedded there without a server. The current model stays
+the default. The test is run once, after stage 1's numbers and stage 2's
+training are recorded here.
