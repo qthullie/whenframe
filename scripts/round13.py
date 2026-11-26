@@ -134,18 +134,24 @@ def bank(args) -> None:
 
 
 def tune(args) -> None:
+    """Each candidate measured once (a stopped stage resumes with the candidates not measured yet)."""
     import compare
 
     with_banks()
-    args.round = 13
-    args.candidates = ",".join(f"{m}={m}:" for m in CANDIDATES)
-    compare.tune(args)
+    done = json.loads(TUNED.read_text()) if TUNED.exists() else {}
+    todo = [f"{m}={m}:" for m in CANDIDATES if done.get(m, {}).get("spec") != f"{m}={m}:"]
+    if todo:
+        args.round, args.candidates = 13, ",".join(todo)
+        compare.tune(args)
 
 
 def cost(args) -> None:
     """The candidates' and the current model's indexing costs, one process each after the other, on an idle
-    machine (scripts/compare.py cost --round 13)."""
+    machine (scripts/compare.py cost --round 13); a model measured before is not measured again."""
+    costs = ROOT / "results" / "round13_cost.json"
     for model in (*CANDIDATES, CURRENT):
+        if model in (json.loads(costs.read_text()) if costs.exists() else {}):
+            continue
         subprocess.run([sys.executable, "-I", str(ROOT / "scripts" / "compare.py"), "cost", "--round", "13",
                         "--videos", args.videos, "--models", model], check=True)  # fmt: skip
 
