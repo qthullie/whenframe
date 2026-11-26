@@ -1118,203 +1118,101 @@
   ]
  },
  "films": {
-  "A summer of festivals": {
-   "declic": [
-    {
-     "file": "VID_20120526_194248.mp4",
-     "start": 2.0,
-     "length": 3.0
-    },
-    {
-     "file": "VID_20090704_114925.mp4",
-     "start": 3.0,
-     "length": 3.0
-    },
-    {
-     "file": "VID_20110729_212637.mp4",
-     "start": 4.0,
-     "length": 3.0
-    },
-    {
-     "file": "VID_20100305_163251.mp4",
-     "start": 8.0,
-     "length": 3.0
-    },
-    {
-     "file": "VID_20090713_175224.mp4",
-     "start": 17.0,
-     "length": 3.0
-    },
-    {
-     "file": "IMG_20070704_211541.jpg",
-     "start": 0.0,
-     "length": 3.0
-    }
-   ],
-   "baseline": [
-    {
-     "file": "VID_20120526_194248.mp4",
-     "start": 36.05,
-     "length": 3.0
-    },
-    {
-     "file": "VID_20090704_114925.mp4",
-     "start": 8.2,
-     "length": 3.0
-    },
-    {
-     "file": "VID_20110729_212637.mp4",
-     "start": 41.15,
-     "length": 3.0
-    },
-    {
-     "file": "VID_20100305_163251.mp4",
-     "start": 14.05,
-     "length": 3.0
-    },
-    {
-     "file": "VID_20090713_175224.mp4",
-     "start": 11.31,
-     "length": 3.0
-    },
-    {
-     "file": "IMG_20120518_212942.jpg",
-     "start": 0.0,
-     "length": 3.0
-    }
-   ]
-  },
-  "Animals": {
-   "declic": [
-    {
-     "file": "VID_20130219_160547.mp4",
-     "start": 7.0,
-     "length": 3.0
-    },
-    {
-     "file": "VID_20110620_213928.mp4",
-     "start": 9.0,
-     "length": 3.0
-    },
-    {
-     "file": "VID_20081205_063747.mp4",
-     "start": 59.0,
-     "length": 3.0
-    },
-    {
-     "file": "VID_20120716_193201.mp4",
-     "start": 0.0,
-     "length": 3.0
-    },
-    {
-     "file": "VID_20130629_175905.mp4",
-     "start": 0.0,
-     "length": 3.0
-    },
-    {
-     "file": "VID_20081026_130440.mp4",
-     "start": 32.0,
-     "length": 3.0
-    }
-   ],
-   "baseline": [
-    {
-     "file": "VID_20130219_160547.mp4",
-     "start": 3.84,
-     "length": 3.0
-    },
-    {
-     "file": "VID_20110620_213928.mp4",
-     "start": 6.93,
-     "length": 3.0
-    },
-    {
-     "file": "IMG_20120923_155623.jpg",
-     "start": 0.0,
-     "length": 3.0
-    },
-    {
-     "file": "VID_20120716_193201.mp4",
-     "start": 10.43,
-     "length": 3.0
-    },
-    {
-     "file": "VID_20130629_175905.mp4",
-     "start": 6.36,
-     "length": 3.0
-    },
-    {
-     "file": "VID_20081026_130440.mp4",
-     "start": 21.92,
-     "length": 3.0
-    }
-   ]
-  },
-  "Au grand air": {
-   "declic": [
-    {
-     "file": "VID_20140425_181116.mp4",
-     "start": 3.0,
-     "length": 3.0
-    },
-    {
-     "file": "VID_20140222_062424.mp4",
-     "start": 71.64,
-     "length": 3.0
-    },
-    {
-     "file": "VID_20131228_161100.mp4",
-     "start": 7.0,
-     "length": 3.0
-    },
-    {
-     "file": "VID_20130313_123506.mp4",
-     "start": 2.5,
-     "length": 3.0
-    },
-    {
-     "file": "IMG_20100621_135013.jpg",
-     "start": 0.0,
-     "length": 3.0
-    },
-    {
-     "file": "IMG_20080912_111820.jpg",
-     "start": 0.0,
-     "length": 3.0
-    }
-   ],
-   "baseline": [
-    {
-     "file": "VID_20140425_181116.mp4",
-     "start": 6.21,
-     "length": 3.0
-    },
-    {
-     "file": "VID_20140222_062424.mp4",
-     "start": 35.82,
-     "length": 3.0
-    },
-    {
-     "file": "VID_20131228_161100.mp4",
-     "start": 12.91,
-     "length": 3.0
-    },
-    {
-     "file": "VID_20130313_123506.mp4",
-     "start": 36.05,
-     "length": 3.0
-    },
-    {
-     "file": "VID_20110728_170906.mp4",
-     "start": 8.36,
-     "length": 3.0
-    },
-    {
-     "file": "IMG_20080912_111820.jpg",
-     "start": 0.0,
-     "length": 3.0
-    }
-   ]
-  }
+  "A summer of festivals": [
+   {
+    "file": "VID_20120526_194248.mp4",
+    "start": 2.0,
+    "length": 3.0
+   },
+   {
+    "file": "VID_20090704_114925.mp4",
+    "start": 3.0,
+    "length": 3.0
+   },
+   {
+    "file": "VID_20110729_212637.mp4",
+    "start": 4.0,
+    "length": 3.0
+   },
+   {
+    "file": "VID_20100305_163251.mp4",
+    "start": 8.0,
+    "length": 3.0
+   },
+   {
+    "file": "VID_20090713_175224.mp4",
+    "start": 17.0,
+    "length": 3.0
+   },
+   {
+    "file": "IMG_20070704_211541.jpg",
+    "start": 0.0,
+    "length": 3.0
+   }
+  ],
+  "Animals": [
+   {
+    "file": "VID_20130219_160547.mp4",
+    "start": 7.0,
+    "length": 3.0
+   },
+   {
+    "file": "VID_20110620_213928.mp4",
+    "start": 9.0,
+    "length": 3.0
+   },
+   {
+    "file": "VID_20081205_063747.mp4",
+    "start": 59.0,
+    "length": 3.0
+   },
+   {
+    "file": "VID_20120716_193201.mp4",
+    "start": 0.0,
+    "length": 3.0
+   },
+   {
+    "file": "VID_20130629_175905.mp4",
+    "start": 0.0,
+    "length": 3.0
+   },
+   {
+    "file": "VID_20081026_130440.mp4",
+    "start": 32.0,
+    "length": 3.0
+   }
+  ],
+  "Au grand air": [
+   {
+    "file": "VID_20140425_181116.mp4",
+    "start": 3.0,
+    "length": 3.0
+   },
+   {
+    "file": "VID_20140222_062424.mp4",
+    "start": 71.64,
+    "length": 3.0
+   },
+   {
+    "file": "VID_20131228_161100.mp4",
+    "start": 7.0,
+    "length": 3.0
+   },
+   {
+    "file": "VID_20130313_123506.mp4",
+    "start": 2.5,
+    "length": 3.0
+   },
+   {
+    "file": "IMG_20100621_135013.jpg",
+    "start": 0.0,
+    "length": 3.0
+   },
+   {
+    "file": "IMG_20080912_111820.jpg",
+    "start": 0.0,
+    "length": 3.0
+   }
+  ]
  }
 }

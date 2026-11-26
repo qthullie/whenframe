@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>whenframe Déclic</title>
-<meta name="description" content="Write a story, and Déclic, whenframe's model, finds each shot in someone's phone and cuts the film. Describe a moment, find it in your videos and photos, on your own computer.">
+<title>whenframe</title>
+<meta name="description" content="Write a story, and whenframe finds each shot in someone's phone and cuts the film. Describe a moment, find it in your videos and photos, on your own computer.">
 <link rel="icon" href="logo.svg" type="image/svg+xml">
 <style>
   :root {
@@ -32,7 +32,6 @@
   .brand { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
   .brand img { width: 40px; height: 40px; }
   .brand h1 { font-size: 26px; margin: 0; letter-spacing: -.02em; line-height: 1.15; }
-  .brand h1 span { color: var(--accent); }
   .brand > div { flex: 1 1 0; min-width: 0; }
   .brand .tagline { margin: 2px 0 0; font-size: 15px; color: var(--ink2); }
   .brand nav { margin-left: auto; display: flex; gap: 16px; font-size: 14px; }
@@ -84,11 +83,6 @@
          font-size: 17px; font-weight: 600; padding: 13px 22px; border-radius: 999px; border: none;
          background: rgba(255, 255, 255, .94); color: #0b0b0b; }
   .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0 6px; }
-  .switch { display: inline-flex; border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
-            background: var(--card); margin-left: auto; }
-  .switch button { border: none; border-radius: 0; padding: 8px 14px; font-size: 14px; }
-  .switch button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
-  .without { color: var(--ink2); font-size: 14px; margin: 4px 0 0; }
   .strip { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(150px, 1fr); gap: 10px;
            overflow-x: auto; padding: 8px 0 6px; }
   .strip button { text-align: left; padding: 0; border-radius: 12px; overflow: hidden; display: flex;
@@ -119,8 +113,6 @@
 
   /* the search */
   .demo { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 20px; margin: 26px 0; }
-  .demo .head { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-  .demo .head .switch { margin-left: auto; }
   .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 4px; }
   #ask { display: flex; gap: 8px; margin: 14px 0 4px; }
   #q { flex: 1; min-width: 0; font: inherit; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--line);
@@ -212,7 +204,6 @@
   footer { color: var(--muted); font-size: 13px; padding: 24px 0 48px; border-top: 1px solid var(--line); }
   @media (max-width: 560px) {
     .board { grid-template-columns: repeat(5, 1fr); }
-    .switch { margin-left: 0; }
     .brand nav { flex-basis: 100%; margin-left: 52px; }
     .tag { font-size: 11px; top: 22px; left: 10px; padding: 3px 8px; }
     .tag b { font-size: 10px; }
@@ -228,18 +219,17 @@
     <div class="brand">
       <img src="logo.svg" alt="">
       <div>
-        <h1>whenframe <span>Déclic</span></h1>
+        <h1>whenframe</h1>
         <p class="tagline">Describe a moment, find it in your videos. Write a story, get the film.</p>
       </div>
-      <nav><a href="#declic">Déclic</a>
+      <nav><a href="#model">The model</a>
            <a href="https://github.com/qthullie/whenframe">Code</a>
            <a href="https://github.com/qthullie/whenframe/blob/main/docs/RESULTS.md">Results</a></nav>
     </div>
   </header>
 
   <section class="hero" aria-labelledby="film-title">
-    <p class="kicker">Déclic, whenframe's model</p>
-    <h2 id="film-title">Write a story. Déclic finds every shot in someone's phone.</h2>
+    <h2 id="film-title">Write a story. whenframe finds every shot in someone's phone.</h2>
     <p class="lead">Each sentence finds its shot among <span id="n-files">232</span> real videos and photos, cut at
       the second it happens, and the shots are joined into a film. It runs in your browser, on what whenframe indexed;
       <code>whenframe film</code> does the same on your computer, with your own videos.</p>
@@ -257,22 +247,14 @@
       <button id="play" type="button">Pause</button>
       <button id="replay" type="button">Replay</button>
       <button id="sound" type="button" aria-pressed="false">♪ Music: off</button>
-      <div class="switch" role="group" aria-label="Who picks the shots">
-        <button type="button" data-declic="1" aria-pressed="true">With Déclic</button>
-        <button type="button" data-declic="0" aria-pressed="false">One image per video</button>
-      </div>
     </div>
-    <p class="without" id="without" hidden>Without Déclic: each file is one image, the middle frame of a video, as photo
-      libraries index videos. It finds a file when that image matches, never the second where it happens, and cuts
-      the middle. On 979 personal videos, the right one is among its first five for <b id="w-one">…</b> of
-      descriptions, against <b id="w-declic">…</b> with Déclic.</p>
     <div class="strip" id="strip"></div>
     <pre class="cli"><code id="cli"></code></pre>
   </section>
 
   <section class="compose" aria-labelledby="compose-title">
     <h2 id="compose-title">Write your own film</h2>
-    <p class="note">Pick sentences in the order they should play, up to eight. Déclic plans the film in your browser:
+    <p class="note">Pick sentences in the order they should play, up to eight. whenframe plans the film in your browser:
       each sentence takes the best moment the film does not use yet.</p>
     <div class="picks" id="pool"></div>
     <ol class="mine" id="mine"></ol>
@@ -281,13 +263,7 @@
   </section>
 
   <div class="demo">
-    <div class="head">
-      <h2 id="what">Someone's phone</h2>
-      <div class="switch" role="group" aria-label="Who searches">
-        <button type="button" data-declic="1" aria-pressed="true">With Déclic</button>
-        <button type="button" data-declic="0" aria-pressed="false">One image per video</button>
-      </div>
-    </div>
+    <h2 id="what">Someone's phone</h2>
     <p class="note">Real videos and photos, named as a phone names them (<code>VID_20140425_181116.mp4</code>):
       searching the names finds nothing. <span id="how">Pick a description:</span> the search runs in your browser,
       on what whenframe indexed. Pick a moment to watch it, or
@@ -304,10 +280,10 @@
     <div class="grid" id="results"></div>
   </div>
 
-  <section class="model" id="declic" aria-labelledby="declic-title">
+  <section class="model" id="model" aria-labelledby="model-title">
     <p class="kicker">The model</p>
-    <h2 id="declic-title">Déclic</h2>
-    <p class="intro">Déclic is the model whenframe searches with. Two image encoders that see differently, Google's
+    <h2 id="model-title">whenframe's model</h2>
+    <p class="intro">whenframe searches with a model of its own. Two image encoders that see differently, Google's
       SigLIP 2 and Meta's Perception Encoder, embed one frame per second on your computer's processor. Two small models
       that whenframe trained on more than 100,000 descriptions written by people rewrite each frame with what the
       frames around it show, so that an action is found, not only a picture. Frames that match almost any text are
@@ -321,14 +297,14 @@
         <div class="sub">no GPU, no cloud: the videos never leave the computer</div></div>
     </div>
     <figure class="chart" id="chart">
-      <figcaption>Déclic beside the other ways, on the same test sets</figcaption>
+      <figcaption>whenframe beside the other ways, on the same test sets</figcaption>
       <p class="sub">The share of descriptions answered right. Published systems as their authors report them; the
         others measured here on the same videos.</p>
       <div class="panels" id="panels"></div>
       <div class="tip" id="tip" hidden></div>
       <details class="table"><summary>The numbers as a table</summary><table id="chart-table"></table></details>
     </figure>
-    <p class="note">Where Déclic is not first: placing a moment in a video it was never trained on, a 7-billion-parameter
+    <p class="note">Where whenframe is not first: placing a moment in a video it was never trained on, a 7-billion-parameter
       vision-language model on a GPU does better. The protocol of each test was written before it ran, and the
       criteria it missed are listed with the ones it met:
       <a href="https://github.com/qthullie/whenframe/blob/main/docs/RESULTS.md">results</a> ·

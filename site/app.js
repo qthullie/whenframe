@@ -3,7 +3,6 @@
 // standardised over the library and added (PE's with its weight), put back on SigLIP 2's scale; ten-second windows
 // around a video's best frames, a photo as its own moment. Films are planned as `whenframe film` plans them
 // (whenframe/film.py): one shot per sentence, the best moment the film does not use yet, cut from its best frame.
-// "One image per video" is what the search is without Déclic: each file is its middle frame, as SigLIP 2 embeds it.
 // The sentences were embedded by the tool; a description of the visitor's own is embedded by the demo's text server
 // (demo-server/, config.json), with the same text models.
 const DATA = "data/", MEDIA = "media/";
@@ -14,13 +13,11 @@ const MOST = 8;  // sentences in a film of one's own
 const $ = (id) => document.getElementById(id);
 const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-let meta, models, Q, FILM, base, rowsOf;
+let meta, models, Q, FILM, rowsOf;
 let server = "";  // the text server's address, when there is one
 let playing = null;  // the moment being played in the dialog, which stops at its end; null for a whole video
 let asked = 0;  // the latest description sent to the server: an older answer arriving late is dropped
-let declic = true;  // who picks the shots and the moments: Déclic, or one image per video
 let story = 0;  // the film shown: an index of FILM.stories, or -1 for the visitor's own
-let searched = null;  // the search shown: [query, embeddings, ms] or null for the library
 const mine = [];  // the visitor's sentences
 
 // float16 -> float32, through a table of the 65,536 values
@@ -111,29 +108,6 @@ function search(qs) {
   return out.sort((a, b) => b.score - a.score);
 }
 
-// ---- one image per video: what the search is without Déclic ----
-
-const baseModel = () => models.findIndex((m) => m.name === FILM.baseline.model);
-
-function plain(q) {
-  // each file's one image (a video's middle frame, a photo itself) against the description, best first
-  const d = FILM.baseline.dim, n = meta.items.length, s = new Float64Array(n);
-  for (let f = 0; f < n; f++) {
-    let x = 0;
-    for (let j = 0, o = f * d; j < d; j++) x += base[o + j] * q[j];
-    s[f] = x;
-  }
-  return { s, order: meta.items.map((_, f) => f).sort((a, b) => s[b] - s[a] || a - b) };
-}
-
-function middleRow(f) {
-  // the indexed frame showing at the middle of a video, for its thumbnail
-  const rows = rowsOf[f], mid = meta.items[f].duration / 2;
-  let r = rows[0];
-  for (const i of rows) if (meta.times[i] <= mid) r = i;
-  return r;
-}
-
 // ---- films ----
 
 const queriesOf = (k) => models.map((m) => m.queries.subarray(k * m.dim, (k + 1) * m.dim));
@@ -146,7 +120,7 @@ function cut(at, until, duration, photo, seconds) {
   return [Math.min(Math.max(at - lead, 0), Math.max(duration - length, 0)), length];
 }
 
-function planDeclic(lines) {
+function plan(lines) {
   // as `whenframe film` plans a film: for each sentence, the best moment worth showing that the film does not use
   const used = [];
   return lines.map((line) => {
@@ -163,20 +137,6 @@ function planDeclic(lines) {
       return { line, k, item: h.item, start, length, row: h.row, sure: h.confidence };
     }
     return { line, k, missing: true };
-  });
-}
-
-function planPlain(lines) {
-  // one image per video: for each sentence, the best file the film does not use yet, cut around its middle
-  const used = new Set(), m = models[baseModel()];
-  return lines.map((line) => {
-    const k = Q.texts.indexOf(line);
-    const { s, order } = plain(m.queries.subarray(k * m.dim, (k + 1) * m.dim));
-    const f = order.find((x) => !used.has(x));
-    used.add(f);
-    const d = meta.items[f].duration, length = d === 0 ? FILM.seconds : Math.min(FILM.seconds, d);
-    return { line, k, item: f, start: d === 0 ? 0 : Math.max(d / 2 - length / 2, 0), length, row: middleRow(f),
-             sure: sure(s[f]), plain: true };
   });
 }
 
@@ -281,8 +241,7 @@ function caption(i, first) {
     $("searched").textContent = as !== s.line ? `searched as “${as}”` : "";
     $("tag-file").textContent = item.file;
     $("tag-when").textContent = item.kind === "photo" ? "· photo" : `· ${clock(s.start)}–${clock(s.start + s.length)}`;
-    $("tag-sure").textContent = s.plain ? (item.kind === "photo" ? "one image per file" : "the middle of the file")
-      : `Déclic: ${Math.round(100 * s.sure)} % sure it matches`;
+    $("tag-sure").textContent = `${Math.round(100 * s.sure)} % sure it matches`;
     sub.style.opacity = 1;
     tag.style.opacity = 1;
   };
@@ -446,7 +405,7 @@ function show(which) {
   story = which;
   const lines = which < 0 ? mine : FILM.stories[which].lines;
   document.querySelectorAll(".tab").forEach((t) => t.setAttribute("aria-selected", String(Number(t.dataset.story) === which)));
-  startFilm(declic ? planDeclic(lines) : planPlain(lines), which < 0 ? "my film" : FILM.stories[which].title);
+  startFilm(plan(lines), which < 0 ? "my film" : FILM.stories[which].title);
 }
 
 function syncMusic() {
@@ -470,14 +429,6 @@ function fadeMusic() {
     else if (!P.running) music.pause();
   };
   requestAnimationFrame(step);
-}
-
-function setDeclic(on) {
-  declic = on;
-  document.querySelectorAll("[data-declic]").forEach((b) => b.setAttribute("aria-pressed", String((b.dataset.declic === "1") === on)));
-  $("without").hidden = on;
-  show(story);
-  if (searched) showMoments(...searched);
 }
 
 // ---- writing one's own ----
@@ -559,7 +510,6 @@ function card(row, item, badge, extra) {
 
 function showLibrary(all = false) {
   // no description picked: the library itself, newest first, as a phone's gallery shows it
-  searched = null;
   const videos = meta.items.filter((x) => x.kind === "video").length;
   $("status").textContent = `${meta.items.length} files: ${videos} videos and ${meta.items.length - videos} photos. ` +
     "Pick a description above to find a moment in them.";
@@ -583,33 +533,15 @@ function showLibrary(all = false) {
 
 function showMoments(query, qs, embedded) {
   // embedded: the milliseconds the text server took to embed the description, or null for one embedded beforehand
-  searched = [query, qs, embedded];
   const t0 = performance.now();
   const box = $("results");
   box.replaceChildren();
   const by = embedded === null ? "" : `; embedded in ${embedded} ms by the demo's text server`;
-  if (!declic) {
-    const { s, order } = plain(qs[baseModel()]);
-    const shown = order.filter((f) => sure(s[f]) >= HIDDEN_BELOW).slice(0, SHOWN);
-    $("status").textContent = `${shown.length} files for “${query}”, one image per video (its middle frame), ` +
-      `without Déclic: files, not moments, searched in ${Math.round(performance.now() - t0)} ms${by}.`;
-    shown.forEach((f, i) => {
-      const item = meta.items[f];
-      const c = card(item.kind === "photo" ? rowsOf[f][0] : middleRow(f), item,
-                     item.kind === "video" ? `the whole video, ${clock(item.duration)}` : "photo",
-                     `${Math.round(100 * sure(s[f]))} % sure it matches`);
-      if (sure(s[f]) < 0.05) c.classList.add("unlikely");
-      c.querySelector(".shot").append(el("span", "rank", String(i + 1)));
-      c.addEventListener("click", () => open(f, null));
-      box.append(c);
-    });
-    return;
-  }
   const hits = search(qs);
   const took = performance.now() - t0;
   const shown = hits.filter((h) => h.confidence >= HIDDEN_BELOW).slice(0, SHOWN);
   $("status").textContent = `${shown.length} moments for “${query}”: ${meta.count.toLocaleString("en")} frames and ` +
-    `photos searched by Déclic in ${Math.round(took)} ms, in your browser${by}.`;
+    `photos searched in ${Math.round(took)} ms, in your browser${by}.`;
   shown.forEach((h, i) => {
     const item = meta.items[h.item];
     const c = card(h.row, item, item.kind === "video" ? `${clock(h.start)} – ${clock(h.end)}` : "photo",
@@ -741,18 +673,16 @@ function textServer(config) {
 function numbers(sum) {
   $("t-video").textContent = pct(sum.video);
   $("t-moment").textContent = pct(sum.moment);
-  $("w-one").textContent = pct(sum.one_image);
-  $("w-declic").textContent = pct(sum.video);
   const panels = [
     { title: "Find the video among 979 personal videos", sub: "DiDeMo test: the right video in the first five",
-      rows: [["Déclic", sum.video, "on a CPU", true],
+      rows: [["whenframe", sum.video, "on a CPU", true],
              ["One image per video", sum.one_image, "its middle frame, SigLIP 2 B/16, on a CPU"],
              [sum.published.name, sum.published["R@5"], "trained on DiDeMo, on a GPU, as its authors report"]] },
     { title: "Find the moment among 979 videos", sub: "DiDeMo test: the right seconds in the first five, all videos at once",
-      rows: [["Déclic", sum.moment, "on a CPU", true],
+      rows: [["whenframe", sum.moment, "on a CPU", true],
              ["One keyframe per shot", sum.keyframe, "as home video tools index videos, on a CPU"]] },
     { title: "Place the moment in a given video", sub: "Charades-STA, never trained on it: the first answer right",
-      rows: [["Déclic", sum.charades, "on a CPU", true],
+      rows: [["whenframe", sum.charades, "on a CPU", true],
              ...sum.charades_others.map((x) => [x.name, x.R1, "as its authors report"])] },
   ];
   const top = Math.max(...panels.flatMap((p) => p.rows.map((r) => r[1])));
@@ -800,16 +730,11 @@ async function start() {
   const config = fetch("config.json").then((r) => r.json()).catch(() => ({}));
   $("status").textContent = "Loading the library's index…";
   [meta, Q, FILM] = await Promise.all([get("frames.json", "json"), get("queries.json", "json"), get("film.json", "json")]);
-  const [loaded, plainImages] = await Promise.all([
-    Promise.all(meta.models.map(async (m) => {
-      const [f, o, q] = await Promise.all([get(`frames.${m.name}.bin`), get(`offsets.${m.name}.bin`),
-                                           get(`queries.${m.name}.bin`)]);
-      return { ...m, frames: half(f), offsets: new Float32Array(o), queries: new Float32Array(q) };
-    })),
-    get(`baseline.${FILM.baseline.model}.bin`),
-  ]);
-  models = loaded;
-  base = half(plainImages);
+  models = await Promise.all(meta.models.map(async (m) => {
+    const [f, o, q] = await Promise.all([get(`frames.${m.name}.bin`), get(`offsets.${m.name}.bin`),
+                                         get(`queries.${m.name}.bin`)]);
+    return { ...m, frames: half(f), offsets: new Float32Array(o), queries: new Float32Array(q) };
+  }));
   rowsOf = meta.items.map(() => []);
   meta.item.forEach((f, i) => rowsOf[f].push(i));
   server = textServer(await config);
@@ -854,7 +779,6 @@ $("sound").addEventListener("click", () => {
   if (musicOn && music.preload === "none") music.preload = "auto";
   syncMusic();
 });
-document.querySelectorAll("[data-declic]").forEach((b) => b.addEventListener("click", () => setDeclic(b.dataset.declic === "1")));
 // the film pauses while it is out of sight, and goes on when it is back
 new IntersectionObserver(([e]) => {
   if (!e.isIntersecting && P.running) {

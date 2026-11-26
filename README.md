@@ -6,7 +6,7 @@
 
 <p align="center">
   <b>Describe a moment, find it in your videos. Write a story, get the film.</b><br>
-  Déclic, whenframe's own model, runs on your computer: no GPU, nothing sent anywhere.<br>
+  whenframe's own model runs on your computer: no GPU, nothing sent anywhere.<br>
   <a href="https://qthullie.github.io/whenframe/"><b>Watch it cut a film in your browser</b></a>
 </p>
 
@@ -30,9 +30,9 @@ whenframe film story.txt -o film.mp4                # one shot per sentence, cut
 whenframe supercut "fireworks" -o fireworks.mp4     # every moment of it, in the order they were filmed
 ```
 
-## Déclic, the model
+## The model
 
-Déclic is the model whenframe searches with: two image encoders that see
+whenframe searches with a model of its own: two image encoders that see
 differently (Google's SigLIP 2 and Meta's Perception Encoder), each frame
 rewritten by whenframe's own models with what the frames around it show,
 frames that match any text marked down, both encoders' scores added. It finds
@@ -40,7 +40,7 @@ the file, and the seconds where the moment happens, which is what lets
 `whenframe film` cut a film from a few sentences.
 
 <!-- table readme-compare -->
-|  | Déclic, on a CPU | others |
+|  | whenframe, on a CPU | others |
 |---|---|---|
 | **Find the video** among 979 (DiDeMo, in the first 5) | **51.1 %** | 25.4 % EventFormer (2024), trained on DiDeMo, on a GPU · 30.7 % one image per video |
 | **Find the moment** among 979 videos (DiDeMo, in the first 5) | **32.0 %** | 2.3 % one keyframe per shot, as home video tools index |

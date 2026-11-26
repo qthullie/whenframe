@@ -37,9 +37,5 @@
  "seconds": 3.0,
  "fade": 0.5,
  "shortest": 1.0,
- "candidates": 30,
- "baseline": {
-  "model": "siglip2-base",
-  "dim": 768
- }
+ "candidates": 30
 }

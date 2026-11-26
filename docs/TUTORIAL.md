@@ -53,8 +53,7 @@ on its only one, which can favour videos slightly; it was not measured.
 Each frame is looked at by two image encoders, Google's SigLIP 2 B/16 and
 Meta's PE core B/16, which learnt from different images and miss different
 things. Each encoder's frames then go through whenframe's own model trained on
-its frames (v3 and v4, below), and a search adds the two encoders' scores:
-together, this is Déclic, whenframe's model. On
+its frames (v3 and v4, below), and a search adds the two encoders' scores. On
 the four test sets, this found the most of everything measured: 43.72 on the
 mean of their primary metrics, more on each of them than SigLIP 2 B/16 with v3
 alone (41.90, the default until the eleventh round) and than SigLIP 2 So400m
@@ -224,7 +223,7 @@ written, and descriptions in other languages are searched as written.
 
 ## Films and supercuts
 
-Déclic finds the seconds where a moment happens; `whenframe film` cuts them
+whenframe finds the seconds where a moment happens; `whenframe film` cuts them
 into a film. Write the story, one sentence a line:
 
 ```text
@@ -377,9 +376,8 @@ defaults are the ones chosen on DiDeMo training videos.
 
 ## How it works
 
-Steps 2, 3 and 5 are Déclic, whenframe's model. A description taken for French
-is first translated into English on the computer
-([Opus-MT](https://github.com/Helsinki-NLP/Opus-MT) fr-en, greedily).
+A description taken for French is first translated into English on the
+computer ([Opus-MT](https://github.com/Helsinki-NLP/Opus-MT) fr-en, greedily).
 
 1. ffmpeg reads one frame per second; frames that barely differ from the last
    one kept are skipped.

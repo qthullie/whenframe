@@ -1112,7 +1112,7 @@ def readme_compare() -> dict[str, str]:
          f"**{pct(r['fusion-no-charades']['charades']['value'])} %**",
          " · ".join(f"{x['R1@0.5']:.1f} % {x['short']}" for x in others)],
     ]  # fmt: skip
-    return {"readme-compare": table(["", "Déclic, on a CPU", "others"], rows)}
+    return {"readme-compare": table(["", "whenframe, on a CPU", "others"], rows)}
 
 
 def charades_table() -> str | None:
