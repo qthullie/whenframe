@@ -78,5 +78,65 @@
    "normalise": "raw"
   },
   "sound_weight": 2.0
+ },
+ "small-noteacher": {
+  "spec": "small-noteacher=pe-core-s16-224:results/temporal/small-noteacher.npz@1",
+  "model": "pe-core-s16-224",
+  "weights": "results/temporal/small-noteacher.npz",
+  "alpha": 1.0,
+  "per": {},
+  "guide": 0.0,
+  "fuse": null,
+  "didemo": 0.2636688809402146,
+  "youcook2": 0.2520193861066236,
+  "unav": 0.41025641025641024,
+  "charades": 0.4296875,
+  "mean": 0.3389080443258121,
+  "speech": {
+   "weight": 0.05,
+   "pad": 5.0,
+   "normalise": "best"
+  },
+  "sound_weight": 1.5
+ },
+ "small-d1": {
+  "spec": "small-d1=pe-core-s16-224:results/temporal/small-d1.npz@1",
+  "model": "pe-core-s16-224",
+  "weights": "results/temporal/small-d1.npz",
+  "alpha": 1.0,
+  "per": {},
+  "guide": 0.0,
+  "fuse": null,
+  "didemo": 0.2738886050076648,
+  "youcook2": 0.2552504038772213,
+  "unav": 0.4205128205128206,
+  "charades": 0.4253472222222222,
+  "mean": 0.34374976290498227,
+  "speech": {
+   "weight": 0.005,
+   "pad": 5.0,
+   "normalise": "raw"
+  },
+  "sound_weight": 1.0
+ },
+ "small-d3": {
+  "spec": "small-d3=pe-core-s16-224:results/temporal/small-d3.npz@1",
+  "model": "pe-core-s16-224",
+  "weights": "results/temporal/small-d3.npz",
+  "alpha": 1.0,
+  "per": {},
+  "guide": 0.0,
+  "fuse": null,
+  "didemo": 0.27491057741440983,
+  "youcook2": 0.2617124394184168,
+  "unav": 0.41794871794871796,
+  "charades": 0.4348958333333333,
+  "mean": 0.34736689202871945,
+  "speech": {
+   "weight": 0.05,
+   "pad": 5.0,
+   "normalise": "best"
+  },
+  "sound_weight": 1.0
  }
 }
