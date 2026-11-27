@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- The thirteenth round tested a small model for phones once: PE core S/16 at
+  224 pixels, with whenframe's model trained on its frames and taught by v3
+  and v4 together (`scripts/round13.py`). Its files weigh 101 MB, a search of
+  the demo's library holds 0.29 GB of memory, and indexing costs 38 % of what
+  whenframe's model costs; but its mean on the four tests is 36.14, 82.7 % of
+  whenframe's model's 43.70, where 85 % was asked (criterion 44). It is not
+  shipped, and the tool is unchanged.
 - `whenframe film` cuts a film from a story, one shot per sentence, each the
   best moment found for it that the film does not use yet (a sentence ending
   with `#2` takes its second best; `--plan` prints the shots). `whenframe

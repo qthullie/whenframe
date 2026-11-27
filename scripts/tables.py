@@ -1090,6 +1090,74 @@ def round12_tables() -> dict[str, str]:
     return out
 
 
+LABEL13 = {"current": "whenframe's model (SigLIP 2 B/16 and PE core B/16, v3 and v4 together)",
+           "small": "the small model (PE core S/16 at 224 + whenframe's model)",
+           "pe-core-s16-224": "PE core S/16 at 224 alone"}  # fmt: skip
+RUNS13 = {"small-noteacher": "without a teacher", "small-d1": "taught by whenframe's model, weight 1",
+          "small-d3": "taught by whenframe's model, weight 3", "small": "the small model, as exported (kept)",
+          "small-no-charades": "*without Charades-STA's videos (beside)*",
+          "small-no-youcook2": "*without YouCook2's videos (beside)*"}  # fmt: skip
+
+
+def round13_tables() -> dict[str, str]:
+    """The thirteenth round: a small model for phones, PE core S/16 at 224 and whenframe's model on its frames, on
+    the tuning sets (stage 2) and once on the tests, against whenframe's model and its encoder alone."""
+    out, cols = {}, ("didemo", "charades", "youcook2", "unav")
+    head = ["DiDeMo R@5", "Charades-STA R1", "YouCook2 R@5", "UnAV-100 P@10", "mean"]
+    ft, fs = RESULTS / "round13_tuned.json", RESULTS / "round13_stage2.json"
+    if ft.exists() and fs.exists():
+        t, enc = json.loads(ft.read_text()), json.loads(fs.read_text())["encoder"]
+        names = {enc: LABEL13[enc]} | RUNS13
+        rows = [[name, *(pct(t[k][c]) for c in cols), f"{100 * t[k]['mean']:.2f}"] for k, name in names.items()
+                if k in t]  # fmt: skip
+        out["round13-tuning"] = table(["tuning sets", *head], rows)
+    f = RESULTS / "round13_test.json"
+    if not f.exists():
+        return out
+    r = json.loads(f.read_text())
+    cost, mem = r["cost"], r["memory"]
+    minutes = {"current": cost["current"], "small": cost["small"],
+               r["encoder"]: cost["encoders"][r["encoder"]]["cpu_min_per_hour"]}  # fmt: skip
+    peak = {"current": max(mem["current_gb"]), "small": max(mem["small_gb"])}
+    names = sorted(LABEL13, key=lambda n: -r[n]["mean"])
+    out["round13-test"] = table(
+        ["test sets, ranked by the mean", *head, "indexing, CPU min per hour", "a search's peak memory"],
+        [[LABEL13[n], *(pct(r[n][c]["value"]) for c in cols), f"**{100 * r[n]['mean']:.2f}**", f"{minutes[n]:.2f}",
+          f"{peak[n]:.2f} GB" if n in peak else ""] for n in names],
+    )  # fmt: skip
+    pairs = [("small", "current"), ("small", r["encoder"])]
+    out["round13-pairs"] = table(
+        ["the first finds more than the second?", "items better", "items worse", "sign test p"],
+        [[f"{LABEL13[a]} / {LABEL13[b]}", str(r["pairs"][f"{a} vs {b}"]["wins"]),
+          str(r["pairs"][f"{a} vs {b}"]["losses"]), f"{r['pairs'][f'{a} vs {b}']['p']:.2g}"] for a, b in pairs],
+    )  # fmt: skip
+    out["round13-left-out"] = table(
+        ["the test of a collection left out of training", "the small model", "trained without it", "change"],
+        [[f"{BENCH[x['test']]}, {('R1 at IoU >= 0.5' if x['test'] == 'charades' else 'R@5, speech + spans')}",
+          pct(x["small"]), pct(x["value"]), f"{100 * (x['value'] - x['small']):+.1f}"]
+         for x in r["left_out"].values()],
+    )  # fmt: skip
+    small, current, met = r["small"], r["current"], r["criteria"]
+    package = sum(v for k, v in r["files"]["bytes"].items() if k.startswith("whenframe/data/")) / 1e6
+    rows = [
+        ["43. the small model's files to download weigh at most 150 MB",
+         f"{r['files']['mb']:.1f} MB (its encoder's {r['files']['mb'] - package:.1f}, whenframe's {package:.1f})",
+         met["43"]],
+        ["44. its mean is at least 85 % of whenframe's model's: at least 37.15",
+         f"{100 * small['mean']:.2f}, {100 * r['share_of_current']:.1f} % of {100 * current['mean']:.2f}", met["44"]],
+        ["45. on DiDeMo's test, it puts the right video among its first five more often than EventFormer (25.4 %)",
+         f"{100 * small['didemo']['full']['video']['R@5']:.1f} %", met["45"]],
+        ["46. indexing with it costs at most half of what whenframe's model costs",
+         f"{100 * cost['share']:.0f} % ({cost['small']:.2f} against {cost['current']:.2f} CPU min per hour, "
+         "decoding included)", met["46"]],
+        ["47. a search of the demo's library holds at most 0.5 GB of memory",
+         f"{max(mem['small_gb']):.2f} GB (whenframe's model {max(mem['current_gb']):.2f} GB)", met["47"]],
+    ]  # fmt: skip
+    out["round13-criteria"] = table(["criterion (fixed before its test run)", "measured on test", "met"],
+                                    [[n, m, "yes" if ok else "no"] for n, m, ok in rows])  # fmt: skip
+    return out
+
+
 def readme_compare() -> dict[str, str]:
     """The README's comparison: whenframe's model (v3 and v4 together, the eleventh round's test), on a CPU, beside
     what others do on the same test sets: published systems as their authors report them (results/published_*.json),
@@ -1191,6 +1259,7 @@ def main() -> int:
     tables.update(round10_tables())
     tables.update(round11_tables())
     tables.update(round12_tables())
+    tables.update(round13_tables())
     tables.update(published_tables())
     tables.update(readme_compare())
     f2 = RESULTS / "didemo_test_round2.json"

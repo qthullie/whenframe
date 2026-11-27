@@ -702,6 +702,11 @@ model for the test, on all of them (`results/temporal/*.json`).
 | e3: adapter | 600 x 64 | 0 | 1 | 10 | 200 | 30.8 | 49.5 | 49.1 | 0.985 |
 | e4: adapter | 600 x 64 | 1 | 1 | 100 | 600 | 33.0 | 52.8 | 48.3 | 0.998 |
 | e5: adapter | 600 x 64 | 1 | 2 | 100 | 400 | 33.1 | 52.7 | 49.1 | 0.997 |
+| small-d1: adapter | 6000 x 128 | 1 | 2 | 30 | 5000 | 27.4 | 47.8 | 46.7 | 0.990 |
+| small-d3: adapter | 6000 x 128 | 1 | 2 | 30 | 4000 | 27.5 | 48.1 | 46.8 | 0.985 |
+| small-no-charades: adapter | 6000 x 128 | 1 | 2 | 30 | 2500 | 27.4 | 48.3 | 45.7 | 0.988 |
+| small-no-youcook2: adapter | 6000 x 128 | 1 | 2 | 30 | 5000 | 27.5 | 48.1 | 46.8 | 0.987 |
+| small-noteacher: adapter | 6000 x 128 | 1 | 2 | 30 | 5500 | 26.6 | 47.3 | 46.3 | 0.991 |
 | temporal-siglip2-base: adapter | 3000 x 128 | 1 | 2 | 100 | 1750 | 34.1 | 53.9 | 49.9 | 0.998 |
 | v2-infonce-s1: adapter | 3000 x 128 | 1 | 2 | 100 | 1500 | 33.4 | 52.7 | 48.9 | 0.999 |
 | v2-infonce-s2: adapter | 3000 x 128 | 1 | 2 | 100 | 1250 | 33.0 | 52.6 | 48.5 | 0.999 |
@@ -1496,3 +1501,96 @@ of the demo's library, its 232 videos and photos, peaked at 1.36 GB instead of
 4.78 GB, and the models a new library downloads weigh 1.43 GB instead of
 2.6 GB: SigLIP 2 B/16's tokenizer, image tower and text tower in 8 bits, and
 PE core B/16's.
+
+## Thirteenth round: a small model, for phones
+
+The thirteenth round of the protocol ([PROTOCOL.md](PROTOCOL.md)) asked
+whether a model of at most 150 MB, small enough for a phone or its browser,
+finds most of what whenframe's model finds by learning from it
+(`scripts/round13.py`, `results/round13_test.json`). Of Meta's two small
+Perception Encoders, S/16 and T/16, each at 224 and 384 pixels, two were
+within the limits on files and indexing cost, and S/16 at 224 had the higher
+tuning mean (stage 1). whenframe's model was then trained on its frames,
+taught by v3 and v4 together (stage 2).
+
+The small model did not meet criterion 44: its mean on the tests is 82.7 % of
+whenframe's model's, where 85 % was asked. As fixed before the test, it is
+not shipped: `--model small` is not added, and the demo site searches as
+before. It met the four other criteria: its files weigh 101 MB instead of
+1.43 GB, a search of the demo's library holds 0.29 GB instead of 1.34 GB,
+indexing costs 38 % of what whenframe's model costs, and on DiDeMo's test it
+puts the right video among its first five more often than the best published
+system.
+
+<!-- table round13-criteria -->
+| criterion (fixed before its test run) | measured on test | met |
+|---|---|---|
+| 43. the small model's files to download weigh at most 150 MB | 101.2 MB (its encoder's 94.4, whenframe's 6.8) | yes |
+| 44. its mean is at least 85 % of whenframe's model's: at least 37.15 | 36.14, 82.7 % of 43.70 | no |
+| 45. on DiDeMo's test, it puts the right video among its first five more often than EventFormer (25.4 %) | 38.9 % | yes |
+| 46. indexing with it costs at most half of what whenframe's model costs | 38 % (4.97 against 12.99 CPU min per hour, decoding included) | yes |
+| 47. a search of the demo's library holds at most 0.5 GB of memory | 0.29 GB (whenframe's model 1.34 GB) | yes |
+<!-- /table -->
+
+### On the test sets
+
+<!-- table round13-test -->
+| test sets, ranked by the mean | DiDeMo R@5 | Charades-STA R1 | YouCook2 R@5 | UnAV-100 P@10 | mean | indexing, CPU min per hour | a search's peak memory |
+|---|---|---|---|---|---|---|---|
+| whenframe's model (SigLIP 2 B/16 and PE core B/16, v3 and v4 together) | 32.0 | 55.4 | 33.0 | 54.4 | **43.70** | 12.99 | 1.34 GB |
+| the small model (PE core S/16 at 224 + whenframe's model) | 21.2 | 48.1 | 23.5 | 51.7 | **36.14** | 4.97 | 0.29 GB |
+| PE core S/16 at 224 alone | 18.6 | 39.3 | 21.3 | 51.7 | **32.72** | 4.93 |  |
+<!-- /table -->
+
+<!-- table round13-pairs -->
+| the first finds more than the second? | items better | items worse | sign test p |
+|---|---|---|---|
+| the small model (PE core S/16 at 224 + whenframe's model) / whenframe's model (SigLIP 2 B/16 and PE core B/16, v3 and v4 together) | 503 | 1331 | 4.4e-86 |
+| the small model (PE core S/16 at 224 + whenframe's model) / PE core S/16 at 224 alone | 887 | 425 | 7.2e-38 |
+<!-- /table -->
+
+On PE core S/16's frames, whenframe's model finds 3.42 points more than the
+encoder alone: 8.8 more on Charades-STA, 2.7 on DiDeMo and 2.3 on YouCook2,
+the same P@10 on UnAV-100. Against whenframe's model it finds less on each
+test, the most on DiDeMo (10.7 points) and YouCook2 (9.5), the least on
+UnAV-100 (2.7). On the tuning sets it had reached 84.1 % of whenframe's
+model's mean. The reference, whenframe's model measured again by the same
+code, gave the twelfth round's numbers exactly.
+
+Beside, deciding nothing: in a browser (onnxruntime-web's WebAssembly on one
+thread, headless Chromium on this machine), the small model's text tower
+embeds a description in 125 ms (median of 230, 251 ms at most) after 4.6
+seconds to load, its token ids the tool's and its embeddings at a cosine of
+at least 0.999 to the tool's. The two files a page would download for it weigh
+64.9 MB. On DiDeMo's test the right video is among its first five for
+38.9 % of the descriptions, against 50.9 % for whenframe's model and 25.4 %
+for EventFormer, as its authors report it.
+
+### A library never seen
+
+<!-- table round13-left-out -->
+| the test of a collection left out of training | the small model | trained without it | change |
+|---|---|---|---|
+| Charades-STA, R1 at IoU >= 0.5 | 48.1 | 40.5 | -7.6 |
+| YouCook2, R@5, speech + spans | 23.5 | 22.2 | -1.3 |
+<!-- /table -->
+
+### Stage 2, on the tuning sets
+
+<!-- table round13-tuning -->
+| tuning sets | DiDeMo R@5 | Charades-STA R1 | YouCook2 R@5 | UnAV-100 P@10 | mean |
+|---|---|---|---|---|---|
+| PE core S/16 at 224 alone | 24.6 | 35.9 | 23.6 | 40.0 | 31.02 |
+| without a teacher | 26.4 | 43.0 | 25.2 | 41.0 | 33.89 |
+| taught by whenframe's model, weight 1 | 27.4 | 42.5 | 25.5 | 42.1 | 34.37 |
+| taught by whenframe's model, weight 3 | 27.5 | 43.5 | 26.2 | 41.8 | 34.74 |
+| the small model, as exported (kept) | 27.5 | 43.5 | 26.3 | 41.8 | 34.78 |
+| *without Charades-STA's videos (beside)* | 27.4 | 37.2 | 25.7 | 41.0 | 32.83 |
+| *without YouCook2's videos (beside)* | 27.5 | 43.8 | 24.4 | 41.0 | 34.19 |
+<!-- /table -->
+
+The teacher's losses at weight 3 gave the highest tuning mean, 0.85 points
+above the run without a teacher. Exported as the package would ship it, in
+float16, it found one more of YouCook2's 619 tuning steps. Stage 1, the four
+encoders alone with their files, indexing costs and text times, is recorded
+in [PROTOCOL.md](PROTOCOL.md).

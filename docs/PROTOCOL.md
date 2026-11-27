@@ -1948,6 +1948,36 @@ The reference, the current model with its text towers in 8 bits, is measured
 again by the same code: its numbers must be the twelfth round's. The test
 runs next, once.
 
+### The test
+
+**Run once** (`scripts/round13.py test`; `results/round13_test.json`), after
+the record above was pushed, on the idle machine:
+
+- 43: the small model's files weigh 101.2 MB, its encoder's five 94.4 MB and
+  whenframe's two 6.8 MB (met);
+- 44: its mean on the four tests is 36.14 (DiDeMo 21.2, Charades-STA 48.1,
+  YouCook2 23.5, UnAV-100 51.7), 82.7 % of the current model's 43.70, where
+  37.15 was asked (**not met**);
+- 45: on DiDeMo's test it puts the right video among its first five for
+  38.9 % of the descriptions, against EventFormer's 25.4 % (met);
+- 46: indexing with it costs 4.97 CPU minutes per hour of DiDeMo's test
+  videos, against 12.99 for the current model, 38 % (met); the small model
+  adds 0.040 of them, v3 and v4 0.044 each;
+- 47: a search of the demo's library peaked at 0.29 GB at most over the
+  three descriptions, the current model's at 1.34 GB (met).
+
+The reference gave the twelfth round's numbers exactly (mean 43.70). Beside:
+the encoder alone has a mean of 32.72, and the small model finds more than
+it (887 items better, 425 worse, sign test p = 7.2e-38); its text tower
+embeds a description in a browser in 125 ms (median of 230), after 4.6
+seconds to load; trained without Charades-STA's videos it finds 40.5 on
+Charades-STA's test (48.1 with them), without YouCook2's 22.2 on YouCook2's
+(23.5).
+
+**Decision.** Criterion 44 is not met, so the small model is not shipped:
+whenframe keeps its one model, `--model small` is not added, and the demo
+site searches as it did. The test is not run again.
+
 ## Fourteenth round: a large model, at most three times the cost
 
 Written before any of its numbers was computed.
