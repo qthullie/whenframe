@@ -15,6 +15,10 @@ Stage 2, whenframe's model on the kept candidate's frames:
     python scripts/round13.py texts                # the collections' descriptions, embedded by its text tower
     ROUND11_TEACHER_DIR=/dev/shm/... python scripts/round13.py stage2 ARGS   # results/round13_stage2.json
 
+The test, once, after stage 2 is recorded in docs/PROTOCOL.md:
+
+    python scripts/round13.py test ARGS --media DEMO_MEDIA --web WEB_FOLDER --ort ORT_DIST   # results/round13_test.json
+
 ARGS are scripts/compare.py's (--annotations, --youcook2-annotations, --unav-annotations, --clap-dir, ...).
 
 `bank` embeds DiDeMo's query bank with each candidate's text tower and chooses, as the ninth round chose PE core
@@ -32,6 +36,16 @@ them for v5 (`teacher`: every training frame through both, kept where ROUND11_TE
 (alpha 1) as the package would ship it, and trains its two left-out runs, taught, if it is, by the fusion of v3's and
 v4's own left-out runs. A stopped stage resumes: a run whose weights exist is not trained again (its logged recipe
 is checked), a candidate measured with the same weights is not measured again.
+
+`test` measures, once, the small model, its encoder alone and the current model with its text towers in 8 bits (as
+the twelfth round tested it: the same numbers again) on the four tests, and the protocol's criteria 43 to 47: the
+files a small library downloads and the package's share of them; the mean; DiDeMo's right video among the first
+five; the indexing cost, its encoder's as stage 1 measured it and its model's over DiDeMo's test frames, against
+the current model's both; and the peak memory of a search of the demo's library, indexed with the small model as
+the package would ship it (`as-shipped`: its query bank and weights read from results/cache/round13_package, since
+whenframe/data holds neither until the test decides), each search a process of its own. Reported beside: the text
+tower's time per description in a browser (scripts/web_text.mjs, on the web tower scripts/small.py web built), and
+each left-out run on the test it left out.
 """
 
 from __future__ import annotations
@@ -337,9 +351,202 @@ def stage2(args) -> None:
     log(f"kept {kept}, exported as {small.name}: record stage 2 in docs/PROTOCOL.md, then run the test once")
 
 
+# ---------------------------------------------------------------- the test, once
+TEST = ROOT / "results" / "round13_test.json"
+PARTIAL = TEST.with_name("round13_test.partial.json")  # the four tests' numbers, kept if a later step stops
+MIN_MEAN = 0.3715  # criterion 44, as written: 85 % of the twelfth round's 43.70
+EVENTFORMER = 0.254  # criterion 45: the best published system's right video among its first five (DiDeMo's test)
+MAX_SEARCH_GB = 0.5  # criterion 47
+QUERIES = ("a geyser shooting steam into the sky", "a pipe band marching down the street", "fireworks")  # round 12's
+BENCHES = ("didemo", "charades", "youcook2", "unav")
+LEFT_OUT = {"charades": "small-no-charades", "youcook2": "small-no-youcook2"}
+PACKAGE = CACHE / "round13_package"  # the small model's query bank and weights as the package would ship them
+SMALL_LIBRARY = CACHE / "site-library-small"  # the demo's library, indexed with the small model
+# a command in a process of its own, whose peak (KB) its parent reads once it has ended (as the twelfth round)
+PEAK = ("import resource, subprocess, sys; subprocess.run(sys.argv[1:], check=True, stdout=subprocess.DEVNULL); "
+        "print(resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss)")  # fmt: skip
+
+
+def as_shipped(package: Path, argv: list[str]) -> int:
+    """`whenframe ARGV`, the small model's query bank and weights read from PACKAGE, as whenframe/data would hold
+    them; the encoder's files are those in whenframe's cache."""
+    from whenframe import bank, cli, temporal
+
+    model = json.loads(STAGE1.read_text())["kept"]
+    load_bank, load_weights = bank.load, temporal.load
+
+    def small_bank(m: str):
+        return np.load(package / f"bank-{m}.npy").astype(np.float32) if m == model else load_bank(m)
+
+    def small_weights(path=None, name: str = "temporal-siglip2-base.npz"):
+        if path is None and name == f"temporal-{model}.npz":
+            return load_weights(package / name)
+        return load_weights(path, name)
+
+    bank.load, temporal.load = small_bank, small_weights
+    return cli.main(argv)
+
+
+def package(args, model: str, tuned: dict) -> dict:
+    """The small model's query bank (DiDeMo's 4,096 descriptions embedded by its text tower, in float16, as the
+    package ships each model's) and its weights with the speech and sound settings chosen for it on the tuning sets
+    (scripts/temporal.py export --settings): the same weights as the file tested."""
+    PACKAGE.mkdir(parents=True, exist_ok=True)
+    np.save(PACKAGE / f"bank-{model}.npy", np.load(CACHE / f"didemo_bank_text_{model}.npy").astype(np.float16))
+    record = json.loads(STAGE2.read_text())
+    out = PACKAGE / f"temporal-{model}.npz"
+    subprocess.run([sys.executable, "-I", "scripts/temporal.py", "export", "--annotations", args.annotations,
+                    "--encoder", model, "--model", record["runs"][record["kept"]]["weights"], "--settings",
+                    f"{TUNED.relative_to(ROOT)}:small", "--out", str(out)], cwd=ROOT, check=True)  # fmt: skip
+    shipped, tested = np.load(out), np.load(ROOT / record["small"])
+    assert set(shipped.files) - {"search"} == set(tested.files), "not the same weights"
+    assert all(np.array_equal(shipped[k], tested[k]) for k in tested.files), "not the same weights"
+    assert json.loads(str(shipped["search"])) == {"speech": tuned["small"]["speech"],
+                                                  "sound_weight": tuned["small"]["sound_weight"]}  # fmt: skip
+    return {p.name: p.stat().st_size for p in (PACKAGE / f"bank-{model}.npy", out)}
+
+
+def small_library(args, model: str) -> None:
+    """The demo's library indexed with the small model, as `whenframe index` indexes a new library (its settings
+    the defaults, its frames through the small model); an interrupted build resumes."""
+    from dataclasses import asdict
+
+    from whenframe.library import Settings
+
+    SMALL_LIBRARY.mkdir(parents=True, exist_ok=True)
+    cfg = SMALL_LIBRARY / "config.json"
+    settings = asdict(Settings(model=model, temporal=f"temporal-{model}"))
+    if not cfg.exists():
+        cfg.write_text(json.dumps(settings, indent=1))
+    assert json.loads(cfg.read_text()) == settings, f"{SMALL_LIBRARY} was built otherwise"
+    subprocess.run([sys.executable, "-I", "scripts/round13.py", "as-shipped", str(PACKAGE), "--library",
+                    str(SMALL_LIBRARY), "index", args.media], cwd=ROOT, check=True)  # fmt: skip
+
+
+def peak_gb(cmd: list[str]) -> float:
+    r = subprocess.run([sys.executable, "-c", PEAK, *cmd], cwd=ROOT, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr[-3000:]
+    return int(r.stdout.strip().splitlines()[-1]) * 1024 / 1e9
+
+
+def four(b, c, speech, sound) -> dict:
+    """A candidate's scores on the four tests."""
+    return {"didemo": b.didemo_score(c, "test"), "charades": b.charades_score(c),
+            "youcook2": b.youcook2_score(c, "test", speech), "unav": b.unav_score(c, "test", sound)}  # fmt: skip
+
+
+def chosen_for(t: dict):
+    from whenframe.speech import SpeechConfig
+
+    sp = t["speech"]
+    return SpeechConfig(sp["weight"], sp["pad"], sp["normalise"]), t["sound_weight"]
+
+
+def test(args) -> None:
+    import compare
+    import round12
+    from compare import Benchmarks, Words, adapter_cost, candidate, paired
+
+    from whenframe.encoder import MODELS, cache_dir
+
+    assert not TEST.exists(), f"{TEST.relative_to(ROOT)} exists: the test is run once"
+    model = kept_model()
+    with_banks()
+    tuned = json.loads(TUNED.read_text())
+    missing = [n for n in ("small", model, *LEFT_OUT.values()) if n not in tuned]
+    assert not missing, f"not measured on the tuning sets: {missing}"
+    for need in (args.media, args.web, args.ort):
+        assert need and Path(need).exists(), "the test needs --media, --web and --ort"
+    # what the measures need, before any number: the package's files, the demo's library indexed with them
+    shipped = package(args, model, tuned)
+    small_library(args, model)
+    b = Benchmarks(args)
+
+    if PARTIAL.exists():  # the four tests' numbers, measured once already
+        res = json.loads(PARTIAL.read_text())
+    else:
+        items = {}
+        # the reference: the current model, its text towers in 8 bits, as the twelfth round tested it
+        round12.register_eight()
+        compare.WORDS = Words("text8", towers=dict(round12.EIGHT))
+        current, speech, sound = round12.fusion()
+        items["current"] = four(b, current, speech, sound)
+        compare.WORDS = Words()
+        for name in ("small", model):
+            items[name] = four(b, candidate(tuned[name]["spec"]), *chosen_for(tuned[name]))
+        res = {n: {k: {"value": v["value"], "full": v["full"]} for k, v in s.items()} for n, s in items.items()}
+        for n in items:
+            res[n]["mean"] = float(np.mean([res[n][k]["value"] for k in BENCHES]))
+            log(f"{n}: " + ", ".join(f"{k} {100 * res[n][k]['value']:.1f}" for k in BENCHES)
+                + f"; mean {100 * res[n]['mean']:.2f}")  # fmt: skip
+        res["pairs"] = {"small vs current": paired(items["small"], items["current"]),
+                        f"small vs {model}": paired(items["small"], items[model])}  # fmt: skip
+        twelfth = json.loads(round12.TEST2.read_text())["runs"]["8bit"]
+        res["twelfth_round_unchanged"] = all(res["current"][k]["value"] == twelfth[k] for k in BENCHES)
+        res["left_out"] = {}
+        for bench, n in LEFT_OUT.items():  # each left-out run on the test it left out
+            c, (speech, sound) = candidate(tuned[n]["spec"]), chosen_for(tuned[n])
+            s = b.charades_score(c) if bench == "charades" else b.youcook2_score(c, "test", speech)
+            res["left_out"][n] = {"test": bench, "value": s["value"], "small": res["small"][bench]["value"]}
+        PARTIAL.write_text(json.dumps(res, indent=1))
+
+    # 43: the files a new small library downloads (the encoder's, as whenframe's cache holds them), and the package's
+    spec = MODELS[model]
+    folder = cache_dir() / "models" / spec.repo.replace("/", "--")
+    names = [spec.tokenizer_file]
+    for f in (spec.vision_file, spec.text_file):
+        names += [f, f.removesuffix(".xml") + ".bin"]
+    files = {n: (folder / n).stat().st_size for n in names} | {f"whenframe/data/{n}": s for n, s in shipped.items()}
+    web = Path(args.web)
+    web_files = {n: (web / n).stat().st_size for n in ("onnx/text_model_web.onnx", "merges.txt")}
+    # 46: indexing, the encoder's cost as stage 1 measured it (decoding included) and its model's over DiDeMo's test
+    # frames, against the current model's two encoders and v3's and v4's
+    costs = json.loads((ROOT / "results" / "round13_cost.json").read_text())
+    current = round12.fusion()[0]
+    adapters = {"small": adapter_cost(b, candidate(tuned["small"]["spec"])), "v3": adapter_cost(b, current),
+                "v4": adapter_cost(b, current.fuse[0])}  # fmt: skip
+    small_cost = costs[model]["cpu_min_per_hour"] + adapters["small"]["cpu_min_per_hour"]
+    current_cost = costs[CURRENT]["cpu_min_per_hour"] + sum(adapters[k]["cpu_min_per_hour"] for k in ("v3", "v4"))
+    # 47: each search a process of its own; the current model's on the demo's library as the site was built
+    small_peaks = [peak_gb([sys.executable, "-I", "scripts/round13.py", "as-shipped", str(PACKAGE), "--library",
+                            str(SMALL_LIBRARY), "search", q]) for q in QUERIES]  # fmt: skip
+    current_peaks = [peak_gb([sys.executable, "-I", "-m", "whenframe", "--library", str(CACHE / "site-library"),
+                              "search", q]) for q in QUERIES]  # fmt: skip
+    # beside: the web tower in a browser, one description at a time
+    subprocess.run(["node", "scripts/web_text.mjs", str(web), args.ort], cwd=ROOT, check=True)
+    browser = json.loads((web / "web_browser.json").read_text())
+    small = res["small"]
+    res |= {
+        "encoder": model,
+        "files": {"bytes": files, "mb": sum(files.values()) / 1e6, "web": web_files,
+                  "web_mb": sum(web_files.values()) / 1e6},
+        "cost": {"small": small_cost, "current": current_cost, "encoders": {model: costs[model],
+                 CURRENT: costs[CURRENT]}, "adapters": adapters,
+                 "share": small_cost / current_cost},
+        "memory": {"small_gb": small_peaks, "current_gb": current_peaks, "queries": list(QUERIES)},
+        "browser": {k: browser[k] for k in ("median_ms", "max_ms", "load_ms", "threads", "passed", "texts")},
+        "share_of_current": small["mean"] / res["current"]["mean"],
+    }  # fmt: skip
+    res["criteria"] = {
+        "43": res["files"]["mb"] <= MAX_MB,
+        "44": small["mean"] >= MIN_MEAN,
+        "45": small["didemo"]["full"]["video"]["R@5"] > EVENTFORMER,
+        "46": small_cost <= MAX_COST_SHARE * current_cost,
+        "47": max(small_peaks) <= MAX_SEARCH_GB,
+    }
+    TEST.write_text(json.dumps(res, indent=1))
+    PARTIAL.unlink()
+    log(f"files {res['files']['mb']:.1f} MB; mean {100 * small['mean']:.2f} (current {100 * res['current']['mean']:.2f}"
+        f", the twelfth round's again: {res['twelfth_round_unchanged']}); DiDeMo's video among the first five "
+        f"{100 * small['didemo']['full']['video']['R@5']:.1f} %; cost {small_cost:.2f} against {current_cost:.2f} CPU "
+        f"min per hour; search peak {max(small_peaks):.2f} GB (current {max(current_peaks):.2f}); browser "
+        f"{browser['median_ms']:.0f} ms per description")  # fmt: skip
+    log(f"criteria {res['criteria']}: wrote {TEST.relative_to(ROOT)}")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("stage", choices=["bank", "tune", "cost", "stage1", "texts", "stage2"])
+    ap.add_argument("stage", choices=["bank", "tune", "cost", "stage1", "texts", "stage2", "test"])
     ap.add_argument("--parallel", type=int, default=3, help="stage2: runs trained at once")
     ap.add_argument("--annotations", help="DiDeMo's didemo_train.json")
     ap.add_argument("--test-annotations")
@@ -349,9 +556,16 @@ def main() -> None:
     ap.add_argument("--clap-dir")
     ap.add_argument("--model-dir")
     ap.add_argument("--videos", help="cost: the folder of DiDeMo's test videos")
+    ap.add_argument("--media", help="test: the folder of the demo's videos and photos (site/library.json's)")
+    ap.add_argument("--web", help="test: the folder of the web tower (scripts/small.py web)")
+    ap.add_argument("--ort", help="test: onnxruntime-web's dist folder (scripts/web_text.mjs)")
     args = ap.parse_args()
-    {"bank": bank, "tune": tune, "cost": cost, "stage1": stage1, "texts": texts, "stage2": stage2}[args.stage](args)
+    stages = {"bank": bank, "tune": tune, "cost": cost, "stage1": stage1, "texts": texts, "stage2": stage2,
+              "test": test}  # fmt: skip
+    stages[args.stage](args)
 
 
 if __name__ == "__main__":
+    if sys.argv[1:2] == ["as-shipped"]:  # python scripts/round13.py as-shipped PACKAGE WHENFRAME_ARGS...
+        sys.exit(as_shipped(Path(sys.argv[2]), sys.argv[3:]))
     main()
