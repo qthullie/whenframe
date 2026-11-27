@@ -7,5 +7,14 @@
   "encode_cpu_min_per_hour": 2.2510998687241126,
   "cpu_min_per_hour": 4.93476454319546,
   "encode_ms_per_frame": 43.235356571188014
+ },
+ "pe-core-s16-384": {
+  "videos": 100,
+  "hours": 1.5198605494444437,
+  "frames": 4746,
+  "decode_cpu_min_per_hour": 2.860077876830381,
+  "encode_cpu_min_per_hour": 7.523038163498727,
+  "cpu_min_per_hour": 10.38311604032911,
+  "encode_ms_per_frame": 144.55080804888365
  }
 }
