@@ -38,5 +38,25 @@
    "normalise": "raw"
   },
   "sound_weight": 1.0
+ },
+ "pe-core-t16-224": {
+  "spec": "pe-core-t16-224=pe-core-t16-224:",
+  "model": "pe-core-t16-224",
+  "weights": null,
+  "alpha": 1.0,
+  "per": {},
+  "guide": 0.0,
+  "fuse": null,
+  "didemo": 0.17782319877363312,
+  "youcook2": 0.22617124394184168,
+  "unav": 0.37948717948717947,
+  "charades": 0.3159722222222222,
+  "mean": 0.2748634611062191,
+  "speech": {
+   "weight": 0.01,
+   "pad": 0.0,
+   "normalise": "raw"
+  },
+  "sound_weight": 1.5
  }
 }
