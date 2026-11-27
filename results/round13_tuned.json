@@ -138,5 +138,65 @@
    "normalise": "best"
   },
   "sound_weight": 1.0
+ },
+ "small": {
+  "spec": "small=pe-core-s16-224:results/temporal/temporal-pe-core-s16-224-small.npz@1",
+  "model": "pe-core-s16-224",
+  "weights": "results/temporal/temporal-pe-core-s16-224-small.npz",
+  "alpha": 1.0,
+  "per": {},
+  "guide": 0.0,
+  "fuse": null,
+  "didemo": 0.27491057741440983,
+  "youcook2": 0.2633279483037157,
+  "unav": 0.41794871794871796,
+  "charades": 0.4348958333333333,
+  "mean": 0.3477707692500442,
+  "speech": {
+   "weight": 0.05,
+   "pad": 5.0,
+   "normalise": "best"
+  },
+  "sound_weight": 1.0
+ },
+ "small-no-charades": {
+  "spec": "small-no-charades=pe-core-s16-224:results/temporal/small-no-charades.npz@1",
+  "model": "pe-core-s16-224",
+  "weights": "results/temporal/small-no-charades.npz",
+  "alpha": 1.0,
+  "per": {},
+  "guide": 0.0,
+  "fuse": null,
+  "didemo": 0.2743995912110373,
+  "youcook2": 0.2568659127625202,
+  "unav": 0.41025641025641024,
+  "charades": 0.3715277777777778,
+  "mean": 0.32826242300193637,
+  "speech": {
+   "weight": 0.005,
+   "pad": 0.0,
+   "normalise": "raw"
+  },
+  "sound_weight": 1.5
+ },
+ "small-no-youcook2": {
+  "spec": "small-no-youcook2=pe-core-s16-224:results/temporal/small-no-youcook2.npz@1",
+  "model": "pe-core-s16-224",
+  "weights": "results/temporal/small-no-youcook2.npz",
+  "alpha": 1.0,
+  "per": {},
+  "guide": 0.0,
+  "fuse": null,
+  "didemo": 0.27491057741440983,
+  "youcook2": 0.24394184168012925,
+  "unav": 0.4102564102564102,
+  "charades": 0.4383680555555556,
+  "mean": 0.3418692212266262,
+  "speech": {
+   "weight": 0.01,
+   "pad": 5.0,
+   "normalise": "raw"
+  },
+  "sound_weight": 1.5
  }
 }

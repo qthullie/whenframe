@@ -1849,6 +1849,105 @@ at 384 just over the limit (6.4537 against 6.4530); both weigh less than
 31.02, against 27.49 for T/16 at 224). T/16 at 384 within them would not
 have changed it (30.74). Stage 2 runs on S/16 at 224's frames.
 
+### Recorded before the test
+
+**Stage 2's numbers** (`scripts/round13.py texts` and `stage2`;
+`results/round13_stage2.json`, `results/round13_tuned.json`, each run's log
+in `results/temporal/`), recorded before the test.
+
+S/16 at 224 embedded the frames of the four collections and of the four
+tests at v4's instants, and its text tower the collections' descriptions.
+The teacher, the current model's v3 and v4 fused over every training frame
+as in the eleventh round, was kept in memory (`/dev/shm`), as there.
+
+The three runs trained with v4's flags on its frames (width 256, two layers,
+four heads, the leash at 30, 6,000 steps), their logged recipe checked. Each
+kept its best check, the mean of DiDeMo's tuning R@5 and Charades-STA's
+held-out R1:
+
+- without a teacher: step 5,000 (34.7);
+- taught, weight 1: step 5,000 (35.0);
+- taught, weight 3: step 5,500 (35.5).
+
+Their speech and sound weights, chosen on the tuning sets (what is said
+within 5 seconds of a frame, for the three):
+
+- without a teacher: speech 0.05 (`normalise` best); sound 1.5;
+- taught, weight 1: speech 0.005; sound 1;
+- taught, weight 3: speech 0.05 (`normalise` best); sound 1.
+
+**Kept: the run taught at weight 3**, the highest mean, 3.72 points above
+its encoder alone. It is exported as the package would ship it, alpha 1
+(`results/temporal/temporal-pe-core-s16-224-small.npz`, 1,321,728 weights),
+and measured again as exported, its weights in float16 as the package ships
+them: the same on DiDeMo, Charades-STA and UnAV-100, one more of YouCook2's
+619 tuning steps found (26.3 against 26.2), and the same speech and sound
+weights chosen. That is the small model, its tuning mean 34.78.
+
+Its two left-out runs were trained with its recipe, taught by the fusion of
+v3's and v4's own left-out runs, as in the eleventh round. The teacher
+without YouCook2's videos was computed while the three runs were being
+measured, by the same code, ahead of its turn. Each kept its best check:
+
+- without Charades-STA's videos: step 2,500 (27.4, DiDeMo's tuning R@5
+  alone, as only a run that trains on Charades-STA is checked on its
+  held-out videos);
+- without YouCook2's videos: step 6,000 (35.7).
+
+Their speech and sound weights, chosen on the tuning sets:
+
+- without Charades-STA's videos: speech 0.005, what is said within the
+  moment; sound 1.5;
+- without YouCook2's videos: speech 0.01, within 5 seconds of a frame;
+  sound 1.5.
+
+| on the tuning sets | DiDeMo | Charades-STA | YouCook2 | UnAV-100 | mean |
+|---|---|---|---|---|---|
+| S/16 at 224 alone | 24.6 | 35.9 | 23.6 | 40.0 | 31.02 |
+| without a teacher | 26.4 | 43.0 | 25.2 | 41.0 | 33.89 |
+| taught, weight 1 | 27.4 | 42.5 | 25.5 | 42.1 | 34.37 |
+| taught, weight 3 | 27.5 | 43.5 | 26.2 | 41.8 | 34.74 |
+| **the small model, as exported** | **27.5** | **43.5** | **26.3** | **41.8** | **34.78** |
+| without Charades-STA's videos | 27.4 | 37.2 | 25.7 | 41.0 | 32.83 |
+| without YouCook2's videos | 27.5 | 43.8 | 24.4 | 41.0 | 34.19 |
+
+For scale, deciding nothing: on the tuning sets the current model's mean is
+41.34 (the twelfth round, its text towers then in full precision), and the
+small model's 34.78 is 84.1 % of it. Criterion 44 asks for 85 % of the
+current model's mean on the tests.
+
+**How criteria 43, 46 and 47 are read**, fixed before the test:
+
+- 43: the files a new library with the small model downloads. These are its
+  encoder's five, as whenframe's cache holds them (CLIP's tokenizer, and
+  each tower's XML and its weights in 8 bits), and the two whenframe's
+  package adds for it (its query bank in float16, and its weights with their
+  speech and sound settings). Reported beside: the two files the demo site
+  downloads instead to embed a description in the browser (the text tower in
+  ONNX, in 8 bits, and CLIP's merges).
+- 46: indexing with the small model costs its encoder's CPU minutes per hour
+  of DiDeMo's test videos as stage 1 measured them (4.93, decoding
+  included), plus the CPU time of the small model over the same videos'
+  frames, per hour, as the fifth round measured it. The current model's is
+  its two encoders' (12.91, measured just after), plus v3's and v4's over
+  their frames, measured the same way.
+- 47: the demo's library (67 videos and 165 photos) is indexed with the small
+  model as the package would ship it. Its query bank and weights are read
+  from the files the test writes, since `whenframe/data` holds neither until
+  the test decides. The library is then searched with the twelfth round's
+  three descriptions ("a geyser shooting steam into the sky", "a pipe band
+  marching down the street", "fireworks"), each search a process of its own,
+  and the highest peak counts. Reported beside: the current model's peaks,
+  on the demo's library as the site was built.
+
+That path was tried once before the test, to check only that it runs, on
+three of the demo's files copied to a scratch folder: they were indexed and
+searched, and nothing was measured.
+
+The reference, the current model with its text towers in 8 bits, is measured
+again by the same code: its numbers must be the twelfth round's. The test
+runs next, once.
+
 ## Fourteenth round: a large model, at most three times the cost
 
 Written before any of its numbers was computed.

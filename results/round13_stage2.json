@@ -1,0 +1,79 @@
+{
+ "encoder": "pe-core-s16-224",
+ "kept": "small-d3",
+ "small": "results/temporal/temporal-pe-core-s16-224-small.npz",
+ "small_tuning": {
+  "didemo": 0.27491057741440983,
+  "charades": 0.4348958333333333,
+  "youcook2": 0.2633279483037157,
+  "unav": 0.41794871794871796,
+  "mean": 0.3477707692500442
+ },
+ "runs": {
+  "small-noteacher": {
+   "weights": "results/temporal/small-noteacher.npz",
+   "best_step": 5000,
+   "best": 0.3466781904701073,
+   "seconds": 6567.3824634552,
+   "tuning": {
+    "didemo": 0.2636688809402146,
+    "charades": 0.4296875,
+    "youcook2": 0.2520193861066236,
+    "unav": 0.41025641025641024,
+    "mean": 0.3389080443258121
+   }
+  },
+  "small-d1": {
+   "weights": "results/temporal/small-d1.npz",
+   "best_step": 5000,
+   "best": 0.34961791361494354,
+   "seconds": 6781.066569328308,
+   "tuning": {
+    "didemo": 0.2738886050076648,
+    "charades": 0.4253472222222222,
+    "youcook2": 0.2552504038772213,
+    "unav": 0.4205128205128206,
+    "mean": 0.34374976290498227
+   }
+  },
+  "small-d3": {
+   "weights": "results/temporal/small-d3.npz",
+   "best_step": 5500,
+   "best": 0.35490320537387154,
+   "seconds": 6771.052401542664,
+   "tuning": {
+    "didemo": 0.27491057741440983,
+    "charades": 0.4348958333333333,
+    "youcook2": 0.2617124394184168,
+    "unav": 0.41794871794871796,
+    "mean": 0.34736689202871945
+   }
+  },
+  "small-no-charades": {
+   "weights": "results/temporal/small-no-charades.npz",
+   "best_step": 2500,
+   "best": 0.2743995912110373,
+   "seconds": 3592.913995742798,
+   "tuning": {
+    "didemo": 0.2743995912110373,
+    "charades": 0.3715277777777778,
+    "youcook2": 0.2568659127625202,
+    "unav": 0.41025641025641024,
+    "mean": 0.32826242300193637
+   }
+  },
+  "small-no-youcook2": {
+   "weights": "results/temporal/small-no-youcook2.npz",
+   "best_step": 6000,
+   "best": 0.3566393164849827,
+   "seconds": 3756.577253818512,
+   "tuning": {
+    "didemo": 0.27491057741440983,
+    "charades": 0.4383680555555556,
+    "youcook2": 0.24394184168012925,
+    "unav": 0.4102564102564102,
+    "mean": 0.3418692212266262
+   }
+  }
+ }
+}
