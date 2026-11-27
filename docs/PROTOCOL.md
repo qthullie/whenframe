@@ -1805,6 +1805,50 @@ the visitor's own embedded there without a server. The current model stays
 the default. The test is run once, after stage 1's numbers and stage 2's
 training are recorded here.
 
+### Recorded before stage 2
+
+**The check, before any benchmark number** (`scripts/small.py check`; each
+export's `check.json`). For the four candidates the token ids are equal to
+open_clip's, and the embeddings of the exports in float32 are at a cosine of
+0.9999998 at worst to open_clip's, image and text towers alike.
+
+**Stage 1's numbers** (`scripts/round13.py`; `results/round13_bank.json`,
+`results/round13_tuned.json`, `results/round13_cost.json`,
+`results/round13_stage1.json`). A restart of the machine stopped the round
+during the bank's choice, after its first number; the steps resumed where
+they stopped (S/16 at 224 on DiDeMo's tuning videos, chosen again, gave the
+same R@5 to the decimal).
+
+Each candidate's own settings, chosen on the tuning sets:
+
+| candidate | bank's beta | bank's strength | spans' strength | speech | sound |
+|---|---|---|---|---|---|
+| S/16 at 224 | 50 | 1 | 0.5 | 0.01 | 1.5 |
+| S/16 at 384 | 20 | 0.5 | 0.25 | 0.005 | 1 |
+| T/16 at 224 | 50 | 1 | 0.25 | 0.01 | 1.5 |
+| T/16 at 384 | 50 | 0.5 | 0.25 | 0.005 | 2 |
+
+| the encoders alone, on the tuning sets | DiDeMo | Charades-STA | YouCook2 | UnAV-100 | mean | files | CPU min per hour | text |
+|---|---|---|---|---|---|---|---|---|
+| S/16 at 224 | 24.6 | 35.9 | 23.6 | 40.0 | 31.02 | 94.4 MB | 4.93 | 6.7 ms |
+| S/16 at 384 | 28.5 | 41.1 | 26.3 | 42.8 | 34.69 | 95.1 MB | 10.38 | 6.1 ms |
+| T/16 at 224 | 17.8 | 31.6 | 22.6 | 37.9 | 27.49 | 76.5 MB | 3.82 | 5.7 ms |
+| T/16 at 384 | 22.2 | 37.1 | 23.4 | 40.3 | 30.74 | 77.0 MB | 6.45 | 6.1 ms |
+
+The current model, measured again just after them as the eleventh round
+measured it, costs 12.91 CPU minutes per hour of DiDeMo's test videos (194
+ms per frame embedded); the limit is half of it, 6.45. The eleventh round
+measured it at 9.36 on a machine of the same model; here everything takes
+about 35 % longer, the candidates as the current model, and the rule
+compares numbers measured one after the other on the same machine.
+Decoding takes 2.7 to 3.1 of these minutes whatever the encoder.
+
+**The rule.** S/16 at 384 costs more than the current model itself and T/16
+at 384 just over the limit (6.4537 against 6.4530); both weigh less than
+150 MB. Among the two within the limits, **S/16 at 224 is kept** (mean
+31.02, against 27.49 for T/16 at 224). T/16 at 384 within them would not
+have changed it (30.74). Stage 2 runs on S/16 at 224's frames.
+
 ## Fourteenth round: a large model, at most three times the cost
 
 Written before any of its numbers was computed.

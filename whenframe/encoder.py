@@ -145,15 +145,19 @@ MODELS = {
     ),
     # the thirteenth round's candidates for a small model (docs/PROTOCOL.md, scripts/small.py): PE core S/16 and
     # T/16 (Apache License 2.0), exported here from timm's weights with their image tower at 224 or 384 pixels, both
-    # towers' weights in 8 bits; measured from files in whenframe's cache, which no release serves yet
+    # towers' weights in 8 bits; measured from files in whenframe's cache, which no release serves yet. Each one's
+    # query bank (beta, strength) and spans' strength as chosen on the tuning sets (results/round13_bank.json)
     **{
         f"pe-core-{size_name}-{pixels}": ModelSpec(
             f"whenframe/pe-core-{size_name}-{pixels}", pixels, 100.0, -20.0, vision_file="onnx/vision_model_int8.xml",
             text_file="onnx/text_model_int8.xml", image_output="image_embeds", text_output="text_embeds",
             text_length=32, pad_token=None, clean="none", text_openvino=True,
+            bank_beta=beta, bank_lambda=lam, spans_lambda=spans,
         )
-        for size_name in ("s16", "t16")
-        for pixels in (224, 384)
+        for (size_name, pixels), (beta, lam, spans) in {
+            ("s16", 224): (50.0, 1.0, 0.5), ("s16", 384): (20.0, 0.5, 0.25),
+            ("t16", 224): (50.0, 1.0, 0.25), ("t16", 384): (50.0, 0.5, 0.25),
+        }.items()
     },
 }  # fmt: skip
 DEFAULT_MODEL = "siglip2-base"  # the encoder of a text alone (the demo's server) and of the first model's scores
