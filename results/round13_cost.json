@@ -16,5 +16,14 @@
   "encode_cpu_min_per_hour": 7.523038163498727,
   "cpu_min_per_hour": 10.38311604032911,
   "encode_ms_per_frame": 144.55080804888365
+ },
+ "pe-core-t16-224": {
+  "videos": 100,
+  "hours": 1.5198605494444437,
+  "frames": 4748,
+  "decode_cpu_min_per_hour": 2.8602007718771674,
+  "encode_cpu_min_per_hour": 0.9646312840143375,
+  "cpu_min_per_hour": 3.8248320558915054,
+  "encode_ms_per_frame": 18.527022325189517
  }
 }
