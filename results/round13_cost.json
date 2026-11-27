@@ -1,0 +1,11 @@
+{
+ "pe-core-s16-224": {
+  "videos": 100,
+  "hours": 1.5198605494444437,
+  "frames": 4748,
+  "decode_cpu_min_per_hour": 2.6836646744713475,
+  "encode_cpu_min_per_hour": 2.2510998687241126,
+  "cpu_min_per_hour": 4.93476454319546,
+  "encode_ms_per_frame": 43.235356571188014
+ }
+}
