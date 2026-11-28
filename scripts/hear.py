@@ -42,11 +42,12 @@ REPO, REVISION = "google/embeddinggemma-2", "f9972ac22e696a105c482202646979e33e4
 RATE = 16_000  # its audio: mono at 16 kHz
 LENGTH, HOP = 5.0, 2.5  # CLAP's windows: 5 seconds, overlapping by half
 PROMPT = "SearchQuery"  # "task: search result | query: "
+THREADS = 4  # PyTorch's threads (`--threads`); they change nothing but the time it takes
 CACHE = ROOT / "results" / "cache"
 TEXTS = CACHE / "round14_eg2_texts.json"
 
 
-def load_model(config: Path):
+def load_model(config: Path, threads: int = THREADS):
     """The model as its model card loads it (sentence-transformers: the transformer, mean pooling, normalised), in
     float32, its weights read into memory from the Hub at the revision above and handed to transformers."""
     import torch
@@ -54,7 +55,7 @@ def load_model(config: Path):
     from sentence_transformers import SentenceTransformer
     from transformers import AutoModel
 
-    torch.set_num_threads(4)
+    torch.set_num_threads(threads)
     t0 = time.time()
     with urllib.request.urlopen(f"https://huggingface.co/{REPO}/resolve/{REVISION}/model.safetensors") as r:  # noqa: S310
         data = r.read()
@@ -135,7 +136,7 @@ def audio(args) -> None:
     parts.mkdir(parents=True, exist_ok=True)
     todo = [n for n in names if not (parts / f"{n}.npz").exists()]
     if todo:
-        model = load_model(Path(args.config))
+        model = load_model(Path(args.config), args.threads)
         work = Path(args.work)
         work.mkdir(parents=True, exist_ok=True)
         if args.set == "unav":
@@ -188,7 +189,7 @@ def gather(name: str, names: list[str]) -> None:
 
 def texts(args) -> None:
     said = json.loads(TEXTS.read_text())
-    model = load_model(Path(args.config))
+    model = load_model(Path(args.config), args.threads)
     out = {k: model.encode(v, prompt_name=PROMPT, batch_size=16, convert_to_numpy=True).astype(np.float32)
            for k, v in said.items()}  # fmt: skip
     np.savez(TEXTS.with_suffix(".npz"), **out)
@@ -201,6 +202,7 @@ def main() -> None:
     ap.add_argument("--set", choices=["unav", "youcook2"])
     ap.add_argument("--config", required=True, help="the model's small files, at the revision above")
     ap.add_argument("--work", help="audio: where each video is written while its sound is decoded")
+    ap.add_argument("--threads", type=int, default=THREADS, help="PyTorch's threads")
     args = ap.parse_args()
     {"audio": audio, "texts": texts}[args.stage](args)
 
