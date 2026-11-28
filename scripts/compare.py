@@ -564,8 +564,10 @@ class Benchmarks:
                  "test": [i for i, q in enumerate(queries) if q["name"] not in tuning]}  # fmt: skip
         return g, queries, text, db, parts
 
-    def youcook2_score(self, c: Candidate, part: str, cfg=None) -> dict:
-        """R@5 with speech and spans; cfg None: the best of the third round's grid on these steps."""
+    def youcook2_score(self, c: Candidate, part: str, cfg=None, heard=None) -> dict:
+        """R@5 with speech and spans; cfg None: the best of the third round's grid on these steps. `heard` (the
+        fourteenth round's part B): another model's standardised scores of the frames (frames x steps), added in
+        place of the transcript's with the best of the third round's speech weights."""
         import youcook2
         from benchmark import frame_scores
 
@@ -580,6 +582,15 @@ class Benchmarks:
             visual = fused(visual, visual_of(c.fuse[0])[-1], c.fuse[1])
         which = parts[part]
         best = None
+        if heard is not None:
+            scores = heard(g, queries, which)
+            for w in sorted({x.weight for x in youcook2.GRID}):
+                r = youcook2.measure(g, queries, visual + w * scores, "whenframe_bank", params, which)
+                if best is None or r["corpus"]["R@5 IoU>=0.5"] > best[1]["corpus"]["R@5 IoU>=0.5"]:
+                    best = (w, r)
+            w, r = best
+            return {"value": r["corpus"]["R@5 IoU>=0.5"], "items": [bool(x) for x in r.pop("found")], "full": r,
+                    "heard_weight": w}  # fmt: skip
         for config in [cfg] if cfg is not None else youcook2.GRID:
             words = [dict(q, text=t) for q, t in zip(queries, said([q["text"] for q in queries]), strict=True)]
             r = youcook2.measure(g, queries, youcook2.with_speech(g, words, visual, db, config, which),
@@ -612,7 +623,9 @@ class Benchmarks:
         bank = didemo_bank(c.model) if packaged is None else packaged.astype(np.float32)
         return z, keep, lib, labels, events, clap, unav.standardise(lib.frames(siglip, bank, beta, lam))
 
-    def unav_score(self, c: Candidate, part: str, weight: float | None = None) -> dict:
+    def unav_score(self, c: Candidate, part: str, weight: float | None = None, heard=None) -> dict:
+        """P@10 with what is heard; `heard` (the fourteenth round's part B): another model's standardised scores of
+        the frames (frames x labels) in place of CLAP's, with the same grid of weights."""
         import unav
 
         c = c.on("unav")
@@ -621,8 +634,11 @@ class Benchmarks:
             frames = unav.standardise(frames + c.fuse[1] * self.unav_frames(c.fuse[0].on("unav"), part)[-1])
         if WORDS.say:  # what is heard, against the words searched (CLAP reads English)
             clap = self.once(("unav-clap", WORDS.name), lambda: clap_texts(self.args.clap_dir, said(labels)))
-        heard = self.once(("unav-heard", part, WORDS.name), lambda: unav.standardise(
-            unav.Library(z, keep).sound(clap, 5.0)))  # fmt: skip
+        if heard is not None:
+            heard = heard(z, keep, labels)
+        else:
+            heard = self.once(("unav-heard", part, WORDS.name), lambda: unav.standardise(
+                unav.Library(z, keep).sound(clap, 5.0)))  # fmt: skip
         best = None
         for w in [weight] if weight is not None else unav.WEIGHTS:
             r = unav.evaluate_scores(lib, events, labels, frames + w * heard)

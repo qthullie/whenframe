@@ -23,6 +23,18 @@ B/16 and PE core L/14 together, each frame decoded once and embedded by both, th
 process of its own on an idle machine, as the eleventh round measured them (results/round14_cost.json). `stage1`
 applies the rule: stage 2 only if PE core L/14 alone has a higher tuning mean than PE core B/16 alone, and the two
 encoders together cost at most three times the current model.
+
+Part B, on the tuning sets, over the current model's frames (its text towers in 8 bits, as the tool runs it):
+
+    python scripts/round14.py hear-texts ARGS   # the descriptions EmbeddingGemma 2 embeds
+    EG2_PYTHON -I scripts/hear.py audio --set unav ...; audio --set youcook2 ...; texts ...   # its embeddings
+    python scripts/round14.py hear-tune ARGS    # the rule for each set: results/round14_heard.json
+
+`hear-tune` measures UnAV-100's tuning videos with CLAP's scores and with EmbeddingGemma 2's in their place, each
+with its weight chosen over the fourth round's grid, and YouCook2's tuning steps with the transcript's full-text
+scores (the third round's grid) and with EmbeddingGemma 2's in their place (the third round's speech weights). A
+frame takes the best cosine of the windows around its middle, standardised over the library's frames as CLAP's are
+(whenframe.sounds). EmbeddingGemma 2 is kept for a set only if that set's tuning metric is higher with it.
 """
 
 from __future__ import annotations
@@ -50,6 +62,9 @@ BANK = ROOT / "results" / "round14_bank.json"
 TUNED = ROOT / "results" / "round14_tuned.json"
 COST = ROOT / "results" / "round14_cost.json"
 STAGE1 = ROOT / "results" / "round14_stage1.json"
+CACHE = ROOT / "results" / "cache"
+TEXTS = CACHE / "round14_eg2_texts.json"  # what scripts/hear.py texts embeds
+HEARD = ROOT / "results" / "round14_heard.json"
 
 
 def chosen_bank() -> dict:
@@ -149,9 +164,87 @@ def stage1(args) -> None:
     print("stage 2" if out["stage2"] else "the rule is not met: part A ends here")
 
 
+# ---------------------------------------------------------------- part B: what is heard
+def hear_texts(args) -> None:
+    """UnAV-100's labels as unav.prepare orders them, and YouCook2's steps in the order of its queries."""
+    import compare
+
+    ann = json.loads(Path(args.unav_annotations).read_text())["database"]
+    labels = sorted({a["label"] for v in ann.values() for a in v["annotations"]})
+    _, queries, _, _, _ = compare.Benchmarks(args).youcook2(compare.Candidate("base"))
+    TEXTS.write_text(json.dumps({"unav_labels": labels, "youcook2": [q["text"] for q in queries]}, indent=1))
+    print(f"{len(labels)} labels and {len(queries)} steps in {TEXTS.name}")
+
+
+def heard_frames(times, ranges, video_of_window, starts, audio, text) -> np.ndarray:
+    """(frames, descriptions): for each description, the best cosine of the windows around each frame's middle,
+    standardised over the library's frames as CLAP's are."""
+    from whenframe import sounds
+
+    cos = audio.astype(np.float32) @ text.T
+    return np.stack([sounds.standardised(sounds.frame_scores(times, ranges, video_of_window, starts, cos[:, j], 5.0))
+                     for j in range(text.shape[0])], axis=1)  # fmt: skip
+
+
+def hear_tune(args) -> None:
+    import compare
+    import round12
+    import unav
+    from compare import Benchmarks, Words
+
+    said = json.loads(TEXTS.read_text())
+    texts = np.load(TEXTS.with_suffix(".npz"))
+    round12.register_eight()
+    compare.WORDS = Words("text8", towers=dict(round12.EIGHT))
+    current = round12.fusion()[0]
+    b = Benchmarks(args)
+    zu = np.load(CACHE / "unav_eg2.npz")
+
+    def heard_unav(z, keep, labels):  # the windows CLAP's scores were computed on, embedded by EmbeddingGemma 2
+        assert [str(n) for n in zu["names"]] == z["names"].tolist() and list(labels) == said["unav_labels"]
+        assert np.array_equal(zu["wcounts"], z["wcounts_5"]) and np.allclose(zu["wstarts"], z["wstarts_5"])
+        zz = {k: z[k] for k in z.files} | {"audio_5": zu["audio"]}
+        return unav.standardise(unav.Library(zz, keep).sound(texts["unav_labels"], 5.0))
+
+    zy = np.load(CACHE / "youcook2_eg2.npz")
+
+    def heard_youcook2(g, queries, which):
+        assert [q["text"] for q in queries] == said["youcook2"]
+        index = {str(n): i for i, n in enumerate(zy["names"])}
+        first = np.concatenate([[0], np.cumsum(zy["wcounts"])[:-1]])
+        rows, ids = [], []
+        for v, name in enumerate(g.names):
+            i = index[str(name)]
+            rows.append(np.arange(first[i], first[i] + zy["wcounts"][i]))
+            ids.append(np.full(zy["wcounts"][i], v))
+        rows, ids = np.concatenate(rows), np.concatenate(ids)
+        ranges = {v: (int(g.starts[v]), int(g.counts[v])) for v in range(len(g.names))}
+        out = np.zeros((len(g.times), len(queries)), np.float32)
+        out[:, which] = heard_frames(g.times, ranges, ids, zy["wstarts"][rows].astype(np.float64), zy["audio"][rows],
+                                     texts["youcook2"][which])  # fmt: skip
+        return out
+
+    res = {"unav": {"clap": b.unav_score(current, "tuning"), "eg2": b.unav_score(current, "tuning", heard=heard_unav)},
+           "youcook2": {"transcript": b.youcook2_score(current, "tuning"),
+                        "eg2": b.youcook2_score(current, "tuning", heard=heard_youcook2)}}  # fmt: skip
+    for k in res:
+        for v in res[k].values():
+            v.pop("items", None)
+    res["kept"] = {"unav": res["unav"]["eg2"]["value"] > res["unav"]["clap"]["value"],
+                   "youcook2": res["youcook2"]["eg2"]["value"] > res["youcook2"]["transcript"]["value"]}  # fmt: skip
+    res["sound_cpu_min_per_hour"] = {k: float(z["cpu"].sum() / (z["seconds"].sum() / 3600) / 60)
+                                     for k, z in (("unav", zu), ("youcook2", zy))}  # fmt: skip
+    HEARD.write_text(json.dumps(res, indent=1))
+    u, y = res["unav"], res["youcook2"]
+    print(f"UnAV-100 tuning P@10: CLAP {100 * u['clap']['value']:.1f} (weight {u['clap']['sound_weight']:g}), "
+          f"EmbeddingGemma 2 {100 * u['eg2']['value']:.1f} (weight {u['eg2']['sound_weight']:g}); YouCook2 tuning "
+          f"R@5: transcript {100 * y['transcript']['value']:.1f}, EmbeddingGemma 2 {100 * y['eg2']['value']:.1f} "
+          f"(weight {y['eg2']['heard_weight']:g}); kept: {res['kept']}")  # fmt: skip
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("stage", choices=["bank", "tune", "cost", "stage1"])
+    ap.add_argument("stage", choices=["bank", "tune", "cost", "stage1", "hear-texts", "hear-tune"])
     ap.add_argument("--annotations", help="DiDeMo's didemo_train.json")
     ap.add_argument("--test-annotations")
     ap.add_argument("--charades-annotations")
@@ -161,7 +254,9 @@ def main() -> None:
     ap.add_argument("--model-dir")
     ap.add_argument("--videos", help="cost: the folder of DiDeMo's test videos")
     args = ap.parse_args()
-    {"bank": bank, "tune": tune, "cost": cost, "stage1": stage1}[args.stage](args)
+    stages = {"bank": bank, "tune": tune, "cost": cost, "stage1": stage1, "hear-texts": hear_texts,
+              "hear-tune": hear_tune}  # fmt: skip
+    stages[args.stage](args)
 
 
 if __name__ == "__main__":
