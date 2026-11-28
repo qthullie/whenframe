@@ -103,6 +103,30 @@ def clips(wave: np.ndarray, starts: np.ndarray) -> list[np.ndarray]:
     return [wave[int(round(s * RATE)) : int(round(s * RATE)) + n] for s in starts]
 
 
+def prefetched(source, bound: int):
+    """The source's videos decoded to their sound in a thread of their own, ahead of the embedding, so that an
+    archive's stream is read on while the model embeds (a stream left waiting is cut by its server); at most `bound`
+    sounds wait (0: no bound, for UnAV-100's short clips, under 1 GB in all)."""
+    import queue
+    import threading
+
+    waiting = queue.Queue(maxsize=bound)
+
+    def read():
+        try:
+            for name, path, temporary in source:
+                wave = sound(path)
+                if temporary:
+                    path.unlink(missing_ok=True)
+                waiting.put((name, wave))
+        finally:
+            waiting.put(None)
+
+    threading.Thread(target=read, daemon=True).start()
+    while (item := waiting.get()) is not None:
+        yield item
+
+
 def audio(args) -> None:
     import compare
 
@@ -114,20 +138,20 @@ def audio(args) -> None:
         model = load_model(Path(args.config))
         work = Path(args.work)
         work.mkdir(parents=True, exist_ok=True)
-        source = compare.unav_source(todo, work) if args.set == "unav" else compare.youcook2_source(todo, work)
+        if args.set == "unav":
+            source = prefetched(compare.unav_source(todo, work), 0)
+        else:
+            source = prefetched(compare.youcook2_source(todo, work), 3)
         t0 = time.time()
-        for k, (name, path, temporary) in enumerate(source, 1):
-            c0 = time.process_time()
-            wave = sound(path)
-            if temporary:
-                path.unlink(missing_ok=True)
+        for k, (name, wave) in enumerate(source, 1):
+            w0 = time.time()
             starts = given[name] if given is not None else windows(wave)
             emb = (model.encode([{"audio": {"array": c, "sampling_rate": RATE}} for c in clips(wave, starts)],
                                 batch_size=8, convert_to_numpy=True)
                    if len(starts) and len(wave) else np.zeros((0, 768), np.float32))  # fmt: skip
             tmp = parts / f"{name}.tmp.npz"
             np.savez(tmp, starts=np.asarray(starts, np.float32), audio=emb.astype(np.float16),
-                     seconds=len(wave) / RATE, cpu=time.process_time() - c0)  # fmt: skip
+                     seconds=len(wave) / RATE, wall=time.time() - w0)  # fmt: skip
             tmp.replace(parts / f"{name}.npz")
             if k % 10 == 0:
                 print(f"{args.set}: {k} of {len(todo)} videos, {time.time() - t0:.0f} s", flush=True)
@@ -156,11 +180,10 @@ def gather(name: str, names: list[str]) -> None:
     np.savez(out, names=np.array(names), wstarts=np.concatenate([g["starts"] for g in got]),
              wcounts=np.array([len(g["starts"]) for g in got]),
              audio=np.concatenate([g["audio"] for g in got]).astype(np.float16),
-             seconds=np.array([float(g["seconds"]) for g in got]),
-             cpu=np.array([float(g["cpu"]) for g in got]))  # fmt: skip
-    seconds, cpu = sum(float(g["seconds"]) for g in got), sum(float(g["cpu"]) for g in got)
-    print(f"wrote {out.name}: {len(names)} videos, {sum(len(g['starts']) for g in got)} windows, "
-          f"{cpu / max(seconds / 3600, 1e-9) / 60:.1f} CPU min per hour of sound", flush=True)  # fmt: skip
+             seconds=np.array([float(g["seconds"]) for g in got]))  # fmt: skip
+    hours = sum(float(g["seconds"]) for g in got) / 3600
+    print(f"wrote {out.name}: {len(names)} videos, {hours:.2f} hours of sound, "
+          f"{sum(len(g['starts']) for g in got)} windows", flush=True)  # fmt: skip
 
 
 def texts(args) -> None:

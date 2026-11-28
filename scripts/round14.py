@@ -232,8 +232,7 @@ def hear_tune(args) -> None:
             v.pop("items", None)
     res["kept"] = {"unav": res["unav"]["eg2"]["value"] > res["unav"]["clap"]["value"],
                    "youcook2": res["youcook2"]["eg2"]["value"] > res["youcook2"]["transcript"]["value"]}  # fmt: skip
-    res["sound_cpu_min_per_hour"] = {k: float(z["cpu"].sum() / (z["seconds"].sum() / 3600) / 60)
-                                     for k, z in (("unav", zu), ("youcook2", zy))}  # fmt: skip
+    res["hours_of_sound"] = {k: float(z["seconds"].sum() / 3600) for k, z in (("unav", zu), ("youcook2", zy))}
     HEARD.write_text(json.dumps(res, indent=1))
     u, y = res["unav"], res["youcook2"]
     print(f"UnAV-100 tuning P@10: CLAP {100 * u['clap']['value']:.1f} (weight {u['clap']['sound_weight']:g}), "
