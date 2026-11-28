@@ -159,6 +159,16 @@ MODELS = {
             ("t16", 224): (50.0, 1.0, 0.25), ("t16", 384): (50.0, 0.5, 0.25),
         }.items()
     },
+    # the fourteenth round's candidate for a large model (docs/PROTOCOL.md, scripts/small.py): PE core L/14 (Apache
+    # License 2.0), exported here from timm's weights with its image tower at 224 pixels in float, one frame at a time
+    # as PE core B/16's, and its text tower's weights in 8 bits; measured from files in whenframe's cache, which no
+    # release serves yet; its logit scale open_clip's (scripts/small.py export), the bias at even odds for a cosine
+    # of 0.2 as PE core B/16's. Its query bank and spans' strength: the defaults until chosen on the tuning sets
+    "pe-core-l14-224": ModelSpec(
+        "whenframe/pe-core-l14-224", 224, 99.8857, -19.9771, vision_file="onnx/vision_model_one.xml",
+        text_file="onnx/text_model_int8.xml", image_output="image_embeds", text_output="text_embeds",
+        text_length=32, pad_token=None, clean="none", text_openvino=True,
+    ),
 }  # fmt: skip
 DEFAULT_MODEL = "siglip2-base"  # the encoder of a text alone (the demo's server) and of the first model's scores
 # what a new library is indexed with: SigLIP 2 B/16 and PE core B/16, searched through whenframe's models v3 and v4

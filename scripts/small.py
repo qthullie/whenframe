@@ -1,9 +1,12 @@
-"""The thirteenth round (docs/PROTOCOL.md): a small model, for phones. PE core S/16 and T/16, exported here.
+"""The thirteenth and fourteenth rounds (docs/PROTOCOL.md): PE core S/16 and T/16 for a small model, PE core L/14
+for a large one, exported here.
 
     python scripts/small.py sample --annotations didemo_train.json --videos DIR --folder CHECK
     TORCH_PYTHON -I scripts/small.py export --model pe-core-s16-224 --folder CHECK --out DIR   # PyTorch, open_clip
     python scripts/small.py check --folder DIR                     # the export against open_clip, before any number
     NNCF_PYTHON -I scripts/small.py compress --folder DIR          # both towers in 8 bits, for OpenVINO
+    NNCF_PYTHON -I scripts/small.py compress --folder DIR --text-only   # L/14: its text tower alone
+    python scripts/small.py one --folder DIR                       # L/14: its image tower in float, for OpenVINO
     python scripts/small.py install --folder DIR                   # into whenframe's cache, as MODELS names it
 
 `sample` decodes the ninth round's 16 frames of DiDeMo's tuning videos (the middle cached frame of the first 16
@@ -20,7 +23,12 @@ embeddings of the sample, its token ids and its logit scale beside them, and tim
 embedding of the export (ONNX Runtime, float32) at a cosine of at least 0.999 to the reference's.
 
 `compress` saves both towers for OpenVINO with their weights in 8 bits (scripts/text8.py's compression, each tower in
-a process of its own); `install` copies them, with the tokenizer, where whenframe's cache keeps the model.
+a process of its own); `install` puts them, with the tokenizer, where whenframe's cache keeps the model (a second name
+for each file, so as not to hold it twice, or a copy where that fails).
+
+PE core L/14 keeps its image tower in float, as PE core B/16's (`one`: saved for OpenVINO one frame at a time, as
+scripts/pe_core.py's `one` saves B/16's, and its embeddings of the sample compared with the reference's); only its
+text tower's weights go to 8 bits (`compress --text-only`). Its weights, 2.7 GB in float32, are held once in memory.
 """
 
 from __future__ import annotations
@@ -44,18 +52,21 @@ sys.path.insert(0, str(ROOT / "scripts"))
 TIMM = {
     "PE-Core-S-16-384": ("timm/PE-Core-S-16-384", "3249a38eb1c432ec19231c6fe1774acb6a4e4efe"),
     "PE-Core-T-16-384": ("timm/PE-Core-T-16-384", "7fe539ed578ac49a1c2b4f946e4b0747704c825a"),
+    "PE-Core-L-14-336": ("timm/PE-Core-L-14-336", "8eff41b3f687e50a323662c2dda5eb3588c6dd35"),  # fourteenth round
 }
 CANDIDATES = {
     "pe-core-s16-224": ("PE-Core-S-16-384", 224),
     "pe-core-s16-384": ("PE-Core-S-16-384", 384),
     "pe-core-t16-224": ("PE-Core-T-16-384", 224),
     "pe-core-t16-384": ("PE-Core-T-16-384", 384),
+    "pe-core-l14-224": ("PE-Core-L-14-336", 224),  # 256 patches of 14 pixels
 }
 SIZES = (224, 384)
 TEXT_LENGTH = 32
 MIN_COSINE = 0.999
 VISION, TEXT = "onnx/vision_model.onnx", "onnx/text_model.onnx"
 VISION8, TEXT8 = "onnx/vision_model_int8.xml", "onnx/text_model_int8.xml"
+ONE = "onnx/vision_model_one.xml"  # an image tower in float, one frame at a time (PE core B/16's and L/14's)
 WEB = "onnx/text_model_web.onnx"  # the text tower for a browser: TEXT8's 8-bit weights, in ONNX
 
 
@@ -111,8 +122,10 @@ def load_open_clip(name: str):
     with urllib.request.urlopen(f"https://huggingface.co/{repo}/resolve/{revision}/open_clip_model.safetensors") as r:  # noqa: S310
         data = r.read()
     print(f"{repo}: {len(data) / 1e6:.0f} MB read into memory in {time.time() - t0:.0f} s", flush=True)
+    weights = load(data)
+    del data  # the weights once in memory, not three times (2.7 GB for L/14)
     model = open_clip.create_model(name, pretrained=None)
-    model.load_state_dict(load(data), strict=True)
+    model.load_state_dict(weights, strict=True, assign=True)
     return model.eval()
 
 
@@ -217,26 +230,58 @@ def check(args) -> None:
 
 
 def compress(args) -> None:
-    """Both towers for OpenVINO with their weights in 8 bits, each compressed in a process of its own."""
+    """Both towers for OpenVINO with their weights in 8 bits, each compressed in a process of its own (or the text
+    tower alone, `--text-only`)."""
     folder = Path(args.folder)
-    for source, dest in ((VISION, VISION8), (TEXT, TEXT8)):
+    towers = ((TEXT, TEXT8),) if args.text_only else ((VISION, VISION8), (TEXT, TEXT8))
+    for source, dest in towers:
         subprocess.run([sys.executable, "-I", str(ROOT / "scripts" / "text8.py"), "compress", "--source",
                         str(folder / source), "--out", str(folder / dest)], check=True)  # fmt: skip
         sizes = sum(p.stat().st_size for p in (folder / dest, (folder / dest).with_suffix(".bin")))
         print(f"{dest}: {sizes / 1e6:.1f} MB", flush=True)
 
 
+def one(args) -> None:
+    """The image tower in float for OpenVINO, fixed to one frame at a time, as scripts/pe_core.py's `one` saves
+    PE core B/16's; its embeddings of the sample against the reference's (one.json)."""
+    from pe_core import _openvino, cosines
+
+    ov = _openvino()
+    folder = Path(args.folder)
+    size = json.loads((folder / "export.json").read_text())["size"]
+    model = ov.Core().read_model(str(folder / VISION))
+    model.reshape({"pixel_values": [1, 3, size, size]})
+    ov.save_model(model, str(folder / ONE), compress_to_fp16=False)
+    del model
+    frames = np.load(folder / "frames.npy")
+    x = (frames.astype(np.float32) / 127.5 - 1.0).transpose(0, 3, 1, 2)
+    compiled = ov.Core().compile_model(str(folder / ONE), "CPU", {"INFERENCE_PRECISION_HINT": "f32"})
+    got = np.concatenate([compiled(x[i : i + 1])[0] for i in range(len(x))])
+    files = (folder / ONE, (folder / ONE).with_suffix(".bin"))
+    result = {"cosine_min": float(cosines(got, np.load(folder / "ref_images.npy")).min()),
+              "mb": sum(p.stat().st_size for p in files) / 1e6}  # fmt: skip
+    (folder / "one.json").write_text(json.dumps(result, indent=1))
+    print(f"saved {folder / ONE}: {json.dumps(result)}")
+
+
 def install(args) -> None:
-    """The 8-bit towers and the tokenizer where whenframe's cache keeps the model (MODELS[model].repo)."""
+    """The towers the tool reads and the tokenizer where whenframe's cache keeps the model (MODELS[model].repo)."""
+    import os
+
     from whenframe.encoder import MODELS, cache_dir
 
     folder = Path(args.folder)
     info = json.loads((folder / "export.json").read_text())
     spec = MODELS[info["model"]]
     dest = cache_dir() / "models" / spec.repo.replace("/", "--")
-    for name in ("tokenizer.json", VISION8, VISION8.replace(".xml", ".bin"), TEXT8, TEXT8.replace(".xml", ".bin")):
+    for name in ("tokenizer.json", spec.vision_file, spec.vision_file.replace(".xml", ".bin"), spec.text_file,
+                 spec.text_file.replace(".xml", ".bin")):  # fmt: skip
         (dest / name).parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy(folder / name, dest / name)
+        (dest / name).unlink(missing_ok=True)
+        try:
+            os.link(folder / name, dest / name)
+        except OSError:
+            shutil.copy(folder / name, dest / name)
     total = sum(p.stat().st_size for p in dest.rglob("*") if p.is_file())
     print(f"{info['model']}: installed in {dest}, {total / 1e6:.1f} MB")
 
@@ -366,15 +411,17 @@ def web(args) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("stage", choices=["sample", "export", "check", "compress", "install", "web"])
+    ap.add_argument("stage", choices=["sample", "export", "check", "compress", "one", "install", "web"])
     ap.add_argument("--sentences", nargs="*", help="web: more descriptions to check the tower on")
     ap.add_argument("--annotations", help="sample: DiDeMo's didemo_train.json; web: its 200 tuning descriptions too")
     ap.add_argument("--videos", help="sample: the folder of DiDeMo's tuning videos")
     ap.add_argument("--folder", help="sample: where the sample goes; export: where it is; others: the export's")
     ap.add_argument("--model", choices=list(CANDIDATES), help="export: the candidate")
     ap.add_argument("--out", help="export: the candidate's folder")
+    ap.add_argument("--text-only", action="store_true", help="compress: the text tower alone (L/14)")
     args = ap.parse_args()
-    stages = {"sample": sample, "export": export, "check": check, "compress": compress, "install": install, "web": web}
+    stages = {"sample": sample, "export": export, "check": check, "compress": compress, "one": one, "install": install,
+              "web": web}  # fmt: skip
     stages[args.stage](args)
 
 

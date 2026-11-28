@@ -1,0 +1,41 @@
+{
+ "export": {
+  "model": "pe-core-l14-224",
+  "open_clip": "PE-Core-L-14-336",
+  "repo": "timm/PE-Core-L-14-336",
+  "revision": "8eff41b3f687e50a323662c2dda5eb3588c6dd35",
+  "size": 224,
+  "torch": "2.15.0+cpu",
+  "open_clip_version": "4.2.2",
+  "logit_scale": 99.88572692871094,
+  "fast_rope": {
+   "layers": 24,
+   "cosine_min": 0.9999998807907104
+  },
+  "weights": {
+   "image": 316824576,
+   "all": 670811137
+  }
+ },
+ "check": {
+  "ids_equal": true,
+  "image_cosine_min": 0.9999998807907104,
+  "text_cosine_min": 0.9999998807907104,
+  "passed": true
+ },
+ "image_tower_for_openvino": {
+  "cosine_min": 0.9999998807907104,
+  "mb": 1269.805292
+ },
+ "beside": {
+  "text_tower_8bit_cosine_to_reference_min": 0.9997291564941406,
+  "tool_bf16_image_cosine_to_reference_min": 0.9992581605911255,
+  "tool_ms_per_frame_4_vcpu": 135,
+  "tool_cpu_ms_per_frame": 511
+ },
+ "files_mb": {
+  "tokenizer.json": 3.642035,
+  "onnx/vision_model_one (xml + bin)": 1269.805292,
+  "onnx/text_model_int8 (xml + bin)": 357.581948
+ }
+}

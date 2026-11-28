@@ -416,8 +416,8 @@ def didemo_bank(model: str) -> np.ndarray:
     key = {"siglip2-base": "", "siglip2-b32": "_siglip2-b32", "siglip2-so400m": "_siglip2-so400m_lower",
            "pe-core-b16": "_pe-core-b16"}.get(model, f"_{model}")  # fmt: skip
     path = CACHE / f"didemo_bank_text{key}.npy"
-    if not path.exists():  # an encoder measured since (the thirteenth round's): its bank is embedded by round13.py
-        raise FileNotFoundError(f"{path}: embed the bank first (scripts/round13.py bank)")
+    if not path.exists():  # an encoder measured since (the thirteenth and fourteenth rounds'): its bank is embedded
+        raise FileNotFoundError(f"{path}: embed the bank first (scripts/round13.py or round14.py bank)")
     return np.load(path).astype(np.float32)
 
 
@@ -714,6 +714,9 @@ TUNED11 = ROOT / "results" / "round11_tuned.json"
 # the thirteenth round's: the small model's candidates on the tuning sets, and their indexing costs
 TUNED13 = ROOT / "results" / "round13_tuned.json"
 COST13 = ROOT / "results" / "round13_cost.json"
+# the fourteenth round's: PE core L/14 and PE core B/16, each alone, on the tuning sets; then the large model's
+TUNED14 = ROOT / "results" / "round14_tuned.json"
+COST14 = ROOT / "results" / "round14_cost.json"
 TEST11 = ROOT / "results" / "round11_test.json"
 TEST11_V5 = ROOT / "results" / "round11_test_v5.json"
 COST11 = ROOT / "results" / "round11_cost.json"
@@ -764,7 +767,7 @@ def tune(args) -> None:
     and the mean of the primary metrics: DiDeMo, YouCook2 and UnAV-100 (sixth round; Charades-STA had none), and
     Charades-STA's 500 held-out training videos (seventh round, --round 7)."""
     b = Benchmarks(args)
-    path = {7: TUNED7, 8: TUNED8, 9: TUNED9, 10: TUNED10, 11: TUNED11, 13: TUNED13}.get(args.round, TUNED)
+    path = {7: TUNED7, 8: TUNED8, 9: TUNED9, 10: TUNED10, 11: TUNED11, 13: TUNED13, 14: TUNED14}.get(args.round, TUNED)
     out = json.loads(path.read_text()) if path.exists() else {}
     for spec in args.candidates.split(","):
         c = candidate(spec)
@@ -931,7 +934,7 @@ def cost(args) -> None:
     names = sorted(str(n) for n in np.load(CACHE / f"{BASE['didemo-test']}.npz")["names"])[: args.cost_videos]
     # the ninth round's: both encoders measured again, one after the other; the eleventh's: SigLIP 2 B/16 again,
     # then SigLIP 2 B/16 and PE core B/16 together (A+B), each frame decoded once and embedded by both
-    dest = {9: COST9, 11: COST11, 13: COST13}.get(args.round, COST)
+    dest = {9: COST9, 11: COST11, 13: COST13, 14: COST14}.get(args.round, COST)
     out = json.loads(dest.read_text()) if dest.exists() else {}
     for m in args.models.split(","):
         encs = [Encoder(x, backend="openvino") for x in m.split("+")]
@@ -981,7 +984,7 @@ def main() -> None:
     ap.add_argument(
         "--round",
         type=int,
-        choices=[6, 7, 8, 9, 10, 11, 13],
+        choices=[6, 7, 8, 9, 10, 11, 13, 14],
         default=6,
         help="tune, evaluate: the sixth round's or a later one's (results/roundN_*.json; from the seventh, "
         "Charades-STA's held-out videos among the tuning sets; 10, the tenth round's screening, tunes only); cost: 9 "
